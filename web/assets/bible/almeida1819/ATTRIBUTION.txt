@@ -1,0 +1,9 @@
+Almeida 1819 (Bíblia Livre)
+
+Fonte dos dados estruturados: https://github.com/midvash/bible-data/tree/main/versions/pt/almeida-livre
+Página da edição: https://midvash.com/almeida-livre
+
+O repositório de origem identifica esta edição de 1819 como domínio público.
+O script e os metadados do repositório Midvash Bible Data são disponibilizados sob MIT.
+
+Importado com 66 livros, 1189 capítulos e 31102 versículos.

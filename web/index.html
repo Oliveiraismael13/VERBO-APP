@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Verbo: uma jornada de leitura e estudo das Escrituras." />
+    <title>Verbo — Sua jornada na Palavra</title>
+    <link rel="stylesheet" href="css/styles.css" />
+  </head>
+  <body>
+    <div class="site-shell">
+      <aside class="sidebar" aria-label="Navegação principal">
+        <a class="brand" href="#inicio" aria-label="Verbo, página inicial"><span>✦</span> VERBO</a>
+        <nav class="main-nav">
+          <a class="active" href="#inicio" data-section="inicio"><i>⌂</i> Início</a>
+          <a href="#biblia" data-section="biblia"><i>▤</i> Bíblia</a>
+          <a href="#planos" data-section="planos"><i>◷</i> Planos de leitura</a>
+          <a href="#estudos" data-section="estudos"><i>✧</i> Estudos</a>
+          <a href="#identificar" data-section="identificar"><i>⌁</i> Identificar versículo</a>
+        </nav>
+        <div class="sidebar-footer"><button id="theme-toggle" type="button">◐ Alternar tema</button><small>VERBO · v0.1</small></div>
+      </aside>
+
+      <main>
+        <header class="topbar">
+          <button class="menu-button" id="menu-toggle" type="button" aria-label="Abrir navegação">☰</button>
+          <div class="breadcrumb"><span>JORNADA</span><b id="page-label">Visão geral</b></div>
+          <div class="top-actions"><button class="search-button" id="search-button" type="button">⌕ <span>Buscar referência</span><kbd>⌘ K</kbd></button><span class="coins" title="Moedas">◆ <b id="coin-count">0</b></span><button class="profile" type="button" aria-label="Seu nível"><b id="level-count">1</b><span id="avatar-level">1</span></button></div>
+        </header>
+
+        <section id="inicio" class="page-section active" aria-labelledby="home-title">
+          <div class="hero">
+            <div><p class="eyebrow">SUA JORNADA DE HOJE</p><h1 id="home-title">Cresça na Palavra,<br />um capítulo por vez.</h1><p class="intro">Leitura bíblica, planos e estudos organizados em um espaço feito para a sua constância.</p><div class="hero-actions"><a class="primary-button" href="#biblia">Continuar leitura <b>→</b></a><a class="secondary-button" href="#planos">Ver planos</a></div></div>
+            <aside class="reading-card"><div class="card-top"><span>LEITURA ATUAL</span><b id="journey-level">NÍVEL 1</b></div><h2 id="current-reading">João 3</h2><blockquote id="current-verse">Carregando a Palavra…</blockquote><div class="progress-line"><i id="xp-progress"></i></div><small id="xp-label">0 / 200 XP para o próximo nível</small></aside>
+          </div>
+          <div class="dashboard-grid">
+            <section class="panel continue-panel"><div class="section-heading"><div><p class="eyebrow">RETOME DE ONDE PAROU</p><h2>O encontro na noite</h2></div><span class="tag">+40 XP</span></div><p>Jesus conversa com Nicodemos sobre o novo nascimento e a vida eterna.</p><div class="chapter-row"><span>JOÃO 3</span><i></i><small>36 versículos · 8 min</small><a href="#biblia">Abrir capítulo →</a></div></section>
+            <section class="panel streak-panel"><p class="eyebrow">SUA CONSTÂNCIA</p><div class="streak"><span>🔥</span><strong id="streak-count">0</strong><small>dias em sequência</small></div><p id="completed-label">Conclua seu primeiro capítulo hoje.</p><a href="#planos">Ver histórico</a></section>
+          </div>
+          <section class="section-block"><div class="section-heading"><div><p class="eyebrow">EXPLORE</p><h2>Encontre o que precisa hoje</h2></div><a href="#estudos">Ver todos →</a></div><div class="explore-grid"><article><i>♡</i><h3>Amor de Deus</h3><p>42 passagens para meditar</p></article><article><i>◈</i><h3>Fé e esperança</h3><p>58 passagens selecionadas</p></article><article><i>✦</i><h3>Salvação</h3><p>36 passagens essenciais</p></article><article><i>◷</i><h3>Planos curtos</h3><p>Para criar constância</p></article></div></section>
+        </section>
+
+        <section id="biblia" class="page-section" aria-labelledby="bible-title">
+          <div class="reader-header"><div><p class="eyebrow" id="testament-label">NOVO TESTAMENTO · 27 LIVROS</p><h1 id="bible-title"><button type="button" class="book-button" id="book-picker-button">João</button> <button type="button" class="chapter-button" id="chapter-picker-button">3⌄</button></h1></div><div class="reader-controls"><select id="translation-select" aria-label="Escolher tradução"><option value="blivre">BLIVRE</option><option value="almeida1819">Almeida 1819</option></select><button id="font-minus" type="button">A−</button><button id="font-plus" type="button">A+</button></div></div>
+          <div class="chapter-navigation"><button id="previous-chapter" type="button">‹ Anterior</button><span id="chapter-meta">Carregando…</span><button id="next-chapter" type="button">Próximo ›</button></div>
+          <div class="reader-layout"><article class="scripture" id="scripture" aria-live="polite"></article><aside class="reader-aside"><p class="eyebrow" id="aside-reference">JOÃO 3</p><h2 id="aside-title">Sua leitura</h2><p id="aside-description">Selecione um versículo para destacar, salvar ou copiar.</p><div class="verse-actions"><button type="button" id="favorite-verse">♡ Favoritar</button><button type="button" id="copy-verse">⧉ Copiar</button></div><button type="button" id="complete-chapter">✓ Marcar como lido <small>+40 XP · +8 ◆</small></button></aside></div>
+        </section>
+
+        <section id="planos" class="page-section" aria-labelledby="plans-title"><p class="eyebrow">CRESÇA UM DIA DE CADA VEZ</p><h1 id="plans-title">Planos de leitura</h1><p class="intro narrow">Caminhos práticos para você ler a Bíblia com intencionalidade.</p><div class="plans-grid"><article class="featured-plan"><span>EM ANDAMENTO</span><h2>João em 21 dias</h2><p>Dia 4 · João 3</p><div class="progress-line"><i></i></div><a href="#biblia">Continuar →</a></article><article class="plan"><b>7 dias</b><div><h3>Uma semana com os Salmos</h3><p>8 min por dia</p></div><button type="button">Começar</button></article><article class="plan"><b>14 dias</b><div><h3>Aprendendo a confiar</h3><p>10 min por dia</p></div><button type="button">Começar</button></article></div></section>
+
+        <section id="estudos" class="page-section" aria-labelledby="studies-title"><p class="eyebrow">APROFUNDE A LEITURA</p><h1 id="studies-title">Estudos</h1><div class="study-feature"><p>ESTUDO EM DESTAQUE</p><h2>O amor que transforma</h2><span>De João 3 ao coração do Evangelho</span><button type="button">Começar estudo →</button></div></section>
+
+        <section id="identificar" class="page-section" aria-labelledby="scan-title"><p class="eyebrow">CÂMERA E IMAGEM</p><h1 id="scan-title">Identificar versículo</h1><p class="intro narrow">Aponte a câmera para um trecho bíblico ou envie uma imagem. A leitura por câmera depende da permissão do seu navegador.</p><div class="scanner"><video id="camera-preview" autoplay muted playsinline></video><div class="scanner-empty" id="scanner-empty"><span>⌁</span><b>Encontre a referência em segundos</b><p>Enquadre uma ou mais linhas de um texto bíblico.</p></div><div class="scanner-corners" aria-hidden="true"><i></i><i></i><i></i><i></i></div></div><div class="scanner-buttons"><button class="primary-button" id="start-camera" type="button">Ativar câmera</button><label class="secondary-button">Enviar imagem<input id="image-upload" type="file" accept="image/*" /></label><button class="secondary-button" id="scan-demo" type="button">Ver demonstração</button></div><article id="scan-result" class="scan-result" hidden><p class="eyebrow">VERSÍCULO IDENTIFICADO</p><h2>João 3:16</h2><blockquote id="scan-verse">Carregando…</blockquote><button class="primary-button" id="open-scan-result" type="button">Abrir na Bíblia →</button></article></section>
+      </main>
+    </div>
+    <dialog id="search-dialog"><form method="dialog"><button class="dialog-close" aria-label="Fechar busca">×</button><p class="eyebrow">BUSQUE NA BÍBLIA</p><label for="reference">Livro, capítulo ou referência</label><input id="reference" placeholder="Ex.: João 3:16" autofocus /><div id="search-results" class="search-results"><p class="search-hint">Experimente “Romanos 8” ou “Salmo 23”.</p></div></form></dialog>
+    <dialog id="book-dialog"><form method="dialog"><button class="dialog-close" aria-label="Fechar livros">×</button><p class="eyebrow">BÍBLIA SAGRADA · 66 LIVROS</p><label for="book-filter">Escolha um livro ou capítulo</label><input id="book-filter" placeholder="Buscar livro" /><div id="book-results" class="book-results"></div></form></dialog>
+    <dialog id="reward-dialog" class="reward-dialog"><form method="dialog"><span>✦</span><p class="eyebrow">MISSÃO CONCLUÍDA</p><h2>Recompensa obtida</h2><div><b id="reward-xp">+40<small>XP</small></b><b id="reward-coins">+8<small>MOEDAS</small></b></div><button class="primary-button">Continuar jornada</button></form></dialog>
+    <script type="module" src="js/app.js"></script>
+  </body>
+</html>
