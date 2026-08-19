@@ -8,6 +8,21 @@ type BibleBook = { slug: string; name: string; longName: string; abbreviation: s
 type ManifestBook = Omit<BibleBook, "chapters"> & { code: string; chapterCount: number; verseCount: number };
 type BibleManifest = { translation: string; code: string; canon: string; bookCount: number; verseCount: number; books: ManifestBook[] };
 
+const translations = {
+  BLIVRE: {
+    label: "BLIVRE",
+    path: "/bible",
+    note: "Bíblia Livre (BLIVRE), edição Textus Receptus · CC BY 3.0 Brasil.",
+  },
+  ALMEIDA1819: {
+    label: "Almeida 1819",
+    path: "/bible/almeida1819",
+    note: "Almeida 1819 (Bíblia Livre) · domínio público · fonte: Midvash Bible Data.",
+  },
+} as const;
+
+type Translation = keyof typeof translations;
+
 const topics = [
   { icon: "♡", title: "Amor de Deus", count: "42 passagens", color: "rose" },
   { icon: "✦", title: "Salvação", count: "36 passagens", color: "gold" },
@@ -19,7 +34,7 @@ export default function VerboApp() {
   const [screen, setScreen] = useState<Screen>("bible");
   const [dark, setDark] = useState(false);
   const [fontSize, setFontSize] = useState(19);
-  const [translation, setTranslation] = useState("BLIVRE");
+  const [translation, setTranslation] = useState<Translation>("BLIVRE");
   const [saved, setSaved] = useState(false);
   const [marked, setMarked] = useState(true);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -37,6 +52,7 @@ export default function VerboApp() {
 
   useEffect(() => {
     const savedTheme = localStorage.getItem("verbo-theme");
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- tema salvo só existe no navegador
     if (savedTheme === "dark") setDark(true);
   }, []);
 
@@ -45,13 +61,22 @@ export default function VerboApp() {
   }, [dark]);
 
   useEffect(() => {
-    fetch("/bible/manifest.json").then((response) => response.json()).then(setManifest);
-  }, []);
+    const controller = new AbortController();
+    fetch(`${translations[translation].path}/manifest.json`, { signal: controller.signal })
+      .then((response) => response.json())
+      .then(setManifest)
+      .catch((error) => { if (error.name !== "AbortError") setToast("Não foi possível carregar a tradução"); });
+    return () => controller.abort();
+  }, [translation]);
 
   useEffect(() => {
-    setBook(null);
-    fetch(`/bible/${bookSlug}.json`).then((response) => response.json()).then(setBook);
-  }, [bookSlug]);
+    const controller = new AbortController();
+    fetch(`${translations[translation].path}/${bookSlug}.json`, { signal: controller.signal })
+      .then((response) => response.json())
+      .then(setBook)
+      .catch((error) => { if (error.name !== "AbortError") setToast("Não foi possível carregar o livro"); });
+    return () => controller.abort();
+  }, [bookSlug, translation]);
 
   useEffect(() => () => streamRef.current?.getTracks().forEach((track) => track.stop()), []);
 
@@ -139,8 +164,8 @@ export default function VerboApp() {
               <h1><button className="reference-button" onClick={() => setBookPicker(true)}>{book?.name ?? "Carregando"} <span>{chapter}⌄</span></button></h1>
             </div>
             <div className="reader-actions">
-              <select className="translation" value={translation} onChange={(event) => setTranslation(event.target.value)} aria-label="Tradução">
-                <option>BLIVRE</option><option disabled>NVI · licença</option><option disabled>NAA · licença</option><option disabled>ARA · licença</option>
+              <select className="translation" value={translation} onChange={(event) => setTranslation(event.target.value as Translation)} aria-label="Tradução">
+                <option value="BLIVRE">BLIVRE</option><option value="ALMEIDA1819">Almeida 1819</option><option disabled>NVI · licença</option><option disabled>NAA · licença</option><option disabled>ARA · licença</option>
               </select>
               <button className="text-control" onClick={() => setReaderMenu(!readerMenu)} aria-label="Preferências de leitura">Aa</button>
             </div>
@@ -163,7 +188,7 @@ export default function VerboApp() {
           </div>
 
           <div className="canon-note"><b>✦ Cânon protestante</b><span>66 livros · sem deuterocanônicos</span></div>
-          <div className="license-note"><span>i</span> Bíblia Livre (BLIVRE), edição Textus Receptus · CC BY 3.0 Brasil.</div>
+          <div className="license-note"><span>i</span> {translations[translation].note}</div>
 
           <article className="scripture" style={{ "--reader-size": `${fontSize}px` } as React.CSSProperties}>
             {!book && <div className="reader-loading">Carregando as Escrituras…</div>}
@@ -239,14 +264,27 @@ export default function VerboApp() {
   );
 }
 
-function StudyResult({ translation, setTranslation, saved, setSaved, notify }: { translation: string; setTranslation: (value: string) => void; saved: boolean; setSaved: (value: boolean) => void; notify: (value: string) => void }) {
+function StudyResult({ translation, setTranslation, saved, setSaved, notify }: { translation: Translation; setTranslation: (value: Translation) => void; saved: boolean; setSaved: (value: boolean) => void; notify: (value: string) => void }) {
   const [tab, setTab] = useState("resumo");
+  const [comparison, setComparison] = useState<Record<Translation, string> | null>(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    Promise.all((Object.keys(translations) as Translation[]).map(async (code) => {
+      const response = await fetch(`${translations[code].path}/joao.json`, { signal: controller.signal });
+      const john: BibleBook = await response.json();
+      return [code, john.chapters[2][15].text] as const;
+    })).then((entries) => setComparison(Object.fromEntries(entries) as Record<Translation, string>)).catch(() => undefined);
+    return () => controller.abort();
+  }, []);
+
+  const verseText = comparison?.[translation] ?? "Carregando o texto bíblico…";
   return (
     <section className="study-page page-in">
       <div className="study-hero">
         <p className="eyebrow light">VERSÍCULO IDENTIFICADO</p>
-        <div className="study-ref"><h1>João 3:16</h1><select value={translation} onChange={(e) => setTranslation(e.target.value)}><option>BLIVRE</option><option disabled>NAA · licença</option><option disabled>NVI · licença</option></select></div>
-        <blockquote>“Porque Deus amou o mundo de tal maneira, que deu o seu Filho unigênito, para que todo aquele que nele crê não pereça, mas tenha a vida eterna.”</blockquote>
+        <div className="study-ref"><h1>João 3:16</h1><select value={translation} onChange={(e) => setTranslation(e.target.value as Translation)}><option value="BLIVRE">BLIVRE</option><option value="ALMEIDA1819">Almeida 1819</option><option disabled>NAA · licença</option><option disabled>NVI · licença</option></select></div>
+        <blockquote>“{verseText}”</blockquote>
         <div className="study-actions"><button onClick={() => { setSaved(!saved); notify(saved ? "Removido dos favoritos" : "Versículo salvo"); }}>{saved ? "♥ Salvo" : "♡ Salvar"}</button><button onClick={() => notify("Versículo copiado")}>⧉ Copiar</button><button onClick={() => notify("Menu de compartilhamento")}>↗ Compartilhar</button></div>
       </div>
       <div className="study-tabs"><button className={tab === "resumo" ? "active" : ""} onClick={() => setTab("resumo")}>Resumo</button><button className={tab === "comparar" ? "active" : ""} onClick={() => setTab("comparar")}>Comparar</button><button className={tab === "contexto" ? "active" : ""} onClick={() => setTab("contexto")}>Contexto</button></div>
@@ -257,7 +295,7 @@ function StudyResult({ translation, setTranslation, saved, setSaved, notify }: {
           <section><div className="section-title"><div><span className="mini-icon">▷</span><h3>Pregações</h3></div><button>Ver mais</button></div><div className="media-card"><div className="media-thumb sermon"><span>28:14</span><i>▶</i></div><div><small>CONTEÚDO EXTERNO</small><b>O amor que alcança o mundo</b><p>Canal parceiro · YouTube</p></div></div></section>
           <section><div className="section-title"><div><span className="mini-icon">◉</span><h3>Podcasts</h3></div><button>Ver mais</button></div><div className="podcast-card"><div className="podcast-art">V</div><div><small>EPISÓDIO 24 · 32 MIN</small><b>Amados antes de tudo</b><p>Verbo — conversas sobre a fé</p></div><button>▶</button></div></section>
         </>}
-        {tab === "comparar" && <div className="compare-list"><p className="license-note"><span>i</span> A comparação será ativada quando as traduções forem licenciadas.</p>{["NAA", "NVI", "ARA"].map((name) => <article key={name}><b>{name}<small>LICENÇA NECESSÁRIA</small></b><p>O texto desta tradução será exibido aqui após a integração autorizada.</p></article>)}</div>}
+        {tab === "comparar" && <div className="compare-list"><p className="license-note"><span>i</span> Duas edições abertas disponíveis para comparação.</p>{(Object.keys(translations) as Translation[]).map((code) => <article key={code}><b>{translations[code].label}<small>{code === "BLIVRE" ? "CC BY 3.0 BR" : "DOMÍNIO PÚBLICO"}</small></b><p>{comparison?.[code] ?? "Carregando…"}</p></article>)}</div>}
         {tab === "contexto" && <div className="context-list"><article><span>15</span><p>Para que todo o que nele crê tenha a vida eterna.</p></article><article className="current"><span>16</span><p>Porque Deus amou o mundo de tal maneira...</p></article><article><span>17</span><p>Pois Deus enviou o seu Filho ao mundo, não para que julgasse o mundo...</p></article><button>Abrir capítulo completo →</button></div>}
       </div>
     </section>
@@ -265,7 +303,7 @@ function StudyResult({ translation, setTranslation, saved, setSaved, notify }: {
 }
 
 function StudiesPage({ onOpen }: { onOpen: () => void }) {
-  return <section className="generic-page page-in"><p className="eyebrow">EXPLORE A PALAVRA</p><h1>Estudos</h1><p className="lead">Aprofunde a leitura por temas, livros e perguntas essenciais.</p><div className="featured-study" onClick={onOpen} role="button" tabIndex={0}><span>ESTUDO EM DESTAQUE</span><h2>O amor que transforma</h2><p>De João 3 ao coração do Evangelho</p><button>Começar estudo →</button></div><h3 className="list-heading">Temas populares</h3><div className="topic-grid">{topics.map((topic) => <button key={topic.title} onClick={onOpen} className={topic.color}><i>{topic.icon}</i><div><b>{topic.title}</b><span>{topic.count}</span></div><em>›</em></button>)}</div></section>;
+  return <section className="generic-page page-in"><p className="eyebrow">EXPLORE A PALAVRA</p><h1>Estudos</h1><p className="lead">Aprofunde a leitura por temas, livros e perguntas essenciais.</p><div className="featured-study" onClick={onOpen} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") onOpen(); }} role="button" tabIndex={0}><span>ESTUDO EM DESTAQUE</span><h2>O amor que transforma</h2><p>De João 3 ao coração do Evangelho</p><button>Começar estudo →</button></div><h3 className="list-heading">Temas populares</h3><div className="topic-grid">{topics.map((topic) => <button key={topic.title} onClick={onOpen} className={topic.color}><i>{topic.icon}</i><div><b>{topic.title}</b><span>{topic.count}</span></div><em>›</em></button>)}</div></section>;
 }
 
 function PlansPage() {
@@ -273,13 +311,13 @@ function PlansPage() {
 }
 
 function ProfilePage({ dark, setDark }: { dark: boolean; setDark: (value: boolean) => void }) {
-  return <section className="generic-page page-in"><div className="profile-card"><div className="profile-avatar">M</div><h2>Minha jornada</h2><p>Seu espaço de leitura e estudo</p><div><span><b>12</b>dias lendo</span><span><b>8</b>favoritos</span><span><b>3</b>anotações</span></div></div><h3 className="list-heading">Biblioteca</h3><div className="settings-list"><button><i>♡</i><span>Versículos favoritos<small>8 salvos</small></span><b>›</b></button><button><i>▱</i><span>Minhas anotações<small>3 anotações</small></span><b>›</b></button><button><i>◴</i><span>Histórico de leitura<small>Últimos 30 dias</small></span><b>›</b></button></div><h3 className="list-heading">Preferências</h3><div className="settings-list"><button onClick={() => setDark(!dark)}><i>{dark ? "☾" : "☀"}</i><span>Aparência<small>{dark ? "Modo escuro" : "Modo claro"}</small></span><em className={`switch ${dark ? "on" : ""}`}><u /></em></button><button><i>⇩</i><span>Conteúdo bíblico<small>BLIVRE · 66 livros disponíveis</small></span><b>›</b></button><button><i>©</i><span>Créditos da tradução<small>CC BY 3.0 Brasil</small></span><b>›</b></button></div></section>;
+  return <section className="generic-page page-in"><div className="profile-card"><div className="profile-avatar">M</div><h2>Minha jornada</h2><p>Seu espaço de leitura e estudo</p><div><span><b>12</b>dias lendo</span><span><b>8</b>favoritos</span><span><b>3</b>anotações</span></div></div><h3 className="list-heading">Biblioteca</h3><div className="settings-list"><button><i>♡</i><span>Versículos favoritos<small>8 salvos</small></span><b>›</b></button><button><i>▱</i><span>Minhas anotações<small>3 anotações</small></span><b>›</b></button><button><i>◴</i><span>Histórico de leitura<small>Últimos 30 dias</small></span><b>›</b></button></div><h3 className="list-heading">Preferências</h3><div className="settings-list"><button onClick={() => setDark(!dark)}><i>{dark ? "☾" : "☀"}</i><span>Aparência<small>{dark ? "Modo escuro" : "Modo claro"}</small></span><em className={`switch ${dark ? "on" : ""}`}><u /></em></button><button><i>⇩</i><span>Conteúdo bíblico<small>2 traduções · 66 livros cada</small></span><b>›</b></button><button><i>©</i><span>Créditos das traduções<small>Domínio público + CC BY</small></span><b>›</b></button></div></section>;
 }
 
 function BookPicker({ manifest, currentSlug, close, choose }: { manifest: BibleManifest; currentSlug: string; close: () => void; choose: (slug: string) => void }) {
   const [testament, setTestament] = useState<"old" | "new">("old");
   const books = manifest.books.filter((book) => book.testament === testament);
-  return <div className="book-picker page-in"><div className="picker-head"><button onClick={close}>×</button><div><p>ESCOLHA UM LIVRO</p><h2>Bíblia Sagrada</h2></div><span>66</span></div><div className="canon-banner"><b>Cânon protestante reformado</b><span>39 livros no Antigo Testamento · 27 no Novo</span></div><div className="testament-tabs"><button className={testament === "old" ? "active" : ""} onClick={() => setTestament("old")}>Antigo Testamento <small>39</small></button><button className={testament === "new" ? "active" : ""} onClick={() => setTestament("new")}>Novo Testamento <small>27</small></button></div><div className="book-grid">{books.map((book) => <button key={book.slug} className={currentSlug === book.slug ? "current" : ""} onClick={() => choose(book.slug)}><i>{book.abbreviation}</i><span><b>{book.name}</b><small>{book.chapterCount} {book.chapterCount === 1 ? "capítulo" : "capítulos"}</small></span><em>›</em></button>)}</div><footer><b>BLIVRE</b><span>Bíblia Livre · CC BY 3.0 Brasil</span></footer></div>;
+  return <div className="book-picker page-in"><div className="picker-head"><button onClick={close}>×</button><div><p>ESCOLHA UM LIVRO</p><h2>Bíblia Sagrada</h2></div><span>66</span></div><div className="canon-banner"><b>Cânon protestante reformado</b><span>39 livros no Antigo Testamento · 27 no Novo</span></div><div className="testament-tabs"><button className={testament === "old" ? "active" : ""} onClick={() => setTestament("old")}>Antigo Testamento <small>39</small></button><button className={testament === "new" ? "active" : ""} onClick={() => setTestament("new")}>Novo Testamento <small>27</small></button></div><div className="book-grid">{books.map((book) => <button key={book.slug} className={currentSlug === book.slug ? "current" : ""} onClick={() => choose(book.slug)}><i>{book.abbreviation}</i><span><b>{book.name}</b><small>{book.chapterCount} {book.chapterCount === 1 ? "capítulo" : "capítulos"}</small></span><em>›</em></button>)}</div><footer><b>{manifest.code}</b><span>{manifest.translation}</span></footer></div>;
 }
 
 function SearchOverlay({ manifest, close, choose, open }: { manifest: BibleManifest | null; close: () => void; choose: (slug: string, chapter?: number) => void; open: () => void }) {
@@ -294,5 +332,5 @@ function SearchOverlay({ manifest, close, choose, open }: { manifest: BibleManif
     const name = book.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
     return name === reference[1] || book.abbreviation.toLowerCase() === reference[1];
   }) : null;
-  return <div className="search-overlay page-in"><div className="search-box"><button onClick={close}>‹</button><input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Busque um livro ou referência" /><span>⌕</span></div><p className="eyebrow">{query ? "RESULTADOS NA BÍBLIA LIVRE" : "BUSCAS RECENTES"}</p>{query ? <div className="search-results">{referencedBook && reference && Number(reference[2]) <= referencedBook.chapterCount && <button onClick={() => choose(referencedBook.slug, Number(reference[2]))}><small>REFERÊNCIA</small><b>{referencedBook.name} {reference[2]}{reference[3] ? `:${reference[3]}` : ""}</b><p>Abrir na Bíblia Livre</p><span>›</span></button>}{bookMatches.map((book) => <button key={book.slug} onClick={() => choose(book.slug)}><small>{book.testament === "old" ? "ANTIGO TESTAMENTO" : "NOVO TESTAMENTO"}</small><b>{book.name}</b><p>{book.chapterCount} capítulos · {book.verseCount} versículos</p><span>›</span></button>)}{normalized.includes("amor") && <button onClick={open}><small>ESTUDO REFORMADO</small><b>O amor soberano de Deus</b><p>Graça, eleição e redenção em Cristo</p><span>›</span></button>}{!referencedBook && bookMatches.length === 0 && !normalized.includes("amor") && <div className="empty-search"><b>Nenhum livro encontrado</b><p>Tente uma referência como “Romanos 8” ou “Salmo 23”. A busca por frases em todos os 31.101 versículos será a próxima etapa.</p></div>}</div> : <div className="recent-searches"><button onClick={() => setQuery("João 3:16")}>◴ <span>João 3:16</span> ×</button><button onClick={() => setQuery("Romanos 8")}>◴ <span>Romanos 8</span> ×</button><div className="search-tip"><b>Agora são 66 livros</b><p>Todo o cânon protestante está disponível, de Gênesis a Apocalipse, sem livros deuterocanônicos.</p></div></div>}</div>;
+  return <div className="search-overlay page-in"><div className="search-box"><button onClick={close}>‹</button><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Busque um livro ou referência" /><span>⌕</span></div><p className="eyebrow">{query ? "RESULTADOS NA TRADUÇÃO SELECIONADA" : "BUSCAS RECENTES"}</p>{query ? <div className="search-results">{referencedBook && reference && Number(reference[2]) <= referencedBook.chapterCount && <button onClick={() => choose(referencedBook.slug, Number(reference[2]))}><small>REFERÊNCIA</small><b>{referencedBook.name} {reference[2]}{reference[3] ? `:${reference[3]}` : ""}</b><p>Abrir na tradução selecionada</p><span>›</span></button>}{bookMatches.map((book) => <button key={book.slug} onClick={() => choose(book.slug)}><small>{book.testament === "old" ? "ANTIGO TESTAMENTO" : "NOVO TESTAMENTO"}</small><b>{book.name}</b><p>{book.chapterCount} capítulos · {book.verseCount} versículos</p><span>›</span></button>)}{normalized.includes("amor") && <button onClick={open}><small>ESTUDO REFORMADO</small><b>O amor soberano de Deus</b><p>Graça, eleição e redenção em Cristo</p><span>›</span></button>}{!referencedBook && bookMatches.length === 0 && !normalized.includes("amor") && <div className="empty-search"><b>Nenhum livro encontrado</b><p>Tente uma referência como “Romanos 8” ou “Salmo 23”. A busca por frases em todos os {manifest?.verseCount.toLocaleString("pt-BR")} versículos será a próxima etapa.</p></div>}</div> : <div className="recent-searches"><button onClick={() => setQuery("João 3:16")}>◴ <span>João 3:16</span> ×</button><button onClick={() => setQuery("Romanos 8")}>◴ <span>Romanos 8</span> ×</button><div className="search-tip"><b>Agora são 66 livros</b><p>Todo o cânon protestante está disponível, de Gênesis a Apocalipse, sem livros deuterocanônicos.</p></div></div>}</div>;
 }
