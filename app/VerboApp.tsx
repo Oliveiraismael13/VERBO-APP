@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
-type Screen = "bible" | "plans" | "camera" | "studies" | "profile" | "result";
+type Screen = "journey" | "bible" | "plans" | "camera" | "studies" | "profile" | "result";
 type BibleVerse = { number: number; text: string };
 type BibleBook = { slug: string; name: string; longName: string; abbreviation: string; testament: "old" | "new"; chapters: BibleVerse[][] };
 type ManifestBook = Omit<BibleBook, "chapters"> & { code: string; chapterCount: number; verseCount: number };
@@ -22,6 +22,10 @@ const translations = {
 } as const;
 
 type Translation = keyof typeof translations;
+type PlayerProgress = { xp: number; level: number; coins: number; streak: number; completed: string[]; achievements: string[] };
+type ChapterReward = { xp: number; coins: number; levelUp: boolean; unlocked: string[] };
+
+const emptyProgress: PlayerProgress = { xp: 0, level: 1, coins: 0, streak: 0, completed: [], achievements: [] };
 
 const topics = [
   { icon: "♡", title: "Amor de Deus", count: "42 passagens", color: "rose" },
@@ -31,7 +35,7 @@ const topics = [
 ];
 
 export default function VerboApp() {
-  const [screen, setScreen] = useState<Screen>("bible");
+  const [screen, setScreen] = useState<Screen>("journey");
   const [dark, setDark] = useState(false);
   const [fontSize, setFontSize] = useState(19);
   const [translation, setTranslation] = useState<Translation>("BLIVRE");
@@ -47,6 +51,9 @@ export default function VerboApp() {
   const [bookPicker, setBookPicker] = useState(false);
   const [cameraState, setCameraState] = useState<"idle" | "live" | "scanning" | "found" | "denied">("idle");
   const [toast, setToast] = useState("");
+  const [progress, setProgress] = useState<PlayerProgress>(emptyProgress);
+  const [reward, setReward] = useState<ChapterReward | null>(null);
+  const [savingChapter, setSavingChapter] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
@@ -59,6 +66,12 @@ export default function VerboApp() {
   useEffect(() => {
     localStorage.setItem("verbo-theme", dark ? "dark" : "light");
   }, [dark]);
+
+  useEffect(() => {
+    fetch("/api/progress").then((response) => response.json()).then((data) => {
+      if (!data.error) setProgress(data);
+    }).catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -114,6 +127,27 @@ export default function VerboApp() {
     go("result");
   };
 
+  const completeChapter = async () => {
+    if (progress.completed.includes(`${bookSlug}:${chapter}`) || savingChapter) return;
+    setSavingChapter(true);
+    try {
+      const response = await fetch("/api/progress", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ bookSlug, chapter }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error);
+      const { reward: earned, ...nextProgress } = data;
+      setProgress(nextProgress);
+      if (earned) setReward(earned);
+    } catch {
+      notify("Não foi possível salvar o progresso");
+    } finally {
+      setSavingChapter(false);
+    }
+  };
+
   const chooseBook = (slug: string, nextChapter = 1) => {
     setBookSlug(slug);
     setChapter(nextChapter);
@@ -140,21 +174,24 @@ export default function VerboApp() {
   const selected = currentVerses.find((verse) => verse.number === selectedVerse);
 
   return (
-    <main className={`app-shell ${dark ? "dark" : ""}`}>
+    <main className={`app-shell rpg-shell ${dark ? "dark" : ""}`}>
       {screen !== "camera" && (
         <header className="topbar">
           {screen === "result" ? (
             <button className="back-btn" onClick={() => go("bible")} aria-label="Voltar">‹</button>
           ) : (
-            <button className="brand" onClick={() => go("bible")} aria-label="Início"><span>✦</span> VERBO</button>
+            <button className="brand" onClick={() => go("journey")} aria-label="Início"><span>✦</span> VERBO</button>
           )}
           {screen === "result" && <span className="top-title">João 3:16</span>}
           <div className="top-actions">
-            <button className="icon-btn" onClick={() => setSearchOpen(true)} aria-label="Buscar">⌕</button>
-            <button className="avatar" onClick={() => go("profile")} aria-label="Perfil">M</button>
+            <button className="hud-search" onClick={() => setSearchOpen(true)} aria-label="Buscar na Bíblia">⌕</button>
+            <div className="hud-resource"><span>◆</span>{progress.coins}</div>
+            <button className="avatar level-avatar" onClick={() => go("profile")} aria-label={`Perfil, nível ${progress.level}`}><b>{progress.level}</b></button>
           </div>
         </header>
       )}
+
+      {screen === "journey" && <JourneyPage progress={progress} onContinue={() => { chooseBook("joao", 3); go("bible"); }} onOpenBible={() => go("bible")} />}
 
       {screen === "bible" && (
         <section className="reader page-in">
@@ -198,6 +235,12 @@ export default function VerboApp() {
               </button>
             ))}
           </article>
+
+          <button className={`chapter-complete ${progress.completed.includes(`${bookSlug}:${chapter}`) ? "done" : ""}`} onClick={completeChapter} disabled={savingChapter || progress.completed.includes(`${bookSlug}:${chapter}`)}>
+            <span>{progress.completed.includes(`${bookSlug}:${chapter}`) ? "✓" : "⚔"}</span>
+            <div><b>{progress.completed.includes(`${bookSlug}:${chapter}`) ? "Capítulo concluído" : "Marcar capítulo como lido"}</b><small>{progress.completed.includes(`${bookSlug}:${chapter}`) ? "Recompensa conquistada" : "+40 XP · +8 moedas"}</small></div>
+            <em>{savingChapter ? "…" : "›"}</em>
+          </button>
 
           {selected && <div className="verse-tools">
             <p><b>{book?.name} {chapter}:{selectedVerse}</b><span>selecionado</span></p>
@@ -245,12 +288,12 @@ export default function VerboApp() {
       {screen === "result" && <StudyResult translation={translation} setTranslation={setTranslation} saved={saved} setSaved={setSaved} notify={notify} />}
       {screen === "studies" && <StudiesPage onOpen={() => go("result")} />}
       {screen === "plans" && <PlansPage />}
-      {screen === "profile" && <ProfilePage dark={dark} setDark={setDark} />}
+      {screen === "profile" && <ProfilePage dark={dark} setDark={setDark} progress={progress} />}
 
       {screen !== "camera" && (
         <nav className="bottom-nav" aria-label="Navegação principal">
+          <button className={screen === "journey" ? "selected" : ""} onClick={() => go("journey")}><span>♜</span>Jornada</button>
           <button className={screen === "bible" ? "selected" : ""} onClick={() => go("bible")}><span>▥</span>Bíblia</button>
-          <button className={screen === "plans" ? "selected" : ""} onClick={() => go("plans")}><span>◴</span>Planos</button>
           <button className="camera" onClick={() => go("camera")}><i>⌁</i><span>Câmera</span></button>
           <button className={screen === "studies" || screen === "result" ? "selected" : ""} onClick={() => go("studies")}><span>✧</span>Estudos</button>
           <button className={screen === "profile" ? "selected" : ""} onClick={() => go("profile")}><span>◎</span>Perfil</button>
@@ -260,8 +303,55 @@ export default function VerboApp() {
       {bookPicker && manifest && <BookPicker manifest={manifest} currentSlug={bookSlug} close={() => setBookPicker(false)} choose={chooseBook} />}
       {searchOpen && <SearchOverlay manifest={manifest} close={() => setSearchOpen(false)} choose={chooseBook} open={() => { setSearchOpen(false); go("result"); }} />}
       {toast && <div className="toast">✓ {toast}</div>}
+      {reward && <RewardModal reward={reward} level={progress.level} close={() => setReward(null)} />}
     </main>
   );
+}
+
+function JourneyPage({ progress, onContinue, onOpenBible }: { progress: PlayerProgress; onContinue: () => void; onOpenBible: () => void }) {
+  const levelXp = progress.xp % 200;
+  const completedCount = progress.completed.length;
+  const milestones = [
+    { name: "Gênesis", icon: "✦", state: completedCount >= 1 ? "complete" : "current", detail: "O princípio da aliança" },
+    { name: "Êxodo", icon: "♜", state: completedCount >= 5 ? "complete" : completedCount >= 1 ? "current" : "locked", detail: "Redenção e libertação" },
+    { name: "Salmos", icon: "☼", state: completedCount >= 10 ? "complete" : completedCount >= 5 ? "current" : "locked", detail: "A escola da oração" },
+    { name: "João", icon: "◆", state: completedCount >= 25 ? "complete" : completedCount >= 10 ? "current" : "locked", detail: "O Verbo se fez carne" },
+    { name: "Romanos", icon: "♛", state: completedCount >= 50 ? "current" : "locked", detail: "A justiça que vem da fé" },
+  ];
+  return <section className="journey-page page-in">
+    <div className="player-hud">
+      <div className="crest"><span>V</span><i>{progress.level}</i></div>
+      <div className="player-level"><p>ESCRIBA · NÍVEL {progress.level}</p><h1>Sua jornada na Palavra</h1><div className="xp-track"><i style={{ width: `${levelXp / 2}%` }} /></div><small>{levelXp} / 200 XP para o próximo nível</small></div>
+      <div className="streak"><b>🔥 {progress.streak}</b><span>dias</span></div>
+    </div>
+
+    <article className="active-quest">
+      <div className="quest-glow" />
+      <p><span>MISSÃO ATUAL</span><b>+40 XP</b></p>
+      <h2>O encontro na noite</h2>
+      <blockquote>“Necessário vos é nascer de novo.”</blockquote>
+      <div><span>João 3 · {progress.completed.includes("joao:3") ? "Concluído" : "1 capítulo"}</span><button onClick={onContinue}>{progress.completed.includes("joao:3") ? "Reler capítulo" : "Continuar missão"} →</button></div>
+    </article>
+
+    <div className="quest-heading"><div><p>TRILHA PRINCIPAL</p><h2>A Grande História</h2></div><span>{completedCount}/1.189</span></div>
+    <div className="quest-map">
+      <i className="map-line" />
+      {milestones.map((item, index) => <button key={item.name} className={`map-node ${item.state} ${index % 2 ? "right" : "left"}`} onClick={item.state === "locked" ? undefined : onOpenBible} disabled={item.state === "locked"}>
+        <span>{item.state === "complete" ? "✓" : item.state === "locked" ? "◇" : item.icon}</span><div><small>{item.state === "complete" ? "REGIÃO CONCLUÍDA" : item.state === "current" ? "PRÓXIMA MISSÃO" : "BLOQUEADO"}</small><b>{item.name}</b><p>{item.detail}</p></div>
+      </button>)}
+    </div>
+
+    <div className="daily-title"><div><p>MISSÕES DIÁRIAS</p><h2>Fortaleça sua constância</h2></div><span>◴ 24h</span></div>
+    <div className="daily-quests">
+      <article className={completedCount ? "complete" : ""}><i>▥</i><div><b>Leia um capítulo</b><span>{completedCount ? "1/1 concluído" : "0/1 capítulo"}<u><em style={{ width: completedCount ? "100%" : "0%" }} /></u></span></div><strong>+20 XP</strong></article>
+      <article><i>🔥</i><div><b>Mantenha a chama</b><span>{progress.streak}/7 dias<u><em style={{ width: `${Math.min(progress.streak / 7 * 100, 100)}%` }} /></u></span></div><strong>◆ 50</strong></article>
+      <article><i>✎</i><div><b>Medite na Palavra</b><span>Crie uma anotação<u><em style={{ width: "0%" }} /></u></span></div><strong>+15 XP</strong></article>
+    </div>
+  </section>;
+}
+
+function RewardModal({ reward, level, close }: { reward: ChapterReward; level: number; close: () => void }) {
+  return <div className="reward-backdrop"><div className="reward-modal" role="dialog" aria-modal="true" aria-label="Recompensa da missão"><div className="reward-rays" /><span className="reward-chest">♛</span><p>{reward.levelUp ? "NOVO NÍVEL ALCANÇADO" : "MISSÃO CONCLUÍDA"}</p><h2>{reward.levelUp ? `Nível ${level}` : "Recompensa obtida"}</h2><div><b>+{reward.xp}<small>XP</small></b><b>+{reward.coins}<small>MOEDAS</small></b></div>{reward.unlocked.length > 0 && <em>✦ Nova conquista desbloqueada</em>}<button onClick={close}>Continuar jornada</button></div></div>;
 }
 
 function StudyResult({ translation, setTranslation, saved, setSaved, notify }: { translation: Translation; setTranslation: (value: Translation) => void; saved: boolean; setSaved: (value: boolean) => void; notify: (value: string) => void }) {
@@ -310,8 +400,8 @@ function PlansPage() {
   return <section className="generic-page page-in"><p className="eyebrow">CRESÇA UM DIA DE CADA VEZ</p><h1>Planos</h1><p className="lead">Leituras breves para criar constância e aprofundar sua fé.</p><div className="progress-card"><span>PLANO ATUAL</span><h2>João em 21 dias</h2><p>Dia 4 de 21 · João 3</p><div><i style={{ width: "19%" }} /></div><button>Continuar leitura →</button></div><h3 className="list-heading">Para começar</h3><div className="plan-list"><article><i>7</i><div><b>Uma semana com os Salmos</b><span>7 dias · 8 min/dia</span></div><button>＋</button></article><article><i>14</i><div><b>Aprendendo a confiar</b><span>14 dias · 10 min/dia</span></div><button>＋</button></article></div></section>;
 }
 
-function ProfilePage({ dark, setDark }: { dark: boolean; setDark: (value: boolean) => void }) {
-  return <section className="generic-page page-in"><div className="profile-card"><div className="profile-avatar">M</div><h2>Minha jornada</h2><p>Seu espaço de leitura e estudo</p><div><span><b>12</b>dias lendo</span><span><b>8</b>favoritos</span><span><b>3</b>anotações</span></div></div><h3 className="list-heading">Biblioteca</h3><div className="settings-list"><button><i>♡</i><span>Versículos favoritos<small>8 salvos</small></span><b>›</b></button><button><i>▱</i><span>Minhas anotações<small>3 anotações</small></span><b>›</b></button><button><i>◴</i><span>Histórico de leitura<small>Últimos 30 dias</small></span><b>›</b></button></div><h3 className="list-heading">Preferências</h3><div className="settings-list"><button onClick={() => setDark(!dark)}><i>{dark ? "☾" : "☀"}</i><span>Aparência<small>{dark ? "Modo escuro" : "Modo claro"}</small></span><em className={`switch ${dark ? "on" : ""}`}><u /></em></button><button><i>⇩</i><span>Conteúdo bíblico<small>2 traduções · 66 livros cada</small></span><b>›</b></button><button><i>©</i><span>Créditos das traduções<small>Domínio público + CC BY</small></span><b>›</b></button></div></section>;
+function ProfilePage({ dark, setDark, progress }: { dark: boolean; setDark: (value: boolean) => void; progress: PlayerProgress }) {
+  return <section className="generic-page page-in"><div className="profile-card rpg-profile"><div className="profile-avatar">{progress.level}</div><p>ESCRIBA · NÍVEL {progress.level}</p><h2>Minha jornada</h2><div className="profile-xp"><i style={{ width: `${(progress.xp % 200) / 2}%` }} /></div><small>{progress.xp} XP acumulados</small><div><span><b>{progress.streak}</b>dias em sequência</span><span><b>{progress.completed.length}</b>capítulos</span><span><b>{progress.coins}</b>moedas</span></div></div><h3 className="list-heading">Conquistas</h3><div className="achievement-row"><article className={progress.achievements.includes("first_chapter") ? "earned" : ""}><i>✦</i><b>Primeiro passo</b></article><article className={progress.achievements.includes("faithful_reader") ? "earned" : ""}><i>🔥</i><b>Leitor fiel</b></article><article className={progress.achievements.includes("scroll_keeper") ? "earned" : ""}><i>♜</i><b>Guardião</b></article></div><h3 className="list-heading">Biblioteca</h3><div className="settings-list"><button><i>♡</i><span>Versículos favoritos<small>8 salvos</small></span><b>›</b></button><button><i>▱</i><span>Minhas anotações<small>3 anotações</small></span><b>›</b></button><button><i>◴</i><span>Capítulos concluídos<small>{progress.completed.length} registrados</small></span><b>›</b></button></div><h3 className="list-heading">Preferências</h3><div className="settings-list"><button onClick={() => setDark(!dark)}><i>{dark ? "☾" : "☀"}</i><span>Aparência<small>{dark ? "Modo escuro" : "Modo claro"}</small></span><em className={`switch ${dark ? "on" : ""}`}><u /></em></button><button><i>⇩</i><span>Conteúdo bíblico<small>2 traduções · 66 livros cada</small></span><b>›</b></button><button><i>©</i><span>Créditos das traduções<small>Domínio público + CC BY</small></span><b>›</b></button></div></section>;
 }
 
 function BookPicker({ manifest, currentSlug, close, choose }: { manifest: BibleManifest; currentSlug: string; close: () => void; choose: (slug: string) => void }) {

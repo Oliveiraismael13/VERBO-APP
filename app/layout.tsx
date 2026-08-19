@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { headers } from "next/headers";
 import "./globals.css";
+import "./rpg.css";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -20,18 +21,18 @@ export async function generateMetadata(): Promise<Metadata> {
   const image = `${protocol}://${host}/og.png`;
 
   return {
-    title: "Verbo — Bíblia e estudo",
-    description: "Leia, encontre e aprofunde-se na Palavra.",
+    title: "Verbo — Sua jornada na Palavra",
+    description: "Leia a Bíblia, conclua capítulos, ganhe XP e avance em uma jornada de fé e constância.",
     icons: { icon: "/favicon.svg", shortcut: "/favicon.svg" },
     openGraph: {
-      title: "Verbo — Bíblia e estudo",
-      description: "Transforme qualquer versículo em uma porta para o estudo bíblico.",
-      images: [{ url: image, width: 1736, height: 907, alt: "Verbo — Leia. Encontre. Aprofunde." }],
+      title: "Verbo — Sua jornada na Palavra",
+      description: "Leia capítulos, ganhe XP e avance em uma jornada bíblica gamificada.",
+      images: [{ url: image, width: 1736, height: 907, alt: "Verbo — Sua jornada na Palavra" }],
     },
     twitter: {
       card: "summary_large_image",
-      title: "Verbo — Bíblia e estudo",
-      description: "Transforme qualquer versículo em uma porta para o estudo bíblico.",
+      title: "Verbo — Sua jornada na Palavra",
+      description: "Leia capítulos, ganhe XP e avance em uma jornada bíblica gamificada.",
       images: [image],
     },
   };

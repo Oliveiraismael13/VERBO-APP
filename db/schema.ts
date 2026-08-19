@@ -56,6 +56,32 @@ export const readingHistory = sqliteTable("reading_history", {
   bookId: integer("book_id").notNull().references(() => books.id), chapter: integer("chapter").notNull(), readAt: integer("read_at", { mode: "timestamp" }).notNull(),
 }, (t) => [index("idx_history_user_read_at").on(t.userId, t.readAt)]);
 
+export const userProgress = sqliteTable("user_progress", {
+  userId: text("user_id").primaryKey().references(() => users.id),
+  xp: integer("xp").notNull().default(0),
+  level: integer("level").notNull().default(1),
+  coins: integer("coins").notNull().default(0),
+  streak: integer("streak").notNull().default(0),
+  lastReadDate: text("last_read_date"),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+});
+
+export const completedChapters = sqliteTable("completed_chapters", {
+  userId: text("user_id").notNull().references(() => users.id),
+  bookSlug: text("book_slug").notNull(),
+  chapter: integer("chapter").notNull(),
+  completedAt: integer("completed_at", { mode: "timestamp" }).notNull(),
+}, (t) => [
+  primaryKey({ columns: [t.userId, t.bookSlug, t.chapter] }),
+  index("idx_completed_chapters_user_date").on(t.userId, t.completedAt),
+]);
+
+export const userAchievements = sqliteTable("user_achievements", {
+  userId: text("user_id").notNull().references(() => users.id),
+  code: text("code").notNull(),
+  unlockedAt: integer("unlocked_at", { mode: "timestamp" }).notNull(),
+}, (t) => [primaryKey({ columns: [t.userId, t.code] })]);
+
 export const readingPlans = sqliteTable("reading_plans", {
   id: integer("id").primaryKey({ autoIncrement: true }), slug: text("slug").notNull(), title: text("title").notNull(),
   durationDays: integer("duration_days").notNull(), description: text("description"),
