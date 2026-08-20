@@ -24,7 +24,7 @@ const translations = {
 } as const;
 
 type Translation = keyof typeof translations;
-type PlayerProgress = { xp: number; level: number; coins: number; streak: number; completed: string[]; achievements: string[] };
+type PlayerProgress = { xp: number; level: number; coins: number; streak: number; completed: string[]; achievements: string[]; displayName?: string; profilePhoto?: string; favorites?: string[]; highlights?: Record<string, string>; notes?: Record<string, string>; plans?: string[] };
 type ChapterReward = { xp: number; coins: number; levelUp: boolean; unlocked: string[]; missionCompleted?: boolean; missionTitle?: string };
 
 const emptyProgress: PlayerProgress = { xp: 0, level: 1, coins: 0, streak: 0, completed: [], achievements: [] };
@@ -76,16 +76,20 @@ export default function VerboApp() {
 
   const verseKey = `${bookSlug}:${chapter}:${selectedVerse}`;
   useEffect(() => {
-    const storedFavorites = JSON.parse(localStorage.getItem("verbo-mobile-favorites") || "[]") as string[];
-    const storedHighlights = JSON.parse(localStorage.getItem("verbo-mobile-highlights") || "{}") as Record<string, string>;
+    const storedFavorites = (progress.favorites || JSON.parse(localStorage.getItem("verbo-mobile-favorites") || "[]")) as string[];
+    const storedHighlights = (progress.highlights || JSON.parse(localStorage.getItem("verbo-mobile-highlights") || "{}")) as Record<string, string>;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- favoritos e destaques vêm do armazenamento do navegador
     setSaved(storedFavorites.includes(verseKey));
     setMarked(Boolean(storedHighlights[verseKey]));
     setHighlightColor(storedHighlights[verseKey] || "yellow");
-  }, [verseKey]);
+  }, [verseKey, progress.favorites, progress.highlights]);
 
   useEffect(() => {
-    fetch("/api/progress").then((response) => response.json()).then((data) => {
-      if (!data.error) setProgress(data);
+    Promise.all([fetch("/api/progress"), fetch("/api/profile"), fetch("/api/library")]).then(async ([progressResponse, profileResponse, libraryResponse]) => {
+      const data = await progressResponse.json();
+      const profile = profileResponse.ok ? await profileResponse.json() : {};
+      const library = libraryResponse.ok ? await libraryResponse.json() : {};
+      if (!data.error) setProgress({ ...data, ...profile, ...library });
     }).catch(() => undefined);
   }, []);
 
@@ -112,6 +116,10 @@ export default function VerboApp() {
   const notify = (message: string) => {
     setToast(message);
     window.setTimeout(() => setToast(""), 1800);
+  };
+
+  const saveRemoteLibrary = async (next: Partial<Pick<PlayerProgress, "favorites" | "highlights" | "notes" | "plans">>) => {
+    await fetch("/api/library", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ favorites: progress.favorites || [], highlights: progress.highlights || {}, notes: progress.notes || {}, plans: progress.plans || [], ...next }) }).catch(() => undefined);
   };
 
   const go = (next: Screen) => {
@@ -181,6 +189,8 @@ export default function VerboApp() {
     const nextFavorites = favorites.includes(verseKey) ? favorites.filter((item) => item !== verseKey) : [...favorites, verseKey];
     localStorage.setItem("verbo-mobile-favorites", JSON.stringify(nextFavorites));
     setSaved(nextFavorites.includes(verseKey));
+    setProgress((current) => ({ ...current, favorites: nextFavorites }));
+    void saveRemoteLibrary({ favorites: nextFavorites });
     notify(nextFavorites.includes(verseKey) ? "Versículo salvo" : "Removido dos favoritos");
   };
 
@@ -190,6 +200,8 @@ export default function VerboApp() {
     localStorage.setItem("verbo-mobile-highlights", JSON.stringify(highlights));
     setHighlightColor(color);
     setMarked(true);
+    setProgress((current) => ({ ...current, highlights }));
+    void saveRemoteLibrary({ highlights });
   };
 
   const clearHighlight = () => {
@@ -197,6 +209,8 @@ export default function VerboApp() {
     delete highlights[verseKey];
     localStorage.setItem("verbo-mobile-highlights", JSON.stringify(highlights));
     setMarked(false);
+    setProgress((current) => ({ ...current, highlights }));
+    void saveRemoteLibrary({ highlights });
   };
 
   const handleSwipe = (direction: -1 | 1) => {
@@ -380,7 +394,7 @@ export default function VerboApp() {
       {screen === "result" && <StudyResult translation={translation} setTranslation={setTranslation} saved={saved} setSaved={setSaved} notify={notify} />}
       {screen === "studies" && <StudiesPage onOpen={() => go("result")} />}
       {screen === "plans" && <PlansPage />}
-      {screen === "profile" && <ProfilePage dark={dark} setDark={setDark} progress={progress} />}
+      {screen === "profile" && <><ProfilePage dark={dark} setDark={setDark} progress={progress} /><button type="button" onClick={async () => { await fetch("/api/auth/logout", { method: "POST" }); window.location.href = "/"; }} style={{ display: "block", width: "calc(100% - 44px)", margin: "-4px auto 24px", padding: "12px", border: "1px solid #d9c8c8", borderRadius: "10px", background: "transparent", color: "#9b5555", fontSize: "11px", fontWeight: 800 }}>Sair da conta</button></>}
 
       {screen !== "camera" && (
         <nav className="bottom-nav" aria-label="Navegação principal">
@@ -545,6 +559,12 @@ function ProfilePage({ dark, setDark, progress }: { dark: boolean; setDark: (val
     const rank = document.querySelector(".rpg-profile > p");
     if (rank) rank.textContent = `${discipleTitle(xpProgress.level).toUpperCase()} · NÍVEL ${xpProgress.level}`;
   }, [xpProgress.level]);
+  useEffect(() => {
+    const name = document.querySelector(".rpg-profile h2");
+    const avatar = document.querySelector(".rpg-profile .profile-avatar");
+    if (name) name.textContent = progress.displayName || "Minha jornada";
+    if (avatar && progress.profilePhoto) avatar.innerHTML = `<img src="${progress.profilePhoto}" alt="Foto do perfil" style="width:100%;height:100%;border-radius:50%;object-fit:cover" />`;
+  }, [progress.displayName, progress.profilePhoto]);
   return <section className="generic-page page-in"><div className="profile-card rpg-profile"><div className="profile-avatar">{progress.level}</div><p>ESCRIBA · NÍVEL {progress.level}</p><h2>Minha jornada</h2><div className="profile-xp"><i style={{ width: `${(progress.xp % 200) / 2}%` }} /></div><small>{progress.xp} XP acumulados</small><div><span><b>{progress.streak}</b>dias em sequência</span><span><b>{progress.completed.length}</b>capítulos</span><span><b>{progress.coins}</b>moedas</span></div></div><h3 className="list-heading">Conquistas</h3><div className="achievement-row"><article className={progress.achievements.includes("first_chapter") ? "earned" : ""}><i>✦</i><b>Primeiro passo</b></article><article className={progress.achievements.includes("faithful_reader") ? "earned" : ""}><i>🔥</i><b>Leitor fiel</b></article><article className={progress.achievements.includes("scroll_keeper") ? "earned" : ""}><i>♜</i><b>Guardião</b></article><article className={progress.achievements.includes("streak_10") ? "earned" : ""}><i>🔥</i><b>10 dias consecutivos</b></article><article className={progress.achievements.includes("streak_50") ? "earned" : ""}><i>🔥</i><b>50 dias consecutivos</b></article><article className={progress.achievements.includes("streak_100") ? "earned" : ""}><i>🔥</i><b>100 dias consecutivos</b></article><article className={progress.achievements.includes("streak_365") ? "earned" : ""}><i>🔥</i><b>365 dias consecutivos</b></article></div><h3 className="list-heading">Biblioteca</h3><div className="settings-list"><button><i>♡</i><span>Versículos favoritos<small>salvos neste dispositivo</small></span><b>›</b></button><button><i>▱</i><span>Minhas anotações<small>em breve</small></span><b>›</b></button><button><i>◴</i><span>Capítulos concluídos<small>{progress.completed.length} registrados</small></span><b>›</b></button></div><h3 className="list-heading">Preferências</h3><div className="settings-list"><button onClick={() => setDark(!dark)}><i>{dark ? "☾" : "☀"}</i><span>Aparência<small>{dark ? "Modo escuro" : "Modo claro"}</small></span><em className={`switch ${dark ? "on" : ""}`}><u /></em></button><button><i>⇩</i><span>Conteúdo bíblico<small>2 traduções · 66 livros cada</small></span><b>›</b></button><button><i>©</i><span>Créditos das traduções<small>Domínio público + CC BY</small></span><b>›</b></button></div></section>;
 }
 

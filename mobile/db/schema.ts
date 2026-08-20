@@ -63,6 +63,7 @@ export const userProgress = sqliteTable("user_progress", {
   coins: integer("coins").notNull().default(0),
   streak: integer("streak").notNull().default(0),
   lastReadDate: text("last_read_date"),
+  lastLoginDate: text("last_login_date"),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
 });
 

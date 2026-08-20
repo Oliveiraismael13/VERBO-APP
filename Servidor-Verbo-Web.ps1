@@ -3,9 +3,11 @@ param(
   [string]$Root = (Join-Path $PSScriptRoot 'web')
 )
 
+Add-Type -AssemblyName System.Net.Http
 $listener = [System.Net.HttpListener]::new()
 $listener.Prefixes.Add("http://localhost:$Port/")
 $listener.Start()
+$httpClient = [System.Net.Http.HttpClient]::new()
 
 $mimeTypes = @{
   '.css' = 'text/css; charset=utf-8'
@@ -23,6 +25,26 @@ try {
   while ($listener.IsListening) {
     $context = $listener.GetContext()
     $relativePath = [Uri]::UnescapeDataString($context.Request.Url.AbsolutePath.TrimStart('/'))
+    if ($relativePath.StartsWith('api/')) {
+      $target = "http://localhost:3000/$relativePath$($context.Request.Url.Query)"
+      $request = [System.Net.Http.HttpRequestMessage]::new([System.Net.Http.HttpMethod]::new($context.Request.HttpMethod), $target)
+      if ($context.Request.HasEntityBody) {
+        $reader = [System.IO.StreamReader]::new($context.Request.InputStream)
+        $body = $reader.ReadToEnd()
+        $reader.Dispose()
+        $request.Content = [System.Net.Http.StringContent]::new($body, [System.Text.Encoding]::UTF8, $context.Request.ContentType)
+      }
+      if ($context.Request.Headers['Cookie']) { $request.Headers.TryAddWithoutValidation('Cookie', $context.Request.Headers['Cookie']) | Out-Null }
+      $upstream = $httpClient.SendAsync($request).Result
+      $responseBody = $upstream.Content.ReadAsByteArrayAsync().Result
+      $context.Response.StatusCode = [int]$upstream.StatusCode
+      $context.Response.ContentType = $upstream.Content.Headers.ContentType.ToString()
+      if ($upstream.Headers.Contains('Set-Cookie')) { foreach ($cookie in $upstream.Headers.GetValues('Set-Cookie')) { $context.Response.Headers.Add('Set-Cookie', $cookie) } }
+      $context.Response.ContentLength64 = $responseBody.Length
+      $context.Response.OutputStream.Write($responseBody, 0, $responseBody.Length)
+      $context.Response.Close()
+      continue
+    }
     if ([string]::IsNullOrWhiteSpace($relativePath)) { $relativePath = 'index.html' }
     $filePath = [System.IO.Path]::GetFullPath((Join-Path $Root $relativePath))
     $rootPath = [System.IO.Path]::GetFullPath($Root)
@@ -44,6 +66,7 @@ try {
   }
 }
 finally {
+  $httpClient.Dispose()
   $listener.Stop()
   $listener.Close()
 }

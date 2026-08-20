@@ -4,6 +4,8 @@ import { defineConfig } from "vite";
 import hostingConfig from "./.openai/hosting.json";
 
 const { d1, r2 } = hostingConfig;
+const d1DatabaseId = process.env.CLOUDFLARE_D1_DATABASE_ID ?? "00000000-0000-4000-8000-000000000000";
+const workerName = process.env.CLOUDFLARE_WORKER_NAME ?? "verbo-preview";
 const isCodexSeatbeltSandbox = process.env.CODEX_SANDBOX === "seatbelt";
 
 export default defineConfig(async () => {
@@ -19,9 +21,10 @@ export default defineConfig(async () => {
       cloudflare({
         viteEnvironment: { name: "rsc", childEnvironments: ["ssr"] },
         config: {
+          name: workerName,
           main: "./worker/index.ts",
           compatibility_flags: ["nodejs_compat"],
-          d1_databases: d1 ? [{ binding: d1, database_name: "site-creator-d1", database_id: "00000000-0000-4000-8000-000000000000" }] : [],
+          d1_databases: d1 ? [{ binding: d1, database_name: "verbo-d1", database_id: d1DatabaseId }] : [],
           r2_buckets: r2 ? [{ binding: r2, bucket_name: "site-creator-r2" }] : [],
         },
       }),

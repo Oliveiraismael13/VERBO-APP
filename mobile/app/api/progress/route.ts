@@ -1,9 +1,13 @@
 import { env } from "cloudflare:workers";
 import { getChatGPTUser } from "../../chatgpt-auth";
+import { currentUser as getSessionUser } from "../../../lib/auth";
+import { corsOptions, withCors } from "../../../lib/cors";
 import { levelForXp } from "../../../lib/xp";
 import { missionForChapter as findCampaignMission } from "../../../lib/campaign";
 
 export const dynamic = "force-dynamic";
+
+export function OPTIONS() { return corsOptions(); }
 
 type ProgressRow = {
   xp: number;
@@ -11,6 +15,7 @@ type ProgressRow = {
   coins: number;
   streak: number;
   last_read_date: string | null;
+  last_login_date: string | null;
 };
 
 const defaultProgress = { xp: 0, level: 1, coins: 0, streak: 0, completed: [] as string[], achievements: [] as string[] };
@@ -29,6 +34,8 @@ function missionForChapter(slug: string, chapter: number) {
 }
 
 async function currentUser() {
+  const session = await getSessionUser();
+  if (session) return { id: session.id, email: session.email };
   const user = await getChatGPTUser();
   if (user) return { id: user.userId, email: user.email };
   if (process.env.NODE_ENV === "development") return { id: "local-verbo-player", email: "marcioismael12@gmail.com" };
@@ -38,11 +45,15 @@ async function currentUser() {
 async function ensureSchema() {
   await env.DB.batch([
     env.DB.prepare("CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY NOT NULL, display_name TEXT, created_at INTEGER NOT NULL)"),
-    env.DB.prepare("CREATE TABLE IF NOT EXISTS user_progress (user_id TEXT PRIMARY KEY NOT NULL, xp INTEGER DEFAULT 0 NOT NULL, level INTEGER DEFAULT 1 NOT NULL, coins INTEGER DEFAULT 0 NOT NULL, streak INTEGER DEFAULT 0 NOT NULL, last_read_date TEXT, updated_at INTEGER NOT NULL, FOREIGN KEY (user_id) REFERENCES users(id))"),
+    env.DB.prepare("CREATE TABLE IF NOT EXISTS user_progress (user_id TEXT PRIMARY KEY NOT NULL, xp INTEGER DEFAULT 0 NOT NULL, level INTEGER DEFAULT 1 NOT NULL, coins INTEGER DEFAULT 0 NOT NULL, streak INTEGER DEFAULT 0 NOT NULL, last_read_date TEXT, last_login_date TEXT, updated_at INTEGER NOT NULL, FOREIGN KEY (user_id) REFERENCES users(id))"),
     env.DB.prepare("CREATE TABLE IF NOT EXISTS completed_chapters (user_id TEXT NOT NULL, book_slug TEXT NOT NULL, chapter INTEGER NOT NULL, completed_at INTEGER NOT NULL, PRIMARY KEY (user_id, book_slug, chapter), FOREIGN KEY (user_id) REFERENCES users(id))"),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_completed_chapters_user_date ON completed_chapters(user_id, completed_at)"),
     env.DB.prepare("CREATE TABLE IF NOT EXISTS user_achievements (user_id TEXT NOT NULL, code TEXT NOT NULL, unlocked_at INTEGER NOT NULL, PRIMARY KEY (user_id, code), FOREIGN KEY (user_id) REFERENCES users(id))"),
   ]);
+  const columns = await env.DB.prepare("PRAGMA table_info(user_progress)").all<{ name: string }>();
+  if (!columns.results.some((column) => column.name === "last_login_date")) {
+    await env.DB.prepare("ALTER TABLE user_progress ADD COLUMN last_login_date TEXT").run();
+  }
 }
 
 async function ensureUser(user: { id: string; email: string }) {
@@ -71,23 +82,30 @@ async function loadProgress(userId: string) {
 
 export async function GET() {
   const user = await currentUser();
-  if (!user) return Response.json({ error: "Não autenticado" }, { status: 401 });
+  if (!user) return withCors(Response.json({ error: "Não autenticado" }, { status: 401 }));
   try {
     await ensureSchema();
     await ensureUser(user);
-    return Response.json(await loadProgress(user.id));
+    const current = await env.DB.prepare("SELECT streak, last_read_date, last_login_date FROM user_progress WHERE user_id = ?").bind(user.id).first<ProgressRow>();
+    const today = todayInBrazil();
+    const lastLogin = current?.last_login_date ?? current?.last_read_date;
+    if (lastLogin !== today) {
+      const nextStreak = lastLogin === previousDay(today) ? (current?.streak ?? 0) + 1 : 1;
+      await env.DB.prepare("UPDATE user_progress SET streak = ?, last_login_date = ?, updated_at = ? WHERE user_id = ?").bind(nextStreak, today, Date.now(), user.id).run();
+    }
+    return withCors(Response.json(await loadProgress(user.id)));
   } catch (error) {
     console.error("Falha ao carregar progresso", error);
-    return Response.json(defaultProgress);
+    return withCors(Response.json(defaultProgress));
   }
 }
 
 export async function POST(request: Request) {
   const user = await currentUser();
-  if (!user) return Response.json({ error: "Não autenticado" }, { status: 401 });
+  if (!user) return withCors(Response.json({ error: "Não autenticado" }, { status: 401 }));
   const body = await request.json() as { bookSlug?: string; chapter?: number };
   if (!body.bookSlug || !/^[a-z0-9]+$/.test(body.bookSlug) || !Number.isInteger(body.chapter) || body.chapter! < 1 || body.chapter! > 150) {
-    return Response.json({ error: "Capítulo inválido" }, { status: 400 });
+    return withCors(Response.json({ error: "Capítulo inválido" }, { status: 400 }));
   }
 
   try {
@@ -95,12 +113,12 @@ export async function POST(request: Request) {
     await ensureUser(user);
     const existing = await env.DB.prepare("SELECT 1 AS found FROM completed_chapters WHERE user_id = ? AND book_slug = ? AND chapter = ?")
       .bind(user.id, body.bookSlug, body.chapter).first<{ found: number }>();
-    if (existing) return Response.json({ ...(await loadProgress(user.id)), reward: null });
+    if (existing) return withCors(Response.json({ ...(await loadProgress(user.id)), reward: null }));
 
     const current = await env.DB.prepare("SELECT xp, streak, last_read_date FROM user_progress WHERE user_id = ?").bind(user.id).first<ProgressRow>();
     const today = todayInBrazil();
     const firstToday = current?.last_read_date !== today;
-    const nextStreak = firstToday ? (current?.last_read_date === previousDay(today) ? (current?.streak ?? 0) + 1 : 1) : (current?.streak ?? 0);
+    const nextStreak = current?.streak ?? 0;
     const campaignMission = missionForChapter(body.bookSlug, body.chapter);
     const mission = campaignMission?.mission;
     const missionCompleted = mission && (await env.DB.prepare("SELECT COUNT(*) AS total FROM completed_chapters WHERE user_id = ? AND book_slug = ? AND chapter BETWEEN ? AND ?").bind(user.id, mission.slug, mission.from, mission.to).first<{ total: number }>())?.total === mission.to - mission.from + 1;
@@ -112,8 +130,8 @@ export async function POST(request: Request) {
 
     await env.DB.batch([
       env.DB.prepare("INSERT INTO completed_chapters (user_id, book_slug, chapter, completed_at) VALUES (?, ?, ?, ?)").bind(user.id, body.bookSlug, body.chapter, now),
-      env.DB.prepare("UPDATE user_progress SET xp = ?, level = ?, coins = coins + ?, streak = ?, last_read_date = ?, updated_at = ? WHERE user_id = ?")
-        .bind(nextXp, nextLevel, coinGain, nextStreak, today, now, user.id),
+      env.DB.prepare("UPDATE user_progress SET xp = ?, level = ?, coins = coins + ?, last_read_date = ?, updated_at = ? WHERE user_id = ?")
+        .bind(nextXp, nextLevel, coinGain, today, now, user.id),
     ]);
 
     const count = await env.DB.prepare("SELECT COUNT(*) AS total FROM completed_chapters WHERE user_id = ?").bind(user.id).first<{ total: number }>();
@@ -131,9 +149,9 @@ export async function POST(request: Request) {
       }
     }
 
-    return Response.json({ ...(await loadProgress(user.id)), reward: { xp: xpGain, coins: coinGain, levelUp: nextLevel > (current?.level ?? 1), unlocked, missionCompleted: Boolean(missionCompleted), missionTitle: missionCompleted ? mission?.title : undefined } });
+    return withCors(Response.json({ ...(await loadProgress(user.id)), reward: { xp: xpGain, coins: coinGain, levelUp: nextLevel > (current?.level ?? 1), unlocked, missionCompleted: Boolean(missionCompleted), missionTitle: missionCompleted ? mission?.title : undefined } }));
   } catch (error) {
     console.error("Falha ao concluir capítulo", error);
-    return Response.json({ error: "Não foi possível salvar o progresso" }, { status: 500 });
+    return withCors(Response.json({ error: "Não foi possível salvar o progresso" }, { status: 500 }));
   }
 }
