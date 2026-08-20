@@ -1,5 +1,7 @@
 import { env } from "cloudflare:workers";
 import { getChatGPTUser } from "../../chatgpt-auth";
+import { levelForXp } from "../../../lib/xp";
+import { missionForChapter as findCampaignMission } from "../../../lib/campaign";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +14,6 @@ type ProgressRow = {
 };
 
 const defaultProgress = { xp: 0, level: 1, coins: 0, streak: 0, completed: [] as string[], achievements: [] as string[] };
-
 function todayInBrazil() {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
 }
@@ -21,6 +22,10 @@ function previousDay(date: string) {
   const value = new Date(`${date}T12:00:00Z`);
   value.setUTCDate(value.getUTCDate() - 1);
   return value.toISOString().slice(0, 10);
+}
+
+function missionForChapter(slug: string, chapter: number) {
+  return findCampaignMission(slug, chapter);
 }
 
 async function currentUser() {
@@ -56,7 +61,7 @@ async function loadProgress(userId: string) {
   ]);
   return {
     xp: progress?.xp ?? 0,
-    level: progress?.level ?? 1,
+    level: levelForXp(progress?.xp ?? 0),
     coins: progress?.coins ?? 0,
     streak: progress?.streak ?? 0,
     completed: chapters.results.map((item) => `${item.book_slug}:${item.chapter}`),
@@ -96,10 +101,13 @@ export async function POST(request: Request) {
     const today = todayInBrazil();
     const firstToday = current?.last_read_date !== today;
     const nextStreak = firstToday ? (current?.last_read_date === previousDay(today) ? (current?.streak ?? 0) + 1 : 1) : (current?.streak ?? 0);
-    const xpGain = firstToday ? 60 : 40;
+    const campaignMission = missionForChapter(body.bookSlug, body.chapter);
+    const mission = campaignMission?.mission;
+    const missionCompleted = mission && (await env.DB.prepare("SELECT COUNT(*) AS total FROM completed_chapters WHERE user_id = ? AND book_slug = ? AND chapter BETWEEN ? AND ?").bind(user.id, mission.slug, mission.from, mission.to).first<{ total: number }>())?.total === mission.to - mission.from + 1;
+    const xpGain = missionCompleted ? 80 : firstToday ? 60 : 40;
     const coinGain = firstToday ? 13 : 8;
     const nextXp = (current?.xp ?? 0) + xpGain;
-    const nextLevel = Math.floor(nextXp / 200) + 1;
+    const nextLevel = levelForXp(nextXp);
     const now = Date.now();
 
     await env.DB.batch([
@@ -116,8 +124,14 @@ export async function POST(request: Request) {
         if (result.meta.changes) unlocked.push(code);
       }
     }
+    for (const [threshold, code] of [[10, "streak_10"], [50, "streak_50"], [100, "streak_100"], [365, "streak_365"]] as const) {
+      if (nextStreak >= threshold) {
+        const result = await env.DB.prepare("INSERT OR IGNORE INTO user_achievements (user_id, code, unlocked_at) VALUES (?, ?, ?)").bind(user.id, code, now).run();
+        if (result.meta.changes) unlocked.push(code);
+      }
+    }
 
-    return Response.json({ ...(await loadProgress(user.id)), reward: { xp: xpGain, coins: coinGain, levelUp: nextLevel > (current?.level ?? 1), unlocked } });
+    return Response.json({ ...(await loadProgress(user.id)), reward: { xp: xpGain, coins: coinGain, levelUp: nextLevel > (current?.level ?? 1), unlocked, missionCompleted: Boolean(missionCompleted), missionTitle: missionCompleted ? mission?.title : undefined } });
   } catch (error) {
     console.error("Falha ao concluir capítulo", error);
     return Response.json({ error: "Não foi possível salvar o progresso" }, { status: 500 });
