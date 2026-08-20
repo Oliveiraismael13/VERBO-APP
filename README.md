@@ -9,7 +9,9 @@ O projeto está separado por plataforma para que a evolução da web não afete 
 
 ### Web
 
-Abra `web/index.html` em um servidor estático. Não há dependências, compilação ou código da versão mobile nessa pasta.
+Para testar a Web com dois cliques, abra [`Abrir-Verbo-Web.cmd`](./Abrir-Verbo-Web.cmd). Ele inicia o servidor local e abre a página funcional no navegador em `http://localhost:4173/`.
+
+Não abra `web/index.html` diretamente: a Bíblia e as interações precisam ser carregadas por esse servidor local. Não há dependências, compilação ou código da versão mobile na pasta `web/`.
 
 ### Mobile
 
