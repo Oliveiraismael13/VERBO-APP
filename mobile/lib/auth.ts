@@ -72,6 +72,21 @@ export async function authenticate(email: string, password: string) {
   return { userId: row.id, email: row.email, displayName: row.display_name };
 }
 
+export async function authenticateGoogle(email: string, displayName: string) {
+  await ensureAuthSchema();
+  const normalizedEmail = email.trim().toLowerCase();
+  const existing = await env.DB.prepare("SELECT id, email, display_name FROM users WHERE lower(email) = ?").bind(normalizedEmail).first<{ id: string; email: string; display_name: string | null }>();
+  if (existing) return { userId: existing.id, email: existing.email, displayName: existing.display_name || displayName };
+  const userId = crypto.randomUUID();
+  const now = Date.now();
+  const safeDisplayName = displayName.trim().slice(0, 24) || normalizedEmail.split("@")[0].slice(0, 24);
+  await env.DB.batch([
+    env.DB.prepare("INSERT INTO users (id, display_name, email, created_at) VALUES (?, ?, ?, ?)").bind(userId, safeDisplayName, normalizedEmail, now),
+    env.DB.prepare("INSERT OR IGNORE INTO user_progress (user_id, updated_at) VALUES (?, ?)").bind(userId, now),
+  ]);
+  return { userId, email: normalizedEmail, displayName: safeDisplayName };
+}
+
 export async function startSession(userId: string) {
   const token = toBase64Url(crypto.getRandomValues(new Uint8Array(32)));
   const tokenHash = toBase64Url(await digest(token));

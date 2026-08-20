@@ -10,3 +10,11 @@ Esta pasta contém exclusivamente a aplicação para smartphones.
 - `assets/`: novos ícones, imagens e fontes exclusivos do mobile.
 
 Execute `pnpm dev` a partir desta pasta para desenvolver somente a versão mobile.
+
+## Login com Google
+
+Crie um cliente OAuth 2.0 do tipo aplicação web no Google Cloud e configure `GOOGLE_CLIENT_ID` e `GOOGLE_CLIENT_SECRET` no ambiente local e nos secrets do GitHub. Adicione como URI de redirecionamento autorizado:
+
+`http://localhost:3000/api/auth/google/callback`
+
+No ambiente publicado, adicione a mesma rota usando o domínio do Worker.
