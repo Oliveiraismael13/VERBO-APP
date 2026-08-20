@@ -9,9 +9,9 @@ O projeto está separado por plataforma para que a evolução da web não afete 
 
 ### Web
 
-Para testar a Web com dois cliques, abra [`Abrir-Verbo-Web.cmd`](./Abrir-Verbo-Web.cmd). Ele inicia o servidor local e abre a página funcional no navegador em `http://localhost:4173/`.
+Para testar a Web com dois cliques, abra o atalho **Verbo Web** criado na Área de Trabalho. Ele inicia o servidor local e abre a página funcional no navegador em `http://localhost:4173/`. O lançador também pode ser aberto diretamente em [`Abrir-Verbo-Web.vbs`](./Abrir-Verbo-Web.vbs).
 
-Não abra `web/index.html` diretamente: a Bíblia e as interações precisam ser carregadas por esse servidor local. Não há dependências, compilação ou código da versão mobile na pasta `web/`.
+Não abra `web/index.html` diretamente: a Bíblia e as interações precisam ser carregadas por esse servidor local. Se o Python não estiver instalado, o lançador usa o servidor PowerShell incluído em [`Servidor-Verbo-Web.ps1`](./Servidor-Verbo-Web.ps1). Não há dependências, compilação ou código da versão mobile na pasta `web/`.
 
 ### Mobile
 
