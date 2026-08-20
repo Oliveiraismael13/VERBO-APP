@@ -1,0 +1,36 @@
+{
+  "group_id": "b8bab002-821b-4688-8cd4-ec19fdac593c",
+  "states": [
+    {
+      "character": {
+        "id": "19d03e3c-7594-49f7-8411-4d9f56fd1d34",
+        "name": "Idle",
+        "prompt": "Homem com uma espada, escudo, sandalhas, coura\u00e7a, capacete e cinto",
+        "size": {
+          "width": 40,
+          "height": 40
+        },
+        "template_id": "mannequin",
+        "directions": 8,
+        "view": "low top-down",
+        "created_at": "2026-08-20T14:25:12.236096+00:00"
+      },
+      "folder": "Idle",
+      "frames": {
+        "rotations": {
+          "south": "Idle/rotations/south.png",
+          "south-east": "Idle/rotations/south-east.png",
+          "east": "Idle/rotations/east.png",
+          "north-east": "Idle/rotations/north-east.png",
+          "north": "Idle/rotations/north.png",
+          "north-west": "Idle/rotations/north-west.png",
+          "west": "Idle/rotations/west.png",
+          "south-west": "Idle/rotations/south-west.png"
+        },
+        "animations": {}
+      }
+    }
+  ],
+  "export_version": "3.1",
+  "export_date": "2026-08-20T15:59:54.574357"
+}

@@ -1,0 +1,12 @@
+.mission-disciple{gap:8px;min-width:49px}
+.mission-disciple>small{font-size:6px;letter-spacing:.8px;line-height:1}
+.pixel-disciple{transform:scale(.62);transform-origin:bottom center;margin-bottom:0}
+.pixel-disciple{width:40px;height:40px;object-fit:contain;filter:drop-shadow(0 3px 0 #0b1712)}
+.pixel-disciple:before{left:8px;top:1px;width:14px;height:13px;background:#d99b70;box-shadow:4px 0 0 #d99b70,0 -3px 0 #35251f,4px -4px 0 #35251f,8px -3px 0 #35251f,12px 0 0 #35251f,0 4px 0 #35251f,12px 4px 0 #35251f}
+.pixel-disciple:after{left:6px;top:14px;width:18px;height:17px;background:#ead7a2;box-shadow:-4px 3px 0 #ead7a2,4px 3px 0 #ead7a2,8px 3px 0 #ead7a2,0 7px 0 #d1ae62,4px 7px 0 #d1ae62,8px 7px 0 #d1ae62,12px 7px 0 #d1ae62,0 17px 0 #284d3d,8px 17px 0 #284d3d}
+.pixel-disciple b,.pixel-disciple em{top:31px;width:6px;height:10px;background:#20382f;box-shadow:0 4px 0 #172820}
+.pixel-disciple b{left:6px}.pixel-disciple em{right:6px}
+.pixel-disciple b:before,.pixel-disciple em:before{content:"";position:absolute;top:-13px;width:5px;height:10px;background:#d99b70}
+.pixel-disciple b:before{left:-5px}.pixel-disciple em:before{right:-5px}
+.pixel-disciple b:after,.pixel-disciple em:after{bottom:-1px;width:8px;height:3px;background:#b87955}
+.pixel-disciple b:after{left:-2px}.pixel-disciple em:after{right:-2px}

@@ -1,0 +1,36 @@
+{
+  "group_id": "9d47777a-2b49-48cc-a0a5-b01d6229e36b",
+  "states": [
+    {
+      "character": {
+        "id": "f69505a3-ab2e-4209-925b-e45d92721268",
+        "name": "Idle",
+        "prompt": "Mulher com escudo, espada, sandalha, capacete, coura\u00e7a e cinto",
+        "size": {
+          "width": 40,
+          "height": 40
+        },
+        "template_id": "mannequin",
+        "directions": 8,
+        "view": "low top-down",
+        "created_at": "2026-08-20T14:25:53.404206+00:00"
+      },
+      "folder": "Idle",
+      "frames": {
+        "rotations": {
+          "south": "Idle/rotations/south.png",
+          "south-east": "Idle/rotations/south-east.png",
+          "east": "Idle/rotations/east.png",
+          "north-east": "Idle/rotations/north-east.png",
+          "north": "Idle/rotations/north.png",
+          "north-west": "Idle/rotations/north-west.png",
+          "west": "Idle/rotations/west.png",
+          "south-west": "Idle/rotations/south-west.png"
+        },
+        "animations": {}
+      }
+    }
+  ],
+  "export_version": "3.1",
+  "export_date": "2026-08-20T16:00:07.871246"
+}

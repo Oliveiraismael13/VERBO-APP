@@ -1,0 +1,36 @@
+{
+  "group_id": "b8bab002-821b-4688-8cd4-ec19fdac593c",
+  "states": [
+    {
+      "character": {
+        "id": "0bd07912-4e4c-4dab-9fde-ce18454de4ce",
+        "name": "Fa\u00e7a o mesmo persona",
+        "prompt": "Homem com uma espada, escudo, sandalhas, coura\u00e7a, capacete e cinto",
+        "size": {
+          "width": 40,
+          "height": 40
+        },
+        "template_id": "mannequin",
+        "directions": 8,
+        "view": "low top-down",
+        "created_at": "2026-08-20T16:04:36.556476+00:00"
+      },
+      "folder": "Faca_o_mesmo_persona",
+      "frames": {
+        "rotations": {
+          "south": "Faca_o_mesmo_persona/rotations/south.png",
+          "south-east": "Faca_o_mesmo_persona/rotations/south-east.png",
+          "east": "Faca_o_mesmo_persona/rotations/east.png",
+          "north-east": "Faca_o_mesmo_persona/rotations/north-east.png",
+          "north": "Faca_o_mesmo_persona/rotations/north.png",
+          "north-west": "Faca_o_mesmo_persona/rotations/north-west.png",
+          "west": "Faca_o_mesmo_persona/rotations/west.png",
+          "south-west": "Faca_o_mesmo_persona/rotations/south-west.png"
+        },
+        "animations": {}
+      }
+    }
+  ],
+  "export_version": "3.1",
+  "export_date": "2026-08-20T16:08:50.514818"
+}
