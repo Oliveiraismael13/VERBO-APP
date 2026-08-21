@@ -115,15 +115,15 @@ export async function POST(request: Request) {
       .bind(user.id, body.bookSlug, body.chapter).first<{ found: number }>();
     if (existing) return withCors(Response.json({ ...(await loadProgress(user.id)), reward: null }));
 
-    const current = await env.DB.prepare("SELECT xp, streak, last_read_date FROM user_progress WHERE user_id = ?").bind(user.id).first<ProgressRow>();
+    const current = await env.DB.prepare("SELECT xp, level, streak, last_read_date FROM user_progress WHERE user_id = ?").bind(user.id).first<ProgressRow>();
     const today = todayInBrazil();
-    const firstToday = current?.last_read_date !== today;
     const nextStreak = current?.streak ?? 0;
     const campaignMission = missionForChapter(body.bookSlug, body.chapter);
     const mission = campaignMission?.mission;
-    const missionCompleted = mission && (await env.DB.prepare("SELECT COUNT(*) AS total FROM completed_chapters WHERE user_id = ? AND book_slug = ? AND chapter BETWEEN ? AND ?").bind(user.id, mission.slug, mission.from, mission.to).first<{ total: number }>())?.total === mission.to - mission.from + 1;
-    const xpGain = missionCompleted ? 80 : firstToday ? 60 : 40;
-    const coinGain = firstToday ? 13 : 8;
+    const completedBefore = mission ? (await env.DB.prepare("SELECT COUNT(*) AS total FROM completed_chapters WHERE user_id = ? AND book_slug = ? AND chapter BETWEEN ? AND ?").bind(user.id, mission.slug, mission.from, mission.to).first<{ total: number }>())?.total ?? 0 : 0;
+    const missionCompleted = Boolean(mission && completedBefore === mission.to - mission.from);
+    const xpGain = missionCompleted ? 80 : 40;
+    const coinGain = missionCompleted ? 8 : 4;
     const nextXp = (current?.xp ?? 0) + xpGain;
     const nextLevel = levelForXp(nextXp);
     const now = Date.now();
