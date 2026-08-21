@@ -501,7 +501,7 @@ export default function VerboApp() {
           </div>
 
           <div className={`canon-note ${catholicEdition ? "catholic" : ""}`}><b>✦ {catholicEdition ? "Cânon católico" : "Cânon protestante"}</b><span>{catholicEdition ? "73 livros · inclui deuterocanônicos" : "66 livros · sem deuterocanônicos"}</span></div>
-          {book?.isDeuterocanonical && <aside className="deuterocanonical-note" role="note"><b>Livro deuterocanônico</b><span>Este livro integra o cânon católico, mas não o cânon protestante de 66 livros. Por isso, não é utilizado nas missões.</span></aside>}
+{book?.isDeuterocanonical && <aside className="deuterocanonical-note" role="note"><b>Livro deuterocanônico</b><span>Este livro integra o cânon católico, mas não o cânon protestante de 66 livros.</span></aside>}
           <div className="license-note"><span>i</span> {translations[translation].note}</div>
 
           <article className="scripture" style={{ "--reader-size": `${fontSize}px` } as React.CSSProperties}>

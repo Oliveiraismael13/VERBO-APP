@@ -28,8 +28,9 @@ test("contains the authenticated Verbo application routes", async () => {
   assert.match(app, /choose\(selectedBook\.slug, number\)/);
   assert.match(app, /CHAMADAFE/);
   assert.match(app, /catholic-73/);
-  assert.match(app, /Livro deuterocanônico/);
-  assert.match(app, /A Edição Chama da Fé não é usada nas missões/);
+assert.match(app, /Livro deuterocanônico/);
+assert.doesNotMatch(app, /Por isso, não é utilizado nas missões/);
+assert.match(app, /A Edição Chama da Fé não é usada nas missões/);
   assert.match(app, /As missões usam a Bíblia Livre e o cânon protestante de 66 livros/);
   assert.match(campaign, /A Luz sobre o Abismo/);
   assert.doesNotMatch(app, /O amor que transforma/);
