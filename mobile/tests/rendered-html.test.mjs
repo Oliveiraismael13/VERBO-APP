@@ -21,6 +21,8 @@ test("contains the authenticated Verbo application routes", async () => {
   const styles = await text("app/globals.css");
   const campaign = await text("lib/campaign.ts");
   assert.match(app, />Missões</);
+  assert.match(app, /ANTIGO TESTAMENTO · 39 LIVROS/);
+  assert.match(app, /NOVO TESTAMENTO · 27 LIVROS/);
   assert.match(campaign, /A Luz sobre o Abismo/);
   assert.doesNotMatch(app, /O amor que transforma/);
   assert.match(app, /marked-\$\{savedHighlight\}/);

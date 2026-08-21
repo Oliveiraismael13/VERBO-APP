@@ -429,7 +429,7 @@ export default function VerboApp() {
           {missionMode && <MissionStoryPanel context={missionForChapter(bookSlug, chapter)} progress={progress} />}
           <div className="reference-row">
             <div>
-              <p className="eyebrow">{book?.testament === "old" ? "ANTIGO TESTAMENTO" : "NOVO TESTAMENTO"} · 66 LIVROS</p>
+              <p className="eyebrow">{book?.testament === "old" ? "ANTIGO TESTAMENTO · 39 LIVROS" : "NOVO TESTAMENTO · 27 LIVROS"}</p>
               <h1><button className="reference-button" onClick={() => setBookPicker(true)}>{book?.name ?? "Carregando"} <span>{chapter}⌄</span></button></h1>
             </div>
             <div className="reader-actions">
