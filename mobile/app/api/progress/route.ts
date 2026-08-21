@@ -3,7 +3,7 @@ import { getChatGPTUser } from "../../chatgpt-auth";
 import { currentUser as getSessionUser } from "../../../lib/auth";
 import { corsOptions, withCors } from "../../../lib/cors";
 import { levelForXp } from "../../../lib/xp";
-import { missionForChapter as findCampaignMission } from "../../../lib/campaign";
+import { campaignActs, missionForChapter as findCampaignMission, type CampaignAct } from "../../../lib/campaign";
 
 export const dynamic = "force-dynamic";
 
@@ -31,6 +31,19 @@ function previousDay(date: string) {
 
 function missionForChapter(slug: string, chapter: number) {
   return findCampaignMission(slug, chapter);
+}
+
+function actForChapter(slug: string, chapter: number) {
+  return campaignActs.find((act) => act.ranges.some((range) => range.slug === slug && chapter >= range.from && chapter <= range.to));
+}
+
+async function completesAct(userId: string, act: CampaignAct, completingSlug: string, completingChapter: number) {
+  for (const range of act.ranges) {
+    const completed = (await env.DB.prepare("SELECT COUNT(*) AS total FROM completed_chapters WHERE user_id = ? AND book_slug = ? AND chapter BETWEEN ? AND ?").bind(userId, range.slug, range.from, range.to).first<{ total: number }>())?.total ?? 0;
+    const missingCurrentChapter = range.slug === completingSlug && completingChapter >= range.from && completingChapter <= range.to ? 1 : 0;
+    if (completed !== range.to - range.from + 1 - missingCurrentChapter) return false;
+  }
+  return true;
 }
 
 async function currentUser() {
@@ -122,8 +135,10 @@ export async function POST(request: Request) {
     const mission = campaignMission?.mission;
     const completedBefore = mission ? (await env.DB.prepare("SELECT COUNT(*) AS total FROM completed_chapters WHERE user_id = ? AND book_slug = ? AND chapter BETWEEN ? AND ?").bind(user.id, mission.slug, mission.from, mission.to).first<{ total: number }>())?.total ?? 0 : 0;
     const missionCompleted = Boolean(mission && completedBefore === mission.to - mission.from);
-    const xpGain = missionCompleted ? 80 : 40;
-    const coinGain = missionCompleted ? 8 : 4;
+    const act = actForChapter(body.bookSlug, body.chapter);
+    const actCompleted = Boolean(act && await completesAct(user.id, act, body.bookSlug, body.chapter));
+    const xpGain = actCompleted ? 100 : missionCompleted ? 80 : 40;
+    const coinGain = actCompleted ? 10 : missionCompleted ? 8 : 4;
     const nextXp = (current?.xp ?? 0) + xpGain;
     const nextLevel = levelForXp(nextXp);
     const now = Date.now();
@@ -149,7 +164,7 @@ export async function POST(request: Request) {
       }
     }
 
-    return withCors(Response.json({ ...(await loadProgress(user.id)), reward: { xp: xpGain, coins: coinGain, levelUp: nextLevel > (current?.level ?? 1), unlocked, missionCompleted: Boolean(missionCompleted), missionTitle: missionCompleted ? mission?.title : undefined } }));
+    return withCors(Response.json({ ...(await loadProgress(user.id)), reward: { xp: xpGain, coins: coinGain, levelUp: nextLevel > (current?.level ?? 1), unlocked, missionCompleted: Boolean(missionCompleted), missionTitle: missionCompleted ? mission?.title : undefined, actCompleted, actTitle: actCompleted ? act?.title : undefined } }));
   } catch (error) {
     console.error("Falha ao concluir capítulo", error);
     return withCors(Response.json({ error: "Não foi possível salvar o progresso" }, { status: 500 }));

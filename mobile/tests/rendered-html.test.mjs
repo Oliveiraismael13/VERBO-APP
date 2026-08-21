@@ -28,8 +28,8 @@ test("contains the authenticated Verbo application routes", async () => {
   assert.match(app, /missionMode && <button className=\{`chapter-complete/);
   assert.match(app, /homem-50lvl-idle-south\.png/);
   const progressRoute = await text("app/api/progress/route.ts");
-  assert.match(progressRoute, /const xpGain = missionCompleted \? 80 : 40/);
-  assert.match(progressRoute, /const coinGain = missionCompleted \? 8 : 4/);
+  assert.match(progressRoute, /const xpGain = actCompleted \? 100 : missionCompleted \? 80 : 40/);
+  assert.match(progressRoute, /const coinGain = actCompleted \? 10 : missionCompleted \? 8 : 4/);
   assert.match(progress, /getSessionUser/);
 });
 
