@@ -48,13 +48,14 @@ async function ensureAuthSchema() {
   if (!columns.results.some((column) => column.name === "email")) await env.DB.prepare("ALTER TABLE users ADD COLUMN email TEXT").run();
   if (!columns.results.some((column) => column.name === "password_hash")) await env.DB.prepare("ALTER TABLE users ADD COLUMN password_hash TEXT").run();
   if (!columns.results.some((column) => column.name === "password_salt")) await env.DB.prepare("ALTER TABLE users ADD COLUMN password_salt TEXT").run();
+  if (!columns.results.some((column) => column.name === "profile_photo")) await env.DB.prepare("ALTER TABLE users ADD COLUMN profile_photo TEXT").run();
 }
 
 export async function prepareAuthSchema() {
   await ensureAuthSchema();
 }
 
-export async function createAccount(email: string, displayName: string, password: string) {
+export async function createAccount(email: string, displayName: string, password: string, profilePhoto = "") {
   await ensureAuthSchema();
   const normalizedEmail = email.trim().toLowerCase();
   const existing = await env.DB.prepare("SELECT id FROM users WHERE lower(email) = ?").bind(normalizedEmail).first<{ id: string }>();
@@ -64,7 +65,7 @@ export async function createAccount(email: string, displayName: string, password
   const userId = crypto.randomUUID();
   const now = Date.now();
   await env.DB.batch([
-    env.DB.prepare("INSERT INTO users (id, display_name, email, password_hash, password_salt, created_at) VALUES (?, ?, ?, ?, ?, ?)").bind(userId, displayName.trim(), normalizedEmail, passwordHash, toBase64Url(salt), now),
+    env.DB.prepare("INSERT INTO users (id, display_name, email, password_hash, password_salt, profile_photo, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)").bind(userId, displayName.trim(), normalizedEmail, passwordHash, toBase64Url(salt), profilePhoto, now),
     env.DB.prepare("INSERT OR IGNORE INTO user_progress (user_id, updated_at) VALUES (?, ?)").bind(userId, now),
   ]);
   return { userId, email: normalizedEmail, displayName: displayName.trim() };

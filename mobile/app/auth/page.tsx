@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
+import { resizeProfilePhoto } from "../../lib/profile-photo";
 import "./auth.css";
 
 type Mode = "login" | "register";
@@ -16,6 +17,7 @@ export default function AuthPage() {
   const [mode, setMode] = useState<Mode>("login");
   const [email, setEmail] = useState("");
   const [displayName, setDisplayName] = useState("");
+  const [profilePhoto, setProfilePhoto] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
@@ -41,7 +43,7 @@ export default function AuthPage() {
       const response = await fetch(`/api/auth/${mode}`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ email, displayName, password }),
+        body: JSON.stringify({ email, displayName, password, profilePhoto }),
       });
       const data = await response.json().catch(() => ({})) as { error?: string };
       if (!response.ok) throw new Error(messageForFailure(response, data));
@@ -67,6 +69,10 @@ export default function AuthPage() {
       <form className="auth-form" onSubmit={submit} noValidate>
         {mode === "register" && <label>Nome
           <input value={displayName} onChange={(event) => setDisplayName(event.target.value)} minLength={2} maxLength={24} autoComplete="name" placeholder="Como podemos chamar você?" required />
+        </label>}
+        {mode === "register" && <label className="auth-photo-picker">Foto do perfil <small>Opcional · a imagem será ajustada automaticamente</small>
+          <span style={profilePhoto ? { backgroundImage: `url("${profilePhoto}")` } : undefined}>{profilePhoto ? "" : "＋"}</span>
+          <input type="file" accept="image/*" onChange={async (event) => { const file = event.target.files?.[0]; if (!file) return; try { setProfilePhoto(await resizeProfilePhoto(file)); setError(""); } catch (photoError) { setError(photoError instanceof Error ? photoError.message : "Não foi possível preparar a foto."); } }} />
         </label>}
         <label>E-mail
           <input value={email} onChange={(event) => setEmail(event.target.value)} type="email" autoComplete="email" inputMode="email" placeholder="voce@exemplo.com" required />

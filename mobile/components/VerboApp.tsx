@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { discipleTitle, getXpProgress } from "../lib/xp";
 import { campaignActs, missionForChapter, narrativeForMission } from "../lib/campaign";
+import { resizeProfilePhoto } from "../lib/profile-photo";
 
 type Screen = "journey" | "bible" | "plans" | "camera" | "studies" | "profile" | "result";
 type BibleVerse = { number: number; text: string };
@@ -121,6 +122,19 @@ export default function VerboApp() {
 
   const saveRemoteLibrary = async (next: Partial<Pick<PlayerProgress, "favorites" | "highlights" | "notes" | "plans">>) => {
     await fetch("/api/library", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ favorites: progress.favorites || [], highlights: progress.highlights || {}, notes: progress.notes || {}, plans: progress.plans || [], ...next }) }).catch(() => undefined);
+  };
+
+  const updateProfilePhoto = async (file: File) => {
+    try {
+      const profilePhoto = await resizeProfilePhoto(file);
+      const response = await fetch("/api/profile", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ displayName: progress.displayName || "Discípulo", profilePhoto }) });
+      const updated = await response.json();
+      if (!response.ok) throw new Error(updated.error || "Não foi possível salvar a foto.");
+      setProgress((current) => ({ ...current, ...updated }));
+      notify("Foto do perfil atualizada");
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Não foi possível atualizar a foto");
+    }
   };
 
   const go = (next: Screen) => {
@@ -447,7 +461,7 @@ export default function VerboApp() {
       {screen === "result" && <StudyResult translation={translation} setTranslation={setTranslation} saved={saved} setSaved={setSaved} notify={notify} />}
       {screen === "studies" && <StudiesPage manifest={manifest} progress={progress} onStart={openMissionBriefing} />}
       {screen === "plans" && <PlansPage />}
-      {screen === "profile" && <><ProfilePage dark={dark} setDark={setDark} progress={progress} manifest={manifest} onOpenFavorite={openFavorite} /><button type="button" onClick={async () => { await fetch("/api/auth/logout", { method: "POST" }); window.location.href = "/"; }} style={{ display: "block", width: "calc(100% - 44px)", margin: "-4px auto 24px", padding: "12px", border: "1px solid #d9c8c8", borderRadius: "10px", background: "transparent", color: "#9b5555", fontSize: "11px", fontWeight: 800 }}>Sair da conta</button></>}
+      {screen === "profile" && <><ProfilePage dark={dark} setDark={setDark} progress={progress} manifest={manifest} onOpenFavorite={openFavorite} onProfilePhotoChange={updateProfilePhoto} /><button type="button" onClick={async () => { await fetch("/api/auth/logout", { method: "POST" }); window.location.href = "/"; }} style={{ display: "block", width: "calc(100% - 44px)", margin: "-4px auto 24px", padding: "12px", border: "1px solid #d9c8c8", borderRadius: "10px", background: "transparent", color: "#9b5555", fontSize: "11px", fontWeight: 800 }}>Sair da conta</button></>}
 
       {screen !== "camera" && (
         <nav className="bottom-nav" aria-label="Navegação principal">
@@ -512,7 +526,7 @@ function JourneyPage({ manifest, progress, onContinue, onOpenBible }: { manifest
   });
   return <section className="journey-page page-in">
     <div className="player-hud">
-      <div className="crest"><span>V</span><i>{progress.level}</i></div>
+      <div className="crest">{progress.profilePhoto ? <ProfilePhoto src={progress.profilePhoto} /> : <span aria-label="Foto do perfil não adicionada">{(progress.displayName || "?").slice(0, 1).toUpperCase()}</span>}<i>{progress.level}</i></div>
       <div className="player-level"><p>{discipleTitle(xpProgress.level).toUpperCase()} · NÍVEL {xpProgress.level}</p><h1>Sua jornada na Palavra</h1><div className="xp-track"><i style={{ width: `${xpProgress.progress}%` }} /></div><small>{xpProgress.isMaxLevel ? "NÍVEL MÁXIMO · 50" : `${xpProgress.current - xpProgress.currentLevelXp} / ${xpProgress.needed} XP para o próximo nível`}</small></div>
       <div className="streak"><b>🔥 {progress.streak}</b><span>dias</span></div>
     </div>
@@ -683,7 +697,7 @@ function PlansPage() {
   return <section className="generic-page page-in"><p className="eyebrow">CRESÇA UM DIA DE CADA VEZ</p><h1>Planos</h1><p className="lead">Leituras breves para criar constância e aprofundar sua fé.</p><div className="progress-card"><span>PLANO ATUAL</span><h2>João em 21 dias</h2><p>Dia 4 de 21 · João 3</p><div><i style={{ width: "19%" }} /></div><button>Continuar leitura →</button></div><h3 className="list-heading">Para começar</h3><div className="plan-list"><article><i>7</i><div><b>Uma semana com os Salmos</b><span>7 dias · 8 min/dia</span></div><button>＋</button></article><article><i>14</i><div><b>Aprendendo a confiar</b><span>14 dias · 10 min/dia</span></div><button>＋</button></article></div></section>;
 }
 
-function ProfilePage({ dark, setDark, progress, manifest, onOpenFavorite }: { dark: boolean; setDark: (value: boolean) => void; progress: PlayerProgress; manifest: BibleManifest | null; onOpenFavorite: (reference: string) => void }) {
+function ProfilePage({ dark, setDark, progress, manifest, onOpenFavorite, onProfilePhotoChange }: { dark: boolean; setDark: (value: boolean) => void; progress: PlayerProgress; manifest: BibleManifest | null; onOpenFavorite: (reference: string) => void; onProfilePhotoChange: (file: File) => void }) {
   const xpProgress = getXpProgress(progress.xp);
   const [expanded, setExpanded] = useState(false);
   const [favoritesOpen, setFavoritesOpen] = useState(false);
@@ -699,7 +713,7 @@ function ProfilePage({ dark, setDark, progress, manifest, onOpenFavorite }: { da
   const visibleAchievements = expanded ? achievements : achievements.slice(0, 3);
   return <section className="generic-page profile-page page-in">
     <div className="profile-heading"><div><p className="eyebrow">SUA JORNADA</p><h1>Perfil</h1><p className="lead">Acompanhe sua constância, suas conquistas e o próximo passo na Palavra.</p></div><span className="profile-status"><i />Jornada ativa</span></div>
-    <section className="profile-summary"><div className="profile-avatar">{progress.profilePhoto ? <ProfilePhoto src={progress.profilePhoto} /> : xpProgress.level}</div><div className="profile-identity"><p className="eyebrow">DISCÍPULO</p><h2>{progress.displayName || "Seu Discípulo"}</h2><p className="profile-rank">Nível {xpProgress.level} <span>·</span> {discipleTitle(xpProgress.level)}</p><div className="profile-xp-meta"><span>{progress.xp.toLocaleString("pt-BR")} XP acumulados</span><b>{xpProgress.isMaxLevel ? "NÍVEL MÁXIMO · 50" : `${xpProgress.current - xpProgress.currentLevelXp} / ${xpProgress.needed} XP`}</b></div><div className="profile-xp"><i style={{ width: `${xpProgress.progress}%` }} /></div><small>{xpProgress.isMaxLevel ? "Você completou toda a progressão disponível." : `Faltam ${xpProgress.remaining} XP para o nível ${xpProgress.level + 1}`}</small></div><div className="profile-next"><span>PRÓXIMO MARCO</span><b>{xpProgress.isMaxLevel ? "NÍVEL MÁXIMO" : `NÍVEL ${xpProgress.level + 1}`}</b><i>Continue lendo<br />para avançar</i></div></section>
+    <section className="profile-summary"><label className="profile-avatar profile-avatar-picker">{progress.profilePhoto ? <ProfilePhoto src={progress.profilePhoto} /> : xpProgress.level}<input type="file" accept="image/*" aria-label="Alterar foto do perfil" onChange={(event) => { const file = event.target.files?.[0]; if (file) onProfilePhotoChange(file); }} /><small>Alterar</small></label><div className="profile-identity"><p className="eyebrow">DISCÍPULO</p><h2>{progress.displayName || "Seu Discípulo"}</h2><p className="profile-rank">Nível {xpProgress.level} <span>·</span> {discipleTitle(xpProgress.level)}</p><div className="profile-xp-meta"><span>{progress.xp.toLocaleString("pt-BR")} XP acumulados</span><b>{xpProgress.isMaxLevel ? "NÍVEL MÁXIMO · 50" : `${xpProgress.current - xpProgress.currentLevelXp} / ${xpProgress.needed} XP`}</b></div><div className="profile-xp"><i style={{ width: `${xpProgress.progress}%` }} /></div><small>{xpProgress.isMaxLevel ? "Você completou toda a progressão disponível." : `Faltam ${xpProgress.remaining} XP para o nível ${xpProgress.level + 1}`}</small></div><div className="profile-next"><span>PRÓXIMO MARCO</span><b>{xpProgress.isMaxLevel ? "NÍVEL MÁXIMO" : `NÍVEL ${xpProgress.level + 1}`}</b><i>Continue lendo<br />para avançar</i></div></section>
     <section className="profile-stats"><article><span>✦</span><div><b>{progress.completed.length}</b><small>capítulos lidos</small></div></article><article><span>🔥</span><div><b>{progress.streak}</b><small>dias de sequência</small></div></article><article><span>◆</span><div><b>{progress.coins}</b><small>moedas guardadas</small></div></article><article><span>◎</span><div><b>50</b><small>níveis disponíveis</small></div></article></section>
     <section className="profile-panel"><div className="profile-section-heading"><div><p className="eyebrow">CONQUISTAS</p><h2>Marcos da jornada</h2></div><span>{achievements.filter((item) => item.unlocked).length} de {achievements.length} conquistadas</span></div><div className="achievement-row">{visibleAchievements.map((item) => <article key={item.name} className={item.unlocked ? "earned" : ""}><i>{item.icon}</i><b>{item.name}</b></article>)}</div><button className="profile-action" onClick={() => setExpanded(!expanded)}>{expanded ? "Exibir menos" : "Exibir mais conquistas"}</button></section>
     <section className="profile-panel"><div className="profile-section-heading"><div><p className="eyebrow">BIBLIOTECA</p><h2>Seu acervo</h2></div><span>Leitura</span></div><div className="library-items"><div><i>♡</i><span>Versículos favoritos<small><b>{favorites.length}</b> salvos para revisitar</small></span></div><div><i>▥</i><span>Capítulos concluídos<small><b>{progress.completed.length}</b> registrados na jornada</small></span></div></div><button className="profile-action" onClick={() => setFavoritesOpen(!favoritesOpen)}>Abrir favoritos <b>→</b></button>{favoritesOpen && <div className="favorites-list">{favorites.length ? favorites.map((reference) => { const [slug, chapter, verse] = reference.split(":"); const book = manifest?.books.find((item) => item.slug === slug); return <button key={reference} onClick={() => onOpenFavorite(reference)}><span>♡</span><div><b>{book?.name || slug} {chapter}:{verse}</b><small>Abrir na Bíblia</small></div><em>›</em></button>; }) : <p>Você ainda não salvou versículos.</p>}</div>}</section>
