@@ -42,5 +42,17 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build and deploy
-        run: pnpm deploy
+      - name: Build
+        run: pnpm build
+
+      - name: Configure Google login
+        run: |
+          if [ -z "$GOOGLE_CLIENT_ID" ] || [ -z "$GOOGLE_CLIENT_SECRET" ]; then
+            echo "::error::Configure GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in the repository secrets."
+            exit 1
+          fi
+          printf '%s' "$GOOGLE_CLIENT_ID" | pnpm exec wrangler secret put GOOGLE_CLIENT_ID
+          printf '%s' "$GOOGLE_CLIENT_SECRET" | pnpm exec wrangler secret put GOOGLE_CLIENT_SECRET
+
+      - name: Deploy
+        run: pnpm exec wrangler deploy

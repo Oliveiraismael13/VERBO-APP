@@ -51,3 +51,10 @@ test("keeps the web profile and deep-link behavior available", async () => {
 test("does not expose a public preview directory", async () => {
   await assert.rejects(access(new URL("public/_sites-preview", root)));
 });
+
+test("deploys Google credentials as Worker secrets", async () => {
+  const workflow = await readFile(new URL("../.github/workflows/deploy-mobile.yml", root), "utf8");
+
+  assert.match(workflow, /wrangler secret put GOOGLE_CLIENT_ID/);
+  assert.match(workflow, /wrangler secret put GOOGLE_CLIENT_SECRET/);
+});
