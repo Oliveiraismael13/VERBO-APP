@@ -46,6 +46,8 @@ assert.match(app, /A Edição Chama da Fé não é usada nas missões/);
   assert.match(app, /className="verse-row"/);
   assert.match(app, /verse-tools" aria-label=\{`Ferramentas para/);
   assert.match(app, /function stageProgress/);
+  assert.match(app, /CONTEXTO HISTÓRICO/);
+  assert.doesNotMatch(app, /MOMENTO DE REFLEXÃO/);
   assert.match(app, /ETAPA ATUAL · \{progressInStage\.done\} de \{progressInStage\.total\}/);
   assert.match(app, /progress\.profilePhoto \? <ProfilePhoto src=\{progress\.profilePhoto\}/);
   assert.match(app, /className="crest-level"/);
@@ -67,6 +69,7 @@ assert.match(app, /A Edição Chama da Fé não é usada nas missões/);
   assert.equal(missions.length, 74);
   for (const [, slug, from, to] of missions) {
     assert.match(campaign, new RegExp(`"${slug}:${from}-${to}": narrative\\(`));
+    assert.match(campaign, new RegExp(`"${slug}:${from}-${to}": "`));
   }
   const progressRoute = await text("app/api/progress/route.ts");
   assert.match(progressRoute, /const xpGain = actCompleted \? 100 : missionCompleted \? 80 : 40/);

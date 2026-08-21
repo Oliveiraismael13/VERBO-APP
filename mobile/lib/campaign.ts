@@ -1,7 +1,8 @@
 export type CampaignRange = { slug: string; from: number; to: number };
 export type CampaignMission = CampaignRange & { title: string };
 export type CampaignAct = { number: number; title: string; ranges: CampaignRange[]; missions: CampaignMission[] };
-export type MissionNarrative = { introduction: string; reflection: string; discovery: string; next: string };
+type NarrativeDraft = { introduction: string; reflection: string; discovery: string; next: string };
+export type MissionNarrative = { introduction: string; historicalContext: string; discovery: string; next: string };
 
 const range = (slug: string, from: number, to: number): CampaignRange => ({ slug, from, to });
 const mission = (slug: string, from: number, to: number, title: string): CampaignMission => ({ slug, from, to, title });
@@ -67,9 +68,9 @@ export function missionForChapter(slug: string, chapter: number) {
   return null;
 }
 
-const narrative = (introduction: string, reflection: string, discovery: string, next: string): MissionNarrative => ({ introduction, reflection, discovery, next });
+const narrative = (introduction: string, reflection: string, discovery: string, next: string): NarrativeDraft => ({ introduction, reflection, discovery, next });
 
-const narratives: Record<string, MissionNarrative> = {
+const narratives: Record<string, NarrativeDraft> = {
   // Ato I — criação, queda e a necessidade da promessa.
   "gen:1-1": narrative("Antes de cidades, reis e povos, a história começa com o Deus soberano criando pela sua palavra. Tudo depende dele e recebe dele sua bondade e propósito.", "O que o texto revela sobre o Criador antes de revelar algo sobre você?", "A primeira peça está no lugar: o mundo não é fruto do acaso, mas da palavra boa e poderosa de Deus.", "Mas como a criatura viverá no mundo que recebeu? O jardim guarda essa pergunta."),
   "gen:2-3": narrative("No jardim, Deus estabelece comunhão, vocação e um limite santo. A escolha humana expõe que o pecado é, no fundo, desconfiança da palavra de Deus.", "Em que momento o texto contrasta a voz de Deus com a voz da serpente?", "A queda alcança a relação com Deus, com o próximo e com a própria criação; ninguém se cura por si mesmo.", "Fora do jardim, a ferida logo aparecerá entre irmãos."),
@@ -159,11 +160,98 @@ const narratives: Record<string, MissionNarrative> = {
   "apo:1-22": narrative("Apocalipse revela Jesus Cristo como Senhor ressuscitado, Juiz justo e Cordeiro vencedor. Com imagens apocalípticas, fortalece a igreja a adorar, perseverar e esperar a nova criação.", "Que visão de Cristo ajuda a enfrentar medo, sedução ou sofrimento no presente?", "A história termina onde a graça pretende levá-la: Deus habita com seu povo, o mal é julgado e o Cordeiro recebe toda a adoração.", "A jornada bíblica se conclui com esperança certa: Cristo reina e fará novas todas as coisas."),
 };
 
+// Cada etapa da jornada recebe seu próprio enquadramento histórico. Evitamos datas
+// excessivamente fechadas onde há debate entre estudiosos e mantemos o texto focado
+// no cenário que ajuda o leitor a localizar a passagem na história da redenção.
+export const historicalContexts: Record<string, string> = {
+  "gen:1-1": "Gênesis abre na história primordial, antes da formação de Israel e de suas instituições. A linguagem apresenta o Deus único como Criador de todo o cosmos, em contraste com as narrativas religiosas do antigo Oriente Próximo que divinizavam elementos da criação.",
+  "gen:2-3": "A narrativa se concentra no jardim, no começo da história humana. Seu cenário explica a vocação dada ao homem e à mulher e a ruptura que, segundo a Escritura, antecede a dispersão dos povos e a história de Israel.",
+  "gen:4-5": "Depois da expulsão do jardim, a narrativa acompanha as primeiras famílias e genealogias. O texto descreve o crescimento da violência humana num mundo ainda anterior ao dilúvio e prepara o contraste entre as linhagens de Caim e Sete.",
+  "gen:6-9": "O dilúvio pertence à seção primordial de Gênesis e dialoga com memórias antigas de grandes inundações conhecidas no Oriente Próximo. A narrativa bíblica, porém, interpreta o evento dentro da justiça e da aliança do Deus Criador.",
+  "gen:10-11": "A tabela das nações e Babel explicam a diversidade de povos e línguas que Israel encontrava ao redor. Babel situa a ambição humana numa planície da Mesopotâmia e encerra a história universal antes do chamado de Abrão.",
+  "gen:12-23": "A história passa da humanidade em geral para uma família nômade. Abrão sai da Mesopotâmia e percorre Canaã, região estratégica entre Egito e grandes reinos orientais, vivendo como peregrino em terras que ainda não possui.",
+  "gen:24-36": "Isaac e Jacó vivem entre Canaã, o Neguebe e a Mesopotâmia, em redes familiares marcadas por casamento, herança e clãs. O período patriarcal explica a origem das tribos que depois formarão Israel.",
+  "gen:37-50": "José é levado ao Egito, potência agrícola central do antigo Oriente Próximo. A administração de grãos e a migração da família para Gósen fornecem a ponte histórica entre os patriarcas e a escravidão narrada em Êxodo.",
+  "exod:1-15": "A leitura se passa no Egito, onde os descendentes de Jacó são retratados como um povo submetido a trabalho forçado. O êxodo se torna a memória fundadora de Israel: libertação, Páscoa e travessia passam a marcar seu calendário e culto.",
+  "exod:16-40": "Após saírem do Egito, os israelitas seguem pelo deserto em direção ao Sinai. Ali, uma comunidade de ex-escravos recebe leis, estrutura de culto e o tabernáculo, aprendendo a viver como povo da aliança.",
+  "lev:1-27": "Levítico está situado junto ao Sinai e reúne instruções para o tabernáculo recém-estabelecido. Sacerdotes, sacrifícios, festas e regras de pureza organizavam a vida de Israel em torno da presença santa de Deus.",
+  "num:1-36": "Números acompanha Israel entre o Sinai e as planícies de Moabe. Censos, acampamentos e deslocamentos mostram uma geração formada no deserto antes da entrada em Canaã.",
+  "deut:1-34": "Deuteronômio registra os discursos finais de Moisés nas planícies de Moabe, a leste do Jordão. A nova geração ouve novamente a lei antes de atravessar para a terra prometida, num momento de renovação da aliança.",
+  "jos:1-24": "Josué começa após a morte de Moisés e descreve a entrada de Israel em Canaã. O livro combina memórias de conquista, distribuição tribal da terra e renovação da aliança em locais como Siquém.",
+  "juiz:1-21": "O período dos juízes antecede a monarquia e é marcado por liderança tribal descentralizada. Israel vive entre povos cananeus, filisteus e outros vizinhos, sem uma autoridade nacional estável.",
+  "rute:1-4": "Rute se passa nos dias dos juízes, mas observa a vida rural de Belém em vez das guerras nacionais. Colheita, resgate de propriedade e casamento levirato revelam costumes familiares do antigo Israel.",
+  "1sa:1-31": "Primeiro Samuel narra a transição de uma confederação tribal para a monarquia. Samuel ministra em Siló, Saul governa sob pressão filisteia e Davi surge numa sociedade que ainda aprende o que significa ter um rei.",
+  "2sa:1-24": "Segundo Samuel acompanha o reinado de Davi, quando Jerusalém se torna capital política e centro cultual de Israel. O livro expõe tanto a consolidação do reino quanto as crises da casa real.",
+  "1rs:1-22": "O livro começa no auge do reino unido, com Salomão e o templo em Jerusalém, e segue para a divisão entre Israel ao norte e Judá ao sul. Profetas como Elias confrontam a idolatria patrocinada por reis.",
+  "2rs:1-25": "Segundo Reis percorre os últimos séculos dos dois reinos, sob a pressão crescente da Assíria e depois da Babilônia. A queda de Samaria e a destruição de Jerusalém enquadram o exílio como evento histórico e teológico.",
+  "1crn:1-29": "Crônicas foi composto para uma comunidade que olha para trás depois do exílio. Genealogias e a história de Davi reorganizam a memória de Israel em torno da linhagem davídica, do templo e do culto.",
+  "2crn:1-36": "Segundo Crônicas relembra sobretudo os reis de Judá a partir do templo de Jerusalém. Escrito com perspectiva posterior ao exílio, destaca reformas, infidelidades e o decreto persa que permite o retorno.",
+  "esd:1-10": "Esdras começa no período persa, quando grupos de judeus voltam da Babilônia para Jerusalém. A reconstrução do altar e do templo ocorre sob administração imperial, em meio a oposição local e recursos limitados.",
+  "nee:1-13": "Neemias atua no período persa como oficial ligado à corte antes de liderar a reconstrução dos muros de Jerusalém. O livro une administração urbana, defesa da cidade e renovação comunitária pela leitura da Lei.",
+  "est:1-10": "Ester se passa na diáspora judaica, dentro da corte persa em Susã. Sem depender de Jerusalém ou do templo como cenário, a narrativa mostra os judeus vivendo sob decisões e perigos da administração imperial.",
+  "jo:1-42": "Jó pertence à literatura de sabedoria e usa um cenário patriarcal, sem vincular sua história à monarquia, à Lei mosaica ou ao templo. O livro trata uma questão humana ampla: como interpretar o sofrimento do justo.",
+  "sal:1-150": "Salmos reúne cânticos produzidos e usados ao longo de muitos períodos de Israel, incluindo a monarquia, crises nacionais e provável uso pós-exílico. A coletânea preserva oração pessoal e adoração pública para a comunidade da aliança.",
+  "prov:1-31": "Provérbios reúne instruções de sabedoria associadas a Salomão e a outros sábios de Israel. Seu ambiente é o da formação doméstica e da corte, onde pais e mestres treinam jovens para viver com temor do Senhor.",
+  "ecl:1-12": "Eclesiastes pertence à tradição sapiencial e examina a vida sob o sol com as ferramentas da observação, do trabalho e da experiência. Sua voz literária dialoga com questões de riqueza, morte e sentido que atravessam todas as épocas.",
+  "cant:1-8": "Cântico dos Cânticos é poesia amorosa ambientada no mundo agrário e real de Israel antigo. Imagens de vinhas, rebanhos, cidades e celebrações de casamento situam o livro na linguagem cotidiana de seu tempo.",
+  "isa:1-66": "Isaías abrange crises de Judá entre a ameaça assíria e a esperança posterior ao exílio. Jerusalém, a casa de Davi e as nações dominantes formam o pano de fundo da sua pregação de juízo e consolação.",
+  "jer:1-52": "Jeremias profetiza nos últimos anos de Judá, enquanto a Babilônia substitui a Assíria como poder regional. Suas mensagens atravessam o cerco de Jerusalém, a queda da cidade e os primeiros dias do exílio.",
+  "lam:1-5": "Lamentações nasce do trauma da destruição de Jerusalém e do templo pelos babilônios. Seus poemas dão voz pública ao luto de uma cidade devastada e ajudam a comunidade a lamentar diante de Deus sem negar a catástrofe.",
+  "eze:1-48": "Ezequiel fala entre os exilados judeus na Babilônia, junto ao rio Quebar. Seu ministério começa antes da queda final de Jerusalém e continua depois dela, quando a comunidade precisa entender exílio, culpa e esperança.",
+  "dan:1-12": "Daniel situa judeus fiéis nas cortes da Babilônia e, depois, do império medo-persa. Histórias de palácio e visões apocalípticas encorajam uma minoria que vive sob governos estrangeiros e mudanças de império.",
+  "ose:1-14": "Oseias ministra no reino do Norte antes de sua queda para a Assíria. Prosperidade aparente, alianças políticas instáveis e culto misturado à idolatria formam o cenário de sua denúncia e de seu chamado ao retorno.",
+  "joel:1-3": "Joel interpreta uma devastadora praga de gafanhotos e uma crise agrícola como ocasião de convocação nacional. O livro usa o culto de Jerusalém, jejum e assembleia para chamar Judá a um retorno público ao Senhor.",
+  "amos:1-9": "Amós prega no reino do Norte durante um tempo de prosperidade econômica e desigualdade social. Vindo de Tecoa, em Judá, ele confronta os santuários do Norte e a falsa segurança de uma sociedade rica.",
+  "oba:1-1": "Obadias dirige-se a Edom, povo aparentado a Israel e situado ao sul de Judá. Sua mensagem nasce no horizonte da queda de Jerusalém, quando Edom se aproveitou da calamidade do seu vizinho.",
+  "jon:1-4": "Jonas se move entre Israel e Nínive, centro do poder assírio. A cidade representa um império temido no antigo Oriente Próximo e torna visível a tensão entre nacionalismo israelita e a compaixão de Deus pelas nações.",
+  "miq:1-7": "Miqueias profetiza em Judá durante a crise assíria, falando tanto a Samaria quanto a Jerusalém. Seus oráculos observam corrupção de líderes, perda de terras e injustiça contra famílias vulneráveis.",
+  "naum:1-3": "Naum anuncia a queda de Nínive quando a Assíria, antes potência dominante, se aproxima do colapso. Para Judá, a ruína desse império violento alteraria profundamente o mapa político da região.",
+  "hab:1-3": "Habacuque fala quando a Babilônia sobe como nova força militar e Judá vê o mundo mudar rapidamente. O diálogo do profeta nasce da violência interna e da perplexidade diante da expansão babilônica.",
+  "sof:1-3": "Sofonias ministra em Judá nos dias de Josias, antes da invasão babilônica. A reforma religiosa do período convive com práticas idólatras e com a necessidade de uma mudança mais profunda no povo.",
+  "ageu:1-2": "Ageu fala à comunidade que retornou do exílio persa e vive em Jerusalém com recursos escassos. O templo ainda estava incompleto, e o profeta chama líderes e povo a retomar sua reconstrução.",
+  "zac:1-14": "Zacarias compartilha o ambiente pós-exílico de Ageu, quando Jerusalém e o templo são reconstruídos sob domínio persa. Suas visões encorajam uma comunidade pequena que aguarda a restauração plena prometida por Deus.",
+  "mal:1-4": "Malaquias retrata uma Judá pós-exílica já estabelecida, mas espiritualmente cansada. Templo, sacerdotes, dízimos e alianças familiares aparecem como áreas em que a rotina religiosa precisava de correção.",
+  "mat:1-28": "Mateus apresenta Jesus na Judeia e Galileia do primeiro século, sob domínio romano e com forte expectativa messiânica. Genealogias, sinagogas, peregrinações a Jerusalém e debates com líderes situam o evangelho no mundo judaico do Segundo Templo.",
+  "mar:1-16": "Marcos acompanha Jesus pela Galileia, regiões gentílicas próximas e Jerusalém sob ocupação romana. O ritmo rápido do evangelho destaca a resposta das multidões, dos discípulos e das autoridades à sua identidade e obra.",
+  "luc:1-24": "Lucas situa o nascimento e o ministério de Jesus no mundo romano, com referências a governantes, censos, sacerdócio e sinagogas. O evangelho mostra a vida judaica do primeiro século e suas margens sociais.",
+  "joao:1-21": "João organiza o ministério de Jesus em torno de sinais, festas judaicas e viagens a Jerusalém. O cenário do Segundo Templo ajuda a entender referências à Páscoa, à Festa dos Tabernáculos e à dedicação do templo.",
+  "atos:1-28": "Atos acompanha a expansão da igreja de Jerusalém até Roma, através de províncias e rotas do império. Pentecostes, sinagogas da diáspora, cidadania romana e viagens marítimas formam o cenário histórico da missão apostólica.",
+  "rom:1-16": "Romanos é uma carta de Paulo a uma comunidade cristã já existente na capital imperial. Judeus e gentios conviviam numa cidade cosmopolita, e a igreja precisava aprender a viver unida sob o evangelho.",
+  "1cor:1-16": "Corinto era uma cidade portuária romana, próspera e socialmente diversa. A igreja se reunia em casas e enfrentava rivalidades, práticas públicas e dilemas morais próprios de um centro urbano do Mediterrâneo.",
+  "2cor:1-13": "Segunda Coríntios surge de uma relação pastoral tensa entre Paulo e a igreja de Corinto. A carta revela redes de viagens, coleta para os santos e debates sobre autoridade apostólica no cristianismo primitivo.",
+  "gal:1-6": "Gálatas se dirige a igrejas da região da Galácia, onde comunidades gentias ouviram missionários que disputavam como os convertidos deveriam se relacionar com a Lei de Moisés. A carta responde a uma crise real de identidade e comunhão.",
+  "efes:1-6": "Efésios circula no ambiente urbano da Ásia Menor romana, onde Éfeso era um importante centro comercial e religioso. A carta fala a igrejas compostas por judeus e gentios, unidas em meio a diferenças culturais profundas.",
+  "fil:1-4": "Filipos era uma colônia romana na Macedônia, marcada por cidadania e presença militar. Paulo escreve em prisão a uma igreja que o apoiava, usando linguagem de parceria, honra e vida pública conhecida naquele contexto.",
+  "col:1-4": "Colossos era uma cidade do vale do Lico, na Ásia Menor, conectada a comunidades como Laodiceia e Hierápolis. A carta enfrenta ensinamentos que misturavam práticas religiosas e diminuíam a suficiência de Cristo.",
+  "1tes:1-5": "Tessalônica era uma grande cidade macedônia situada numa rota importante do império. A jovem igreja nasceu em meio a oposição e precisava compreender como viver publicamente enquanto esperava a volta de Cristo.",
+  "2tes:1-3": "Segunda Tessalonicenses continua o cuidado de Paulo por uma igreja sob pressão. Boatos e inquietações sobre o Dia do Senhor circulavam numa comunidade recente, exigindo correção pastoral e perseverança.",
+  "1tim:1-6": "Primeira Timóteo orienta a vida de uma igreja local em ambiente urbano, tradicionalmente ligado ao ministério de Timóteo em Éfeso. Ensino, oração, cuidado de viúvas e liderança mostram a organização concreta das primeiras comunidades cristãs.",
+  "2tim:1-4": "Segunda Timóteo reflete os últimos anos do ministério de Paulo, com prisão, abandono de colaboradores e expectativa de sofrimento. É uma carta pessoal sobre transmitir o evangelho quando a geração apostólica se aproxima do fim.",
+  "tito:1-3": "Tito trata da organização de igrejas em Creta, ilha mediterrânea de longa vida comercial e cultural. A carta mostra como comunidades recém-formadas precisavam de presbíteros, ensino confiável e testemunho público.",
+  "flm:1-1": "Filemom é uma carta pessoal enviada a uma casa cristã, provavelmente no ambiente de Colossos. Ela trata uma relação entre senhor e escravo dentro de uma sociedade romana em que a escravidão estruturava muitas casas e negócios.",
+  "heb:1-13": "Hebreus fala a cristãos familiarizados com as Escrituras, o sacerdócio e o culto do Antigo Testamento. Em um tempo de pressão e cansaço, a carta interpreta essas instituições à luz da obra final de Cristo.",
+  "tiag:1-5": "Tiago se dirige às doze tribos na dispersão, linguagem que descreve cristãos judeus espalhados por diferentes regiões. Pobreza, favoritismo em assembleias e tensões econômicas revelam os desafios sociais dessas comunidades.",
+  "1ped:1-5": "Primeira Pedro é enviada a cristãos de várias províncias da Ásia Menor. Eles vivem como minoria religiosa sob pressões cotidianas e precisam aprender a testemunhar dentro de casas, cidades e relações públicas romanas.",
+  "2ped:1-3": "Segunda Pedro responde ao avanço de falsos mestres em comunidades que aguardavam a volta de Cristo. O texto reflete o esforço da igreja apostólica para preservar ensino confiável e esperança diante de zombaria e demora percebida.",
+  "1joao:1-5": "Primeira João nasce no contexto de igrejas afetadas por ruptura e ensino divergente sobre Jesus. A carta oferece critérios pastorais para distinguir comunhão verdadeira em comunidades do final do primeiro século.",
+  "2joao:1-1": "Segunda João é dirigida a uma comunidade local e trata da hospitalidade oferecida a mestres itinerantes. Em redes de casas cristãs, acolher ou não um pregador tinha impacto direto sobre a circulação do ensino.",
+  "3joao:1-1": "Terceira João mostra uma igreja local em conflito sobre hospitalidade e autoridade. Nomes pessoais e viagens missionárias revelam como pequenas comunidades cooperavam para sustentar a expansão do evangelho.",
+  "jud:1-1": "Judas responde a infiltrações de falsos mestres numa comunidade cristã. Seu uso intenso de exemplos bíblicos e tradições judaicas mostra uma igreja que precisava defender a fé recebida em meio a pressões internas.",
+  "apo:1-22": "Apocalipse é dirigido a sete igrejas da Ásia Menor sob o domínio romano. Cidades marcadas por comércio, culto imperial e religiões locais recebem visões que ajudam cristãos a enxergar sua lealdade a Cristo dentro de um império poderoso.",
+};
+
 export function narrativeForMission(mission: CampaignMission): MissionNarrative {
   const key = `${mission.slug}:${mission.from}-${mission.to}`;
-  return narratives[key] ?? {
+  const source = narratives[key];
+  if (source) return {
+    introduction: source.introduction,
+    historicalContext: historicalContexts[key] ?? "Este trecho deve ser lido dentro do seu lugar na história bíblica e no mundo em que foi originalmente recebido.",
+    discovery: source.discovery,
+    next: source.next,
+  };
+  return {
     introduction: `Nesta parte da Grande História, ${mission.title.toLowerCase()} conduz a leitura de ${mission.from === mission.to ? "um capítulo" : "uma nova sequência de capítulos"}. Observe o texto antes de tirar conclusões apressadas.`,
-    reflection: "Que parte do texto ajuda você a compreender melhor o que veio antes?",
+    historicalContext: "Este trecho deve ser lido dentro do seu lugar na história bíblica e no mundo em que foi originalmente recebido.",
     discovery: "Cada leitura amplia a compreensão da história bíblica e do lugar deste trecho nela.",
     next: "A próxima etapa revelará uma nova consequência e uma nova pergunta para acompanhar.",
   };
