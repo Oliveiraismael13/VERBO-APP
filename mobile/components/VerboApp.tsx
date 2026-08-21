@@ -61,7 +61,6 @@ export default function VerboApp() {
   const [progress, setProgress] = useState<PlayerProgress>(emptyProgress);
   const [reward, setReward] = useState<ChapterReward | null>(null);
   const [savingChapter, setSavingChapter] = useState(false);
-  const [pendingAdvance, setPendingAdvance] = useState<-1 | 1 | null>(null);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -153,7 +152,7 @@ export default function VerboApp() {
     go("result");
   };
 
-  const completeChapter = async (advanceDirection: -1 | 1 = 1) => {
+  const completeChapter = async () => {
     if (!missionMode) {
       notify("Entre na missão para registrar este capítulo");
       return;
@@ -171,8 +170,8 @@ export default function VerboApp() {
       const { reward: earned, ...nextProgress } = data;
       setProgress(nextProgress);
       if (earned) {
-        setPendingAdvance(advanceDirection);
         setReward(earned);
+        advanceToNextChapter(nextProgress);
       }
     } catch {
       notify("Não foi possível salvar o progresso");
@@ -223,7 +222,7 @@ export default function VerboApp() {
     if (missionMode && !progress.completed.includes(chapterKey)) {
       const shouldComplete = window.confirm(`Deseja marcar ${book?.name || "este capítulo"} ${chapter} como concluído?`);
       if (shouldComplete) {
-        void completeChapter(direction);
+        void completeChapter();
         return;
       }
     }
@@ -301,6 +300,25 @@ export default function VerboApp() {
     const index = manifest.books.findIndex((item) => item.slug === book.slug);
     const neighbor = manifest.books[index + direction];
     if (neighbor) chooseBook(neighbor.slug, direction === 1 ? 1 : neighbor.chapterCount);
+  };
+
+  const advanceToNextChapter = (updatedProgress: PlayerProgress) => {
+    if (!book || !manifest) return;
+    const target = chapter + 1;
+    if (target <= book.chapters.length) {
+      if (missionMode && !isMainChapterUnlocked(manifest, updatedProgress, bookSlug, target)) return;
+      setChapter(target);
+      setSelectedVerse(1);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+    const index = manifest.books.findIndex((item) => item.slug === book.slug);
+    const nextBook = manifest.books[index + 1];
+    if (!nextBook || (missionMode && !isMainChapterUnlocked(manifest, updatedProgress, nextBook.slug, 1))) return;
+    setBookSlug(nextBook.slug);
+    setChapter(1);
+    setSelectedVerse(1);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const currentVerses = book?.chapters[chapter - 1] ?? [];
@@ -444,7 +462,7 @@ export default function VerboApp() {
       {searchOpen && <SearchOverlay manifest={manifest} close={() => setSearchOpen(false)} choose={chooseBook} open={() => { setSearchOpen(false); go("result"); }} />}
       {missionBriefingOpen && <MissionBriefing manifest={manifest} progress={progress} start={beginMission} close={() => setMissionBriefingOpen(false)} />}
       {toast && <div className="toast">✓ {toast}</div>}
-      {reward && <RewardModal reward={reward} level={progress.level} close={() => { setReward(null); if (pendingAdvance) { const direction = pendingAdvance; setPendingAdvance(null); moveChapter(direction); } }} />}
+      {reward && <RewardModal reward={reward} level={progress.level} close={() => setReward(null)} />}
     </main>
   );
 }

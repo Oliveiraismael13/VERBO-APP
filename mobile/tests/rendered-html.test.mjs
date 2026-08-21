@@ -26,6 +26,8 @@ test("contains the authenticated Verbo application routes", async () => {
   assert.match(app, /Abrir favoritos/);
   assert.match(app, /mission-mode-banner/);
   assert.match(app, /missionMode && <button className=\{`chapter-complete/);
+  assert.match(app, /setReward\(earned\);\s+advanceToNextChapter\(nextProgress\);/);
+  assert.doesNotMatch(app, /pendingAdvance/);
   assert.match(app, /homem-50lvl-idle-south\.png/);
   const missions = Array.from(campaign.matchAll(/mission\("([^"]+)", (\d+), (\d+),/g));
   assert.equal(missions.length, 74);
