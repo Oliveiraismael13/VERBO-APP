@@ -1,7 +1,7 @@
 /* global self, caches, fetch, URL */
 
 const CACHE_NAME = "verbo-assets-v1";
-const CORE_ASSETS = ["/manifest.webmanifest", "/favicon.svg", "/icons/verbo-192.png", "/icons/verbo-512.png"];
+const CORE_ASSETS = ["/manifest.webmanifest", "/favicon.svg", "/icons/verbo-180.png", "/icons/verbo-192.png", "/icons/verbo-512.png"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(CORE_ASSETS)).then(() => self.skipWaiting()));

@@ -96,11 +96,13 @@ test("is installable as a mobile application", async () => {
   assert.match(layout, /manifest: "\/manifest\.webmanifest"/);
   assert.match(layout, /<AppInstall \/>/);
   assert.match(manifest, /"display": "standalone"/);
+  assert.match(manifest, /"name": "Verbo"/);
   assert.match(manifest, /"short_name": "Verbo"/);
   assert.match(manifest, /"src": "\/icons\/verbo-192\.png"/);
   assert.match(manifest, /"src": "\/icons\/verbo-512\.png"/);
   assert.match(install, /beforeinstallprompt/);
   assert.match(install, /serviceWorker\.register\("\/sw\.js"\)/);
+  assert.match(layout, /apple-touch-icon" sizes="180x180" href="\/icons\/verbo-180\.png\?v=1"/);
   assert.match(worker, /!url\.pathname\.startsWith\("\/api\/"\)/);
 });
 
