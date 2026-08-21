@@ -21,11 +21,16 @@ test("contains the authenticated Verbo application routes", async () => {
   const styles = await text("app/globals.css");
   const campaign = await text("lib/campaign.ts");
   assert.match(app, />Missões</);
-  assert.match(app, /ANTIGO TESTAMENTO · 39 LIVROS/);
+  assert.match(app, /ANTIGO TESTAMENTO · \$\{oldTestamentBookCount\} LIVROS/);
   assert.match(app, /NOVO TESTAMENTO · 27 LIVROS/);
   assert.match(app, /ESCOLHA UM CAPÍTULO/);
   assert.match(app, /Array\.from\(\{ length: selectedBook\.chapterCount \}/);
   assert.match(app, /choose\(selectedBook\.slug, number\)/);
+  assert.match(app, /CHAMADAFE/);
+  assert.match(app, /catholic-73/);
+  assert.match(app, /Livro deuterocanônico/);
+  assert.match(app, /A Edição Chama da Fé não é usada nas missões/);
+  assert.match(app, /As missões usam a Bíblia Livre e o cânon protestante de 66 livros/);
   assert.match(campaign, /A Luz sobre o Abismo/);
   assert.doesNotMatch(app, /O amor que transforma/);
   assert.match(app, /marked-\$\{savedHighlight\}/);
@@ -56,6 +61,7 @@ test("contains the authenticated Verbo application routes", async () => {
   assert.match(styles, /profile-avatar-picker\{position:relative;overflow:visible;cursor:pointer\}/);
   assert.match(styles, /left:50%;bottom:-9px;transform:translateX\(-50%\)/);
   assert.match(styles, /\.chapter-grid\{display:grid;grid-template-columns:repeat\(5,1fr\)/);
+  assert.match(styles, /\.deuterocanonical-note\{display:flex/);
   const missions = Array.from(campaign.matchAll(/mission\("([^"]+)", (\d+), (\d+),/g));
   assert.equal(missions.length, 74);
   for (const [, slug, from, to] of missions) {
@@ -126,6 +132,11 @@ test("is installable as a mobile application", async () => {
   assert.match(install, /serviceWorker\.register\("\/sw\.js"\)/);
   assert.match(layout, /apple-touch-icon" sizes="180x180" href="\/icons\/verbo-180\.png\?v=2"/);
   assert.match(worker, /!url\.pathname\.startsWith\("\/api\/"\)/);
+  const catholicManifest = await text("public/bible/chamadafe/manifest.json");
+  const tobit = await text("public/bible/chamadafe/tobias.json");
+  assert.match(catholicManifest, /"bookCount":73/);
+  assert.match(catholicManifest, /"isDeuterocanonical":true/);
+  assert.match(tobit, /"name":"Tobias"/);
 });
 
 test("deploys Google credentials as Worker secrets", async () => {
