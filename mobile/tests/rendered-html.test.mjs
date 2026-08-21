@@ -24,6 +24,8 @@ test("contains the authenticated Verbo application routes", async () => {
   assert.doesNotMatch(app, /O amor que transforma/);
   assert.match(app, /marked-\$\{savedHighlight\}/);
   assert.match(app, /Abrir favoritos/);
+  assert.match(app, /mission-mode-banner/);
+  assert.match(app, /missionMode && <button className=\{`chapter-complete/);
   assert.match(progress, /getSessionUser/);
 });
 

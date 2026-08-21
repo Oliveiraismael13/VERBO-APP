@@ -293,7 +293,7 @@ export default function VerboApp() {
   const selected = currentVerses.find((verse) => verse.number === selectedVerse);
 
   return (
-    <main className={`app-shell rpg-shell ${dark ? "dark" : ""}`}>
+    <main className={`app-shell rpg-shell ${dark ? "dark" : ""} ${missionMode ? "mission-active" : ""}`}>
       {screen !== "camera" && (
         <header className="topbar">
           {screen === "result" ? (
@@ -314,6 +314,7 @@ export default function VerboApp() {
 
       {screen === "bible" && (
         <section className="reader page-in" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd} onClick={(event) => { if (!(event.target as HTMLElement).closest("[data-verse], .verse-tools")) { setVerseSelected(false); setHighlightPickerOpen(false); } }}>
+          {missionMode && <div className="mission-mode-banner"><div className="mission-disciple" aria-label="Seu Discípulo caminhando"><div className="pixel-disciple" aria-hidden="true"><i /><b /></div><small>DISCÍPULO</small></div><div className="mission-reference"><b>JORNADA PRINCIPAL ATIVA</b><strong>{book?.name ?? "Carregando"} {chapter}</strong><small>Conclua este capítulo para liberar o próximo.</small></div><button onClick={() => { setMissionMode(false); notify("Você voltou à Bíblia livre"); }}>Sair da missão</button></div>}
           <div className="reference-row">
             <div>
               <p className="eyebrow">{book?.testament === "old" ? "ANTIGO TESTAMENTO" : "NOVO TESTAMENTO"} · 66 LIVROS</p>
@@ -356,11 +357,11 @@ export default function VerboApp() {
             })}
           </article>
 
-          <button className={`chapter-complete ${progress.completed.includes(`${bookSlug}:${chapter}`) ? "done" : ""}`} onClick={completeChapter} disabled={savingChapter || progress.completed.includes(`${bookSlug}:${chapter}`)}>
+          {missionMode && <button className={`chapter-complete ${progress.completed.includes(`${bookSlug}:${chapter}`) ? "done" : ""}`} onClick={completeChapter} disabled={savingChapter || progress.completed.includes(`${bookSlug}:${chapter}`)}>
             <span>{progress.completed.includes(`${bookSlug}:${chapter}`) ? "✓" : "⚔"}</span>
             <div><b>{progress.completed.includes(`${bookSlug}:${chapter}`) ? "Capítulo concluído" : "Marcar capítulo como lido"}</b><small>{progress.completed.includes(`${bookSlug}:${chapter}`) ? "Recompensa conquistada" : "+40 XP · +8 moedas"}</small></div>
             <em>{savingChapter ? "…" : "›"}</em>
-          </button>
+          </button>}
 
           {selected && verseSelected && <div className="verse-tools">
             <p><b>{book?.name} {chapter}:{selectedVerse}</b><span>selecionado</span></p>
