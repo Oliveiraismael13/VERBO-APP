@@ -18,7 +18,10 @@ test("contains the authenticated Verbo application routes", async () => {
   assert.match(auth, /\/api\/auth\/\$\{mode\}/);
   assert.match(auth, /password-toggle/);
   const app = await text("components/VerboApp.tsx");
+  const campaign = await text("lib/campaign.ts");
   assert.match(app, />Missões</);
+  assert.match(campaign, /A Luz sobre o Abismo/);
+  assert.doesNotMatch(app, /O amor que transforma/);
   assert.match(progress, /getSessionUser/);
 });
 

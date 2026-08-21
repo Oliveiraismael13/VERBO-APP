@@ -392,7 +392,7 @@ export default function VerboApp() {
       )}
 
       {screen === "result" && <StudyResult translation={translation} setTranslation={setTranslation} saved={saved} setSaved={setSaved} notify={notify} />}
-      {screen === "studies" && <StudiesPage onOpen={() => go("result")} />}
+      {screen === "studies" && <StudiesPage manifest={manifest} progress={progress} onStart={() => { const mission = nextMainMission(manifest, progress); if (mission) chooseBook(mission.slug, mission.chapter); setMissionMode(true); go("bible"); }} />}
       {screen === "plans" && <PlansPage />}
       {screen === "profile" && <><ProfilePage dark={dark} setDark={setDark} progress={progress} /><button type="button" onClick={async () => { await fetch("/api/auth/logout", { method: "POST" }); window.location.href = "/"; }} style={{ display: "block", width: "calc(100% - 44px)", margin: "-4px auto 24px", padding: "12px", border: "1px solid #d9c8c8", borderRadius: "10px", background: "transparent", color: "#9b5555", fontSize: "11px", fontWeight: 800 }}>Sair da conta</button></>}
 
@@ -545,8 +545,47 @@ function StudyResult({ translation, setTranslation, saved, setSaved, notify }: {
   );
 }
 
-function StudiesPage({ onOpen }: { onOpen: () => void }) {
-  return <section className="generic-page page-in"><p className="eyebrow">SUA TRILHA DE APRENDIZADO</p><h1>Missões</h1><p className="lead">Avance pela Palavra em jornadas, temas e perguntas essenciais.</p><div className="featured-study" onClick={onOpen} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") onOpen(); }} role="button" tabIndex={0}><span>MISSÃO EM DESTAQUE</span><h2>O amor que transforma</h2><p>De João 3 ao coração do Evangelho</p><button>Começar missão →</button></div><h3 className="list-heading">Temas populares</h3><div className="topic-grid">{topics.map((topic) => <button key={topic.title} onClick={onOpen} className={topic.color}><i>{topic.icon}</i><div><b>{topic.title}</b><span>{topic.count}</span></div><em>›</em></button>)}</div></section>;
+function isCampaignMissionComplete(mission: (typeof campaignActs)[number]["missions"][number], completed: string[]) {
+  const completedSet = new Set(completed);
+  for (let chapter = mission.from; chapter <= mission.to; chapter += 1) {
+    if (!completedSet.has(`${mission.slug}:${chapter}`)) return false;
+  }
+  return true;
+}
+
+function StudiesPage({ manifest, progress, onStart }: { manifest: BibleManifest | null; progress: PlayerProgress; onStart: () => void }) {
+  const activeActIndex = campaignActs.findIndex((act) => !isActComplete(act, progress.completed));
+  const actIndex = activeActIndex === -1 ? campaignActs.length - 1 : activeActIndex;
+  const act = campaignActs[actIndex];
+  const nextAct = campaignActs[actIndex + 1];
+  const activeMission = nextMainMission(manifest, progress);
+  const actChapters = act.ranges.map((range) => {
+    const name = manifest?.books.find((book) => book.slug === range.slug)?.name ?? range.slug;
+    return `${name} ${range.from}${range.from === range.to ? "" : `–${range.to}`}`;
+  }).join(" · ");
+  const missionChapters = (mission: (typeof campaignActs)[number]["missions"][number]) => {
+    const name = manifest?.books.find((book) => book.slug === mission.slug)?.name ?? mission.slug;
+    return `${name} ${mission.from}${mission.from === mission.to ? "" : `–${mission.to}`}`;
+  };
+
+  return <section className="generic-page missions-page page-in">
+    <div className="missions-intro"><p className="eyebrow">SUA TRILHA DE APRENDIZADO</p><h1>Missão principal</h1><p className="lead">Avance pela história completa das Escrituras, lendo cada capítulo e registrando seu progresso.</p></div>
+    <section className="campaign-overview">
+      <div className="campaign-heading"><div><p className="eyebrow">ATO {act.number} · {actChapters}</p><h2>{act.title}</h2></div><span className="campaign-status">{isActComplete(act, progress.completed) ? "CONCLUÍDO" : "EM ANDAMENTO"}</span></div>
+      <p className="campaign-lead">{act.number === 1 ? "A beleza da criação encontra a ruptura, a violência e a dispersão. Descubra por que a promessa precisa começar novamente." : "Continue avançando pela Grande História, capítulo a capítulo, até completar este ato da campanha."}</p>
+      <div className="campaign-missions">{act.missions.map((mission, index) => {
+        const complete = isCampaignMissionComplete(mission, progress.completed);
+        const previousComplete = index === 0 || isCampaignMissionComplete(act.missions[index - 1], progress.completed);
+        const current = !complete && previousComplete;
+        return <article key={mission.title} className={`campaign-mission ${complete ? "complete" : current ? "current" : "locked"}`}>
+          <span>{complete ? "✓" : String(index + 1).padStart(2, "0")}</span><div><small>{complete ? "MISSÃO CONCLUÍDA" : current ? "MISSÃO ATUAL" : "BLOQUEADA"} · {missionChapters(mission)}</small><h3>{mission.title}</h3><p>{current && activeMission ? `Comece em ${activeMission.name} ${activeMission.chapter} para avançar nesta missão.` : complete ? "Todos os capítulos desta missão foram concluídos." : "Conclua a missão anterior para liberar este trecho."}</p></div><b>{complete ? "CONCLUÍDA" : current ? "EM ANDAMENTO" : "BLOQUEADA"}</b>
+        </article>;
+      })}</div>
+      <button className="journey-cta mission-current-cta" onClick={onStart} disabled={!activeMission}> {activeMission ? `Abrir missão atual · ${activeMission.name} ${activeMission.chapter}` : "Campanha concluída"} <b>→</b></button>
+      {nextAct && <div className="campaign-next"><span>PRÓXIMO ATO</span><b>{nextAct.title}</b><small>Desbloqueado após a conclusão de {actChapters}.</small></div>}
+    </section>
+    <section className="secondary-missions"><div className="campaign-heading"><div><p className="eyebrow">CONTEÚDO OPCIONAL</p><h2>Missões secundárias</h2></div><span className="campaign-status">BLOQUEADO</span></div><p>A campanha principal é o foco atual. Histórias opcionais e conteúdos paralelos serão liberados ao final da Grande História.</p><button disabled>Bloqueado até o fim da campanha</button></section>
+  </section>;
 }
 
 function PlansPage() {
