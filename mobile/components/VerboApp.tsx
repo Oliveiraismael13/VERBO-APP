@@ -25,7 +25,8 @@ const translations = {
 } as const;
 
 type Translation = keyof typeof translations;
-type PlayerProgress = { xp: number; level: number; coins: number; streak: number; completed: string[]; achievements: string[]; displayName?: string; profilePhoto?: string; favorites?: string[]; highlights?: Record<string, string>; notes?: Record<string, string>; plans?: string[] };
+type LastReading = { bookSlug: string; chapter: number };
+type PlayerProgress = { xp: number; level: number; coins: number; streak: number; completed: string[]; achievements: string[]; displayName?: string; profilePhoto?: string; favorites?: string[]; highlights?: Record<string, string>; notes?: Record<string, string>; plans?: string[]; lastReading?: LastReading | null };
 type ChapterReward = { xp: number; coins: number; levelUp: boolean; unlocked: string[]; missionCompleted?: boolean; missionTitle?: string; actCompleted?: boolean; actTitle?: string };
 
 const emptyProgress: PlayerProgress = { xp: 0, level: 1, coins: 0, streak: 0, completed: [], achievements: [] };
@@ -63,7 +64,9 @@ export default function VerboApp() {
   const [progress, setProgress] = useState<PlayerProgress>(emptyProgress);
   const [reward, setReward] = useState<ChapterReward | null>(null);
   const [savingChapter, setSavingChapter] = useState(false);
+  const [lastReadingReady, setLastReadingReady] = useState(false);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+  const lastReadingRef = useRef<LastReading | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
@@ -76,6 +79,21 @@ export default function VerboApp() {
   useEffect(() => {
     localStorage.setItem("verbo-theme", dark ? "dark" : "light");
   }, [dark]);
+
+  useEffect(() => {
+    const restoreFrame = window.requestAnimationFrame(() => {
+      const saved = JSON.parse(localStorage.getItem("verbo-last-reading") || "null") as unknown;
+      if (!saved || typeof saved !== "object") return;
+      const reading = saved as Partial<LastReading>;
+      if (typeof reading.bookSlug === "string" && /^[a-z0-9]+$/.test(reading.bookSlug) && Number.isInteger(reading.chapter) && reading.chapter! >= 1) {
+        lastReadingRef.current = { bookSlug: reading.bookSlug, chapter: reading.chapter };
+        setBookSlug(reading.bookSlug);
+        setChapter(reading.chapter);
+        setSelectedVerse(1);
+      }
+    });
+    return () => window.cancelAnimationFrame(restoreFrame);
+  }, []);
 
   const verseKey = `${bookSlug}:${chapter}:${selectedVerse}`;
   const selectedVerseKeys = useMemo(() => selectedVerses.map((number) => `${bookSlug}:${chapter}:${number}`), [bookSlug, chapter, selectedVerses]);
@@ -93,8 +111,17 @@ export default function VerboApp() {
       const data = await progressResponse.json();
       const profile = profileResponse.ok ? await profileResponse.json() : {};
       const library = libraryResponse.ok ? await libraryResponse.json() : {};
-      if (!data.error) setProgress({ ...data, ...profile, ...library });
-    }).catch(() => undefined);
+      if (!data.error) {
+        setProgress({ ...data, ...profile, ...library });
+        const reading = library.lastReading as LastReading | null | undefined;
+        if (reading && typeof reading.bookSlug === "string" && /^[a-z0-9]+$/.test(reading.bookSlug) && Number.isInteger(reading.chapter) && reading.chapter >= 1) {
+          lastReadingRef.current = reading;
+          setBookSlug(reading.bookSlug);
+          setChapter(reading.chapter);
+          setSelectedVerse(1);
+        }
+      }
+    }).catch(() => undefined).finally(() => setLastReadingReady(true));
   }, []);
 
   useEffect(() => {
@@ -123,8 +150,18 @@ export default function VerboApp() {
   };
 
   const saveRemoteLibrary = async (next: Partial<Pick<PlayerProgress, "favorites" | "highlights" | "notes" | "plans">>) => {
-    await fetch("/api/library", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ favorites: progress.favorites || [], highlights: progress.highlights || {}, notes: progress.notes || {}, plans: progress.plans || [], ...next }) }).catch(() => undefined);
+    await fetch("/api/library", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ favorites: progress.favorites || [], highlights: progress.highlights || {}, notes: progress.notes || {}, plans: progress.plans || [], lastReading: lastReadingRef.current, ...next }) }).catch(() => undefined);
   };
+
+  useEffect(() => {
+    if (!lastReadingReady) return;
+    const reading = { bookSlug, chapter };
+    lastReadingRef.current = reading;
+    localStorage.setItem("verbo-last-reading", JSON.stringify(reading));
+    const timer = window.setTimeout(() => { void saveRemoteLibrary({}); }, 250);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- a leitura deve ser salva somente ao trocar de livro ou capítulo
+  }, [bookSlug, chapter, lastReadingReady]);
 
   const updateProfilePhoto = async (file: File) => {
     try {

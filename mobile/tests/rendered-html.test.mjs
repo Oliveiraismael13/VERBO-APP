@@ -27,6 +27,8 @@ test("contains the authenticated Verbo application routes", async () => {
   assert.match(app, /Abrir favoritos/);
   assert.match(app, /mission-mode-banner/);
   assert.match(app, /className="chapter-nav chapter-nav-bottom" aria-label="Navegação no fim do capítulo"/);
+  assert.match(app, /localStorage\.setItem\("verbo-last-reading", JSON\.stringify\(reading\)\)/);
+  assert.match(app, /lastReading: lastReadingRef\.current/);
   assert.match(app, /missionMode && <button className=\{`chapter-complete/);
   assert.match(app, /setReward\(earned\);\s+advanceToNextChapter\(nextProgress\);/);
   assert.doesNotMatch(app, /pendingAdvance/);
@@ -57,6 +59,9 @@ test("contains the authenticated Verbo application routes", async () => {
   assert.match(progressRoute, /const xpGain = actCompleted \? 100 : missionCompleted \? 80 : 40/);
   assert.match(progressRoute, /const coinGain = actCompleted \? 10 : missionCompleted \? 8 : 4/);
   assert.match(progress, /getSessionUser/);
+  const libraryRoute = await text("app/api/library/route.ts");
+  assert.match(libraryRoute, /last_reading_json/);
+  assert.match(libraryRoute, /lastReading: parseLastReading/);
 });
 
 test("contains the account and session implementation", async () => {
