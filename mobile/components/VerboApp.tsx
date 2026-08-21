@@ -322,8 +322,6 @@ export default function VerboApp() {
   };
 
   const currentVerses = book?.chapters[chapter - 1] ?? [];
-  const selected = currentVerses.find((verse) => verse.number === selectedVerse);
-
   return (
     <main className={`app-shell rpg-shell ${dark ? "dark" : ""} ${missionMode ? "mission-active" : ""}`}>
       {screen !== "camera" && (
@@ -384,9 +382,26 @@ export default function VerboApp() {
             {!book && <div className="reader-loading">Carregando as Escrituras…</div>}
             {currentVerses.map(({ number, text }) => {
               const savedHighlight = progress.highlights?.[`${bookSlug}:${chapter}:${number}`];
-              return <button key={number} data-verse={number} className={`verse ${number === selectedVerse && verseSelected ? "selected" : ""} ${savedHighlight ? `marked marked-${savedHighlight}` : ""}`} onClick={() => selectVerse(number)}>
-                <sup>{number}</sup>{text}
-              </button>;
+              const isSelected = number === selectedVerse && verseSelected;
+              return <div key={number} className="verse-row">
+                {isSelected && <div className="verse-tools" aria-label={`Ferramentas para ${book?.name} ${chapter}:${number}`}>
+                  <p><b>{book?.name} {chapter}:{number}</b><span>selecionado</span></p>
+                  <div>
+                    <button onClick={() => setHighlightPickerOpen(!highlightPickerOpen)} className={marked ? "active" : ""} aria-label="Escolher cor da marcação">◒</button>
+                    <button onClick={toggleFavorite} className={saved ? "active" : ""} aria-label="Favoritar">{saved ? "♥" : "♡"}</button>
+                    <button onClick={() => notify("Anotação pronta para editar")} aria-label="Criar anotação">▱</button>
+                    <button onClick={() => navigator.clipboard?.writeText(`${book?.name} ${chapter}:${number} — ${text}`).then(() => notify("Versículo copiado"))} aria-label="Copiar">⧉</button>
+                    <button onClick={() => openResult()} aria-label="Estudar">↗</button>
+                  </div>
+                  {highlightPickerOpen && <div className="mobile-highlight-colors" aria-label="Cores da marcação">
+                    {[["yellow", "Amarelo"], ["green", "Verde"], ["blue", "Azul"], ["rose", "Rosa"]].map(([color, label]) => <button key={color} className={`mobile-color ${color} ${highlightColor === color && marked ? "active" : ""}`} onClick={() => chooseHighlight(color)} aria-label={`Marcar em ${label.toLowerCase()}`} />)}
+                    <button className="mobile-clear-highlight" onClick={clearHighlight}>Limpar</button>
+                  </div>}
+                </div>}
+                <button data-verse={number} className={`verse ${isSelected ? "selected" : ""} ${savedHighlight ? `marked marked-${savedHighlight}` : ""}`} onClick={() => selectVerse(number)}>
+                  <sup>{number}</sup>{text}
+                </button>
+              </div>;
             })}
           </article>
 
@@ -396,20 +411,6 @@ export default function VerboApp() {
             <em>{savingChapter ? "…" : "›"}</em>
           </button>}
 
-          {selected && verseSelected && <div className="verse-tools">
-            <p><b>{book?.name} {chapter}:{selectedVerse}</b><span>selecionado</span></p>
-            <div>
-              <button onClick={() => setHighlightPickerOpen(!highlightPickerOpen)} className={marked ? "active" : ""} aria-label="Escolher cor da marcação">◒</button>
-              <button onClick={toggleFavorite} className={saved ? "active" : ""} aria-label="Favoritar">{saved ? "♥" : "♡"}</button>
-              <button onClick={() => notify("Anotação pronta para editar")} aria-label="Criar anotação">▱</button>
-              <button onClick={() => navigator.clipboard?.writeText(`${book?.name} ${chapter}:${selectedVerse} — ${selected.text}`).then(() => notify("Versículo copiado"))} aria-label="Copiar">⧉</button>
-              <button onClick={() => openResult()} aria-label="Estudar">↗</button>
-            </div>
-            {highlightPickerOpen && <div className="mobile-highlight-colors" aria-label="Cores da marcação">
-              {[["yellow", "Amarelo"], ["green", "Verde"], ["blue", "Azul"], ["rose", "Rosa"]].map(([color, label]) => <button key={color} className={`mobile-color ${color} ${highlightColor === color && marked ? "active" : ""}`} onClick={() => chooseHighlight(color)} aria-label={`Marcar em ${label.toLowerCase()}`} />)}
-              <button className="mobile-clear-highlight" onClick={clearHighlight}>Limpar</button>
-            </div>}
-          </div>}
         </section>
       )}
 
