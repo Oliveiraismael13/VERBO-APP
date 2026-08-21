@@ -33,6 +33,7 @@ test("contains the authenticated Verbo application routes", async () => {
   assert.match(app, /function stageProgress/);
   assert.match(app, /ETAPA ATUAL · \{progressInStage\.done\} de \{progressInStage\.total\}/);
   assert.match(app, /progress\.profilePhoto \? <ProfilePhoto src=\{progress\.profilePhoto\}/);
+  assert.match(app, /className="crest-level"/);
   assert.match(auth, /resizeProfilePhoto/);
   assert.match(auth, /type="file" accept="image\/\*"/);
   assert.match(app, /homem-50lvl-idle-south\.png/);

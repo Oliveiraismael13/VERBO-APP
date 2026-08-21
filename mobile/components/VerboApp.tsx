@@ -526,7 +526,7 @@ function JourneyPage({ manifest, progress, onContinue, onOpenBible }: { manifest
   });
   return <section className="journey-page page-in">
     <div className="player-hud">
-      <div className="crest">{progress.profilePhoto ? <ProfilePhoto src={progress.profilePhoto} /> : <span aria-label="Foto do perfil não adicionada">{(progress.displayName || "?").slice(0, 1).toUpperCase()}</span>}<i>{progress.level}</i></div>
+      <div className="crest-wrap"><div className="crest">{progress.profilePhoto ? <ProfilePhoto src={progress.profilePhoto} /> : <span aria-label="Foto do perfil não adicionada">{(progress.displayName || "?").slice(0, 1).toUpperCase()}</span>}</div><i className="crest-level">{progress.level}</i></div>
       <div className="player-level"><p>{discipleTitle(xpProgress.level).toUpperCase()} · NÍVEL {xpProgress.level}</p><h1>Sua jornada na Palavra</h1><div className="xp-track"><i style={{ width: `${xpProgress.progress}%` }} /></div><small>{xpProgress.isMaxLevel ? "NÍVEL MÁXIMO · 50" : `${xpProgress.current - xpProgress.currentLevelXp} / ${xpProgress.needed} XP para o próximo nível`}</small></div>
       <div className="streak"><b>🔥 {progress.streak}</b><span>dias</span></div>
     </div>
