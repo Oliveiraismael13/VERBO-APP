@@ -1,6 +1,7 @@
 export type CampaignRange = { slug: string; from: number; to: number };
 export type CampaignMission = CampaignRange & { title: string };
 export type CampaignAct = { number: number; title: string; ranges: CampaignRange[]; missions: CampaignMission[] };
+export type MissionNarrative = { introduction: string; reflection: string; discovery: string; next: string };
 
 const range = (slug: string, from: number, to: number): CampaignRange => ({ slug, from, to });
 const mission = (slug: string, from: number, to: number, title: string): CampaignMission => ({ slug, from, to, title });
@@ -64,4 +65,47 @@ export function missionForChapter(slug: string, chapter: number) {
     if (found) return { act, mission: found };
   }
   return null;
+}
+
+const narratives: Record<string, MissionNarrative> = {
+  "gen:1-1": {
+    introduction: "Antes de cidades, reis e povos, a história começa com Deus criando e chamando o mundo de bom. Leia devagar: cada detalhe prepara a grande história que virá.",
+    reflection: "O que o texto mostra sobre Deus antes de falar sobre a humanidade?",
+    discovery: "Você encontrou a primeira peça da história: o mundo nasce da palavra e da bondade de Deus.",
+    next: "Mas um mundo bom ainda guarda uma pergunta: como viver nele? O jardim espera.",
+  },
+  "gen:2-3": {
+    introduction: "O cenário agora se aproxima. No jardim, confiança, responsabilidade e escolha passam a ocupar o centro da história.",
+    reflection: "Onde o texto apresenta liberdade, limite e confiança?",
+    discovery: "A ruptura não começa longe; ela alcança o coração humano e suas relações.",
+    next: "Fora do jardim, a história continua — e a ferida aparece entre irmãos.",
+  },
+  "gen:4-5": {
+    introduction: "Depois da ruptura, a pergunta se torna concreta: o que acontece quando o pecado atravessa uma família e uma geração?",
+    reflection: "Que responsabilidade o texto apresenta quando fala do outro?",
+    discovery: "A violência não é tratada como detalhe; ela revela a profundidade da ruptura.",
+    next: "A terra se enche, mas a história ainda precisa de um recomeço.",
+  },
+  "gen:6-9": {
+    introduction: "Em meio à violência, Noé aparece como parte de uma história de juízo, preservação e aliança — não como um escape da gravidade do texto.",
+    reflection: "Quais sinais de juízo e de preservação aparecem nesta leitura?",
+    discovery: "Mesmo diante do juízo, a aliança aponta para a paciência e a fidelidade de Deus.",
+    next: "Depois das águas, a humanidade ainda tentará construir um nome para si.",
+  },
+  "gen:10-11": {
+    introduction: "Povos, línguas e uma torre: a história agora olha para a ambição humana e para a dispersão das nações.",
+    reflection: "O que as pessoas em Babel desejam construir para si mesmas?",
+    discovery: "A dispersão encerra este primeiro ato, mas a promessa está prestes a tomar a forma de uma família.",
+    next: "Um chamado a Abrão abrirá o próximo capítulo da Grande História.",
+  },
+};
+
+export function narrativeForMission(mission: CampaignMission): MissionNarrative {
+  const key = `${mission.slug}:${mission.from}-${mission.to}`;
+  return narratives[key] ?? {
+    introduction: `Nesta parte da Grande História, ${mission.title.toLowerCase()} conduz a leitura de ${mission.from === mission.to ? "um capítulo" : "uma nova sequência de capítulos"}. Observe o texto antes de tirar conclusões apressadas.`,
+    reflection: "Que parte do texto ajuda você a compreender melhor o que veio antes?",
+    discovery: "Cada leitura amplia a compreensão da história bíblica e do lugar deste trecho nela.",
+    next: "A próxima etapa revelará uma nova consequência e uma nova pergunta para acompanhar.",
+  };
 }

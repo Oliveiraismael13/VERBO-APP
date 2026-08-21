@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { discipleTitle, getXpProgress } from "../lib/xp";
-import { campaignActs } from "../lib/campaign";
+import { campaignActs, missionForChapter, narrativeForMission } from "../lib/campaign";
 
 type Screen = "journey" | "bible" | "plans" | "camera" | "studies" | "profile" | "result";
 type BibleVerse = { number: number; text: string };
@@ -47,6 +47,7 @@ export default function VerboApp() {
   const [highlightPickerOpen, setHighlightPickerOpen] = useState(false);
   const [verseSelected, setVerseSelected] = useState(false);
   const [missionMode, setMissionMode] = useState(false);
+  const [missionBriefingOpen, setMissionBriefingOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [readerMenu, setReaderMenu] = useState(false);
   const [manifest, setManifest] = useState<BibleManifest | null>(null);
@@ -271,6 +272,19 @@ export default function VerboApp() {
     go("bible");
   };
 
+  const openMissionBriefing = () => {
+    if (nextMainMission(manifest, progress)) setMissionBriefingOpen(true);
+  };
+
+  const beginMission = () => {
+    const mission = nextMainMission(manifest, progress);
+    if (!mission) return;
+    chooseBook(mission.slug, mission.chapter);
+    setMissionMode(true);
+    setMissionBriefingOpen(false);
+    go("bible");
+  };
+
   const moveChapter = (direction: -1 | 1) => {
     if (!book || !manifest) return;
     const target = chapter + direction;
@@ -310,11 +324,12 @@ export default function VerboApp() {
         </header>
       )}
 
-      {screen === "journey" && <JourneyPage manifest={manifest} progress={progress} onContinue={() => { const mission = nextMainMission(manifest, progress); if (mission) chooseBook(mission.slug, mission.chapter); setMissionMode(true); go("bible"); }} onOpenBible={() => { setMissionMode(false); go("bible"); }} />}
+      {screen === "journey" && <JourneyPage manifest={manifest} progress={progress} onContinue={openMissionBriefing} onOpenBible={() => { setMissionMode(false); go("bible"); }} />}
 
       {screen === "bible" && (
         <section className="reader page-in" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd} onClick={(event) => { if (!(event.target as HTMLElement).closest("[data-verse], .verse-tools")) { setVerseSelected(false); setHighlightPickerOpen(false); } }}>
           {missionMode && <div className="mission-mode-banner"><div className="mission-disciple" aria-label="Seu Discípulo caminhando"><PixelDisciple /><small>DISCÍPULO</small></div><div className="mission-reference"><b>JORNADA PRINCIPAL ATIVA</b><strong>{book?.name ?? "Carregando"} {chapter}</strong><small>Conclua este capítulo para liberar o próximo.</small></div><button onClick={() => { setMissionMode(false); notify("Você voltou à Bíblia livre"); }}>Sair da missão</button></div>}
+          {missionMode && <MissionStoryPanel context={missionForChapter(bookSlug, chapter)} progress={progress} />}
           <div className="reference-row">
             <div>
               <p className="eyebrow">{book?.testament === "old" ? "ANTIGO TESTAMENTO" : "NOVO TESTAMENTO"} · 66 LIVROS</p>
@@ -411,7 +426,7 @@ export default function VerboApp() {
       )}
 
       {screen === "result" && <StudyResult translation={translation} setTranslation={setTranslation} saved={saved} setSaved={setSaved} notify={notify} />}
-      {screen === "studies" && <StudiesPage manifest={manifest} progress={progress} onStart={() => { const mission = nextMainMission(manifest, progress); if (mission) chooseBook(mission.slug, mission.chapter); setMissionMode(true); go("bible"); }} />}
+      {screen === "studies" && <StudiesPage manifest={manifest} progress={progress} onStart={openMissionBriefing} />}
       {screen === "plans" && <PlansPage />}
       {screen === "profile" && <><ProfilePage dark={dark} setDark={setDark} progress={progress} manifest={manifest} onOpenFavorite={openFavorite} /><button type="button" onClick={async () => { await fetch("/api/auth/logout", { method: "POST" }); window.location.href = "/"; }} style={{ display: "block", width: "calc(100% - 44px)", margin: "-4px auto 24px", padding: "12px", border: "1px solid #d9c8c8", borderRadius: "10px", background: "transparent", color: "#9b5555", fontSize: "11px", fontWeight: 800 }}>Sair da conta</button></>}
 
@@ -427,6 +442,7 @@ export default function VerboApp() {
 
       {bookPicker && manifest && <BookPicker manifest={manifest} currentSlug={bookSlug} close={() => setBookPicker(false)} choose={chooseBook} />}
       {searchOpen && <SearchOverlay manifest={manifest} close={() => setSearchOpen(false)} choose={chooseBook} open={() => { setSearchOpen(false); go("result"); }} />}
+      {missionBriefingOpen && <MissionBriefing manifest={manifest} progress={progress} start={beginMission} close={() => setMissionBriefingOpen(false)} />}
       {toast && <div className="toast">✓ {toast}</div>}
       {reward && <RewardModal reward={reward} level={progress.level} close={() => { setReward(null); if (pendingAdvance) { const direction = pendingAdvance; setPendingAdvance(null); moveChapter(direction); } }} />}
     </main>
@@ -507,8 +523,36 @@ function JourneyPage({ manifest, progress, onContinue, onOpenBible }: { manifest
   </section>;
 }
 
+function actProgress(act: (typeof campaignActs)[number], completed: string[]) {
+  const completedSet = new Set(completed);
+  const total = act.ranges.reduce((sum, range) => sum + range.to - range.from + 1, 0);
+  const done = act.ranges.reduce((sum, range) => sum + Array.from({ length: range.to - range.from + 1 }, (_, index) => completedSet.has(`${range.slug}:${range.from + index}`) ? 1 : 0).reduce((count, value) => count + value, 0), 0);
+  return { done, total, percent: total ? Math.round(done / total * 100) : 0 };
+}
+
+function MissionBriefing({ manifest, progress, start, close }: { manifest: BibleManifest | null; progress: PlayerProgress; start: () => void; close: () => void }) {
+  const next = nextMainMission(manifest, progress);
+  const context = next ? missionForChapter(next.slug, next.chapter) : null;
+  if (!next || !context) return null;
+  const narrative = narrativeForMission(context.mission);
+  const missionIndex = context.act.missions.findIndex((mission) => mission.title === context.mission.title) + 1;
+  const progressInAct = actProgress(context.act, progress.completed);
+  const book = manifest?.books.find((item) => item.slug === next.slug);
+  return <div className="mission-briefing-backdrop" role="dialog" aria-modal="true" aria-label="Abertura da jornada"><section className="mission-briefing"><button className="mission-briefing-close" onClick={close} aria-label="Fechar">×</button><PixelDisciple /><p>JORNADA: A GRANDE HISTÓRIA</p><span>ATO {context.act.number} · {context.act.title}</span><h1>Capítulo {missionIndex} — {context.mission.title}</h1><div className="mission-progress"><span>{progressInAct.done} de {progressInAct.total} capítulos neste ato</span><i><b style={{ width: `${progressInAct.percent}%` }} /></i></div><blockquote>{narrative.introduction}</blockquote><div className="mission-briefing-ref"><small>LEITURA DE HOJE</small><b>{book?.name || next.slug} {next.chapter}</b></div><button className="mission-begin-button" onClick={start}>Começar jornada <b>→</b></button></section></div>;
+}
+
+function MissionStoryPanel({ context, progress }: { context: ReturnType<typeof missionForChapter>; progress: PlayerProgress }) {
+  if (!context) return null;
+  const narrative = narrativeForMission(context.mission);
+  const index = context.act.missions.findIndex((mission) => mission.title === context.mission.title) + 1;
+  const progressInAct = actProgress(context.act, progress.completed);
+  return <aside className="mission-story-panel"><div><p>CAPÍTULO {index} DE {context.act.missions.length} · ATO {context.act.number}</p><h2>{context.mission.title}</h2><span>{narrative.introduction}</span></div><div className="mission-story-progress"><b>{progressInAct.done}/{progressInAct.total}</b><i><em style={{ width: `${progressInAct.percent}%` }} /></i></div><blockquote><small>MOMENTO DE REFLEXÃO</small>{narrative.reflection}</blockquote></aside>;
+}
+
 function RewardModal({ reward, level, close }: { reward: ChapterReward; level: number; close: () => void }) {
-  return <div className="reward-backdrop"><div className="reward-modal" role="dialog" aria-modal="true" aria-label="Recompensa da missão"><div className="reward-rays" /><span className="reward-chest">♛</span><p>{reward.actCompleted ? `ATO CONCLUÍDO · ${reward.actTitle}` : reward.missionCompleted ? `MISSÃO CONCLUÍDA · ${reward.missionTitle}` : reward.levelUp ? "NOVO NÍVEL ALCANÇADO" : "CAPÍTULO CONCLUÍDO"}</p><h2>{reward.levelUp ? `Nível ${level}` : "Recompensa obtida"}</h2><div><b>+{reward.xp}<small>XP</small></b><b>+{reward.coins}<small>MOEDAS</small></b></div>{reward.unlocked.length > 0 && <em>✦ Nova conquista desbloqueada</em>}<button onClick={close}>Continuar jornada</button></div></div>;
+  const completedMission = reward.missionTitle ? campaignActs.flatMap((act) => act.missions).find((mission) => mission.title === reward.missionTitle) : undefined;
+  const narrative = completedMission ? narrativeForMission(completedMission) : null;
+  return <div className="reward-backdrop"><div className="reward-modal" role="dialog" aria-modal="true" aria-label="Recompensa da missão"><div className="reward-rays" /><span className="reward-chest">♛</span><p>{reward.actCompleted ? `ATO CONCLUÍDO · ${reward.actTitle}` : reward.missionCompleted ? `MISSÃO CONCLUÍDA · ${reward.missionTitle}` : reward.levelUp ? "NOVO NÍVEL ALCANÇADO" : "CAPÍTULO CONCLUÍDO"}</p><h2>{reward.levelUp ? `Nível ${level}` : "Recompensa obtida"}</h2><div><b>+{reward.xp}<small>XP</small></b><b>+{reward.coins}<small>MOEDAS</small></b></div>{narrative && <blockquote className="mission-reveal"><b>{narrative.discovery}</b><span>{narrative.next}</span></blockquote>}{reward.unlocked.length > 0 && <em>✦ Nova conquista desbloqueada</em>}<button onClick={close}>Continuar jornada</button></div></div>;
 }
 
 function StudyResult({ translation, setTranslation, saved, setSaved, notify }: { translation: Translation; setTranslation: (value: Translation) => void; saved: boolean; setSaved: (value: boolean) => void; notify: (value: string) => void }) {
