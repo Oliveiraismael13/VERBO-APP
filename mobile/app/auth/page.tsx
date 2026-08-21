@@ -20,7 +20,6 @@ export default function AuthPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
-  const [googleLoading, setGoogleLoading] = useState(false);
 
   useEffect(() => {
     const message = new URLSearchParams(window.location.search).get("error");
@@ -53,11 +52,6 @@ export default function AuthPage() {
     }
   };
 
-  const continueWithGoogle = () => {
-    setGoogleLoading(true);
-    window.location.assign("/api/auth/google");
-  };
-
   return <main className="auth-page">
     <section className="auth-card" aria-labelledby="auth-title">
       <div className="auth-mark" aria-hidden="true">✦</div>
@@ -69,13 +63,6 @@ export default function AuthPage() {
         <button className={mode === "login" ? "active" : ""} type="button" role="tab" aria-selected={mode === "login"} onClick={() => selectMode("login")}>Entrar</button>
         <button className={mode === "register" ? "active" : ""} type="button" role="tab" aria-selected={mode === "register"} onClick={() => selectMode("register")}>Criar conta</button>
       </div>
-
-      <button className="google-submit" type="button" onClick={continueWithGoogle} disabled={googleLoading || saving}>
-        <span className="google-mark" aria-hidden="true">G</span>
-        {googleLoading ? "Abrindo Google…" : "Continuar com Google"}
-      </button>
-
-      <div className="auth-divider"><span>ou use seu e-mail</span></div>
 
       <form className="auth-form" onSubmit={submit} noValidate>
         {mode === "register" && <label>Nome
@@ -91,7 +78,7 @@ export default function AuthPage() {
           </span>
         </label>
         {error && <p className="auth-error" role="alert">{error}</p>}
-        <button className="auth-submit" type="submit" disabled={saving || googleLoading}>{saving ? "Entrando…" : mode === "login" ? "Entrar" : "Criar minha conta"}<span aria-hidden="true">→</span></button>
+        <button className="auth-submit" type="submit" disabled={saving}>{saving ? "Entrando…" : mode === "login" ? "Entrar" : "Criar minha conta"}<span aria-hidden="true">→</span></button>
       </form>
 
       <p className="auth-note">Seus dados de acesso são protegidos e a senha nunca fica visível no aplicativo.</p>

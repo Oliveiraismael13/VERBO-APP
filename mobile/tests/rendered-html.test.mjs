@@ -17,7 +17,6 @@ test("contains the authenticated Verbo application routes", async () => {
   assert.match(page, /<AuthPage \/>/);
   assert.match(auth, /\/api\/auth\/\$\{mode\}/);
   assert.match(auth, /password-toggle/);
-  assert.match(auth, /Continuar com Google/);
   assert.match(progress, /getSessionUser/);
 });
 
@@ -32,6 +31,7 @@ test("contains the account and session implementation", async () => {
   ]);
 
   assert.match(auth, /PBKDF2/);
+  assert.match(auth, /PASSWORD_ITERATIONS = 100000/);
   assert.match(auth, /HttpOnly/);
   assert.match(auth, /InvalidCredentialsError/);
   assert.match(auth, /sessions/);

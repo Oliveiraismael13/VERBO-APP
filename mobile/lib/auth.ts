@@ -3,7 +3,8 @@ import { env } from "cloudflare:workers";
 
 const SESSION_COOKIE = "verbo_session";
 const SESSION_DAYS = 30;
-const PASSWORD_ITERATIONS = 120000;
+// Cloudflare Workers limits Web Crypto PBKDF2 to 100,000 iterations.
+const PASSWORD_ITERATIONS = 100000;
 
 type User = { id: string; email: string; displayName: string };
 
