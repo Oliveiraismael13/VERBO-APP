@@ -401,7 +401,7 @@ export default function VerboApp() {
           <button className={screen === "journey" ? "selected" : ""} onClick={() => go("journey")}><span>♜</span>Jornada</button>
           <button className={screen === "bible" ? "selected" : ""} onClick={() => { setMissionMode(false); go("bible"); }}><span>▥</span>Bíblia</button>
           <button className="camera" onClick={() => go("camera")}><i>⌁</i><span>Câmera</span></button>
-          <button className={screen === "studies" || screen === "result" ? "selected" : ""} onClick={() => go("studies")}><span>✧</span>Estudos</button>
+          <button className={screen === "studies" || screen === "result" ? "selected" : ""} onClick={() => go("studies")}><span>✧</span>Missões</button>
           <button className={screen === "profile" ? "selected" : ""} onClick={() => go("profile")}><span>◎</span>Perfil</button>
         </nav>
       )}
@@ -546,7 +546,7 @@ function StudyResult({ translation, setTranslation, saved, setSaved, notify }: {
 }
 
 function StudiesPage({ onOpen }: { onOpen: () => void }) {
-  return <section className="generic-page page-in"><p className="eyebrow">EXPLORE A PALAVRA</p><h1>Estudos</h1><p className="lead">Aprofunde a leitura por temas, livros e perguntas essenciais.</p><div className="featured-study" onClick={onOpen} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") onOpen(); }} role="button" tabIndex={0}><span>ESTUDO EM DESTAQUE</span><h2>O amor que transforma</h2><p>De João 3 ao coração do Evangelho</p><button>Começar estudo →</button></div><h3 className="list-heading">Temas populares</h3><div className="topic-grid">{topics.map((topic) => <button key={topic.title} onClick={onOpen} className={topic.color}><i>{topic.icon}</i><div><b>{topic.title}</b><span>{topic.count}</span></div><em>›</em></button>)}</div></section>;
+  return <section className="generic-page page-in"><p className="eyebrow">SUA TRILHA DE APRENDIZADO</p><h1>Missões</h1><p className="lead">Avance pela Palavra em jornadas, temas e perguntas essenciais.</p><div className="featured-study" onClick={onOpen} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") onOpen(); }} role="button" tabIndex={0}><span>MISSÃO EM DESTAQUE</span><h2>O amor que transforma</h2><p>De João 3 ao coração do Evangelho</p><button>Começar missão →</button></div><h3 className="list-heading">Temas populares</h3><div className="topic-grid">{topics.map((topic) => <button key={topic.title} onClick={onOpen} className={topic.color}><i>{topic.icon}</i><div><b>{topic.title}</b><span>{topic.count}</span></div><em>›</em></button>)}</div></section>;
 }
 
 function PlansPage() {
