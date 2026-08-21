@@ -94,6 +94,7 @@ test("is installable as a mobile application", async () => {
   const worker = await text("public/sw.js");
 
   assert.match(layout, /manifest: "\/manifest\.webmanifest"/);
+  assert.match(layout, /\/og\.png\?v=2/);
   assert.match(layout, /<AppInstall \/>/);
   assert.match(manifest, /"display": "standalone"/);
   assert.match(manifest, /"name": "Verbo"/);

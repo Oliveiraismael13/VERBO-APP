@@ -19,7 +19,7 @@ export async function generateMetadata(): Promise<Metadata> {
   const requestHeaders = await headers();
   const host = requestHeaders.get("host") ?? "localhost:3000";
   const protocol = host.startsWith("localhost") ? "http" : "https";
-  const image = `${protocol}://${host}/og.png`;
+  const image = `${protocol}://${host}/og.png?v=2`;
 
   return {
     title: "Verbo — Sua jornada na Palavra",
