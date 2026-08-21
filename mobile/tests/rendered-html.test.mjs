@@ -30,6 +30,8 @@ test("contains the authenticated Verbo application routes", async () => {
   assert.doesNotMatch(app, /pendingAdvance/);
   assert.match(app, /className="verse-row"/);
   assert.match(app, /verse-tools" aria-label=\{`Ferramentas para/);
+  assert.match(app, /function stageProgress/);
+  assert.match(app, /ETAPA ATUAL · \{progressInStage\.done\} de \{progressInStage\.total\}/);
   assert.match(app, /homem-50lvl-idle-south\.png/);
   const missions = Array.from(campaign.matchAll(/mission\("([^"]+)", (\d+), (\d+),/g));
   assert.equal(missions.length, 74);

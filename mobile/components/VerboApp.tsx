@@ -549,6 +549,13 @@ function actProgress(act: (typeof campaignActs)[number], completed: string[]) {
   return { done, total, percent: total ? Math.round(done / total * 100) : 0 };
 }
 
+function stageProgress(mission: (typeof campaignActs)[number]["missions"][number], completed: string[]) {
+  const completedSet = new Set(completed);
+  const total = mission.to - mission.from + 1;
+  const done = Array.from({ length: total }, (_, index) => completedSet.has(`${mission.slug}:${mission.from + index}`) ? 1 : 0).reduce((count, value) => count + value, 0);
+  return { done, total, percent: total ? Math.round(done / total * 100) : 0 };
+}
+
 function MissionBriefing({ manifest, progress, start, close }: { manifest: BibleManifest | null; progress: PlayerProgress; start: () => void; close: () => void }) {
   const next = nextMainMission(manifest, progress);
   const context = next ? missionForChapter(next.slug, next.chapter) : null;
@@ -556,8 +563,9 @@ function MissionBriefing({ manifest, progress, start, close }: { manifest: Bible
   const narrative = narrativeForMission(context.mission);
   const missionIndex = context.act.missions.findIndex((mission) => mission.title === context.mission.title) + 1;
   const progressInAct = actProgress(context.act, progress.completed);
+  const progressInStage = stageProgress(context.mission, progress.completed);
   const book = manifest?.books.find((item) => item.slug === next.slug);
-  return <div className="mission-briefing-backdrop" role="dialog" aria-modal="true" aria-label="Abertura da jornada"><section className="mission-briefing"><button className="mission-briefing-close" onClick={close} aria-label="Fechar">×</button><PixelDisciple /><p>JORNADA: A GRANDE HISTÓRIA</p><span>ATO {context.act.number} · {context.act.title}</span><h1>Etapa {missionIndex} — {context.mission.title}</h1><div className="mission-progress"><span>{progressInAct.done} de {progressInAct.total} capítulos bíblicos neste ato</span><i><b style={{ width: `${progressInAct.percent}%` }} /></i></div><blockquote>{narrative.introduction}</blockquote><div className="mission-briefing-ref"><small>LEITURA DE HOJE</small><b>{book?.name || next.slug} {next.chapter}</b></div><button className="mission-begin-button" onClick={start}>Começar jornada <b>→</b></button></section></div>;
+  return <div className="mission-briefing-backdrop" role="dialog" aria-modal="true" aria-label="Abertura da jornada"><section className="mission-briefing"><button className="mission-briefing-close" onClick={close} aria-label="Fechar">×</button><PixelDisciple /><p>JORNADA: A GRANDE HISTÓRIA</p><span>ATO {context.act.number} · {context.act.title}</span><h1>Etapa {missionIndex} — {context.mission.title}</h1><div className="mission-progress mission-progress-stage"><span>ETAPA ATUAL · {progressInStage.done} de {progressInStage.total} capítulos bíblicos</span><i><b style={{ width: `${progressInStage.percent}%` }} /></i></div><div className="mission-progress"><span>ATO · {progressInAct.done} de {progressInAct.total} capítulos bíblicos</span><i><b style={{ width: `${progressInAct.percent}%` }} /></i></div><blockquote>{narrative.introduction}</blockquote><div className="mission-briefing-ref"><small>LEITURA DE HOJE</small><b>{book?.name || next.slug} {next.chapter}</b></div><button className="mission-begin-button" onClick={start}>Começar jornada <b>→</b></button></section></div>;
 }
 
 function MissionStoryPanel({ context, progress }: { context: ReturnType<typeof missionForChapter>; progress: PlayerProgress }) {
@@ -565,7 +573,8 @@ function MissionStoryPanel({ context, progress }: { context: ReturnType<typeof m
   const narrative = narrativeForMission(context.mission);
   const index = context.act.missions.findIndex((mission) => mission.title === context.mission.title) + 1;
   const progressInAct = actProgress(context.act, progress.completed);
-  return <aside className="mission-story-panel"><div><p>ETAPA {index} DE {context.act.missions.length} · ATO {context.act.number}</p><h2>{context.mission.title}</h2><span>{narrative.introduction}</span></div><div className="mission-story-progress"><b>{progressInAct.done}/{progressInAct.total}</b><i><em style={{ width: `${progressInAct.percent}%` }} /></i></div><blockquote><small>MOMENTO DE REFLEXÃO</small>{narrative.reflection}</blockquote></aside>;
+  const progressInStage = stageProgress(context.mission, progress.completed);
+  return <aside className="mission-story-panel"><div><p>ETAPA {index} DE {context.act.missions.length} · ATO {context.act.number}</p><h2>{context.mission.title}</h2><span>{narrative.introduction}</span></div><div className="mission-story-progress"><div className="mission-stage-progress"><small>ETAPA</small><b>{progressInStage.done}/{progressInStage.total}</b><i><em style={{ width: `${progressInStage.percent}%` }} /></i></div><div><small>ATO</small><b>{progressInAct.done}/{progressInAct.total}</b><i><em style={{ width: `${progressInAct.percent}%` }} /></i></div></div><blockquote><small>MOMENTO DE REFLEXÃO</small>{narrative.reflection}</blockquote></aside>;
 }
 
 function RewardModal({ reward, level, close }: { reward: ChapterReward; level: number; close: () => void }) {
