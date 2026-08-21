@@ -18,6 +18,7 @@ test("contains the authenticated Verbo application routes", async () => {
   assert.match(auth, /\/api\/auth\/\$\{mode\}/);
   assert.match(auth, /password-toggle/);
   const app = await text("components/VerboApp.tsx");
+  const styles = await text("app/globals.css");
   const campaign = await text("lib/campaign.ts");
   assert.match(app, />Missões</);
   assert.match(campaign, /A Luz sobre o Abismo/);
@@ -40,6 +41,10 @@ test("contains the authenticated Verbo application routes", async () => {
   assert.match(auth, /resizeProfilePhoto/);
   assert.match(auth, /type="file" accept="image\/\*"/);
   assert.match(app, /homem-50lvl-idle-south\.png/);
+  assert.match(styles, /campaign-mission\.current\{border-color:#ad96db;background:#f6f2fd\}/);
+  assert.match(styles, /journey-cta\{width:100%;border:0;border-radius:10px;background:#604a8f/);
+  assert.match(styles, /profile-status\{display:flex;align-items:center;gap:5px;white-space:nowrap;border:1px solid #d5c5ef/);
+  assert.match(styles, /profile-avatar\{display:grid;place-items:center;width:58px;height:58px;border-radius:50%;overflow:hidden;background:#604a8f/);
   const missions = Array.from(campaign.matchAll(/mission\("([^"]+)", (\d+), (\d+),/g));
   assert.equal(missions.length, 74);
   for (const [, slug, from, to] of missions) {
