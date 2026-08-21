@@ -314,7 +314,7 @@ export default function VerboApp() {
 
       {screen === "bible" && (
         <section className="reader page-in" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd} onClick={(event) => { if (!(event.target as HTMLElement).closest("[data-verse], .verse-tools")) { setVerseSelected(false); setHighlightPickerOpen(false); } }}>
-          {missionMode && <div className="mission-mode-banner"><div className="mission-disciple" aria-label="Seu Discípulo caminhando"><div className="pixel-disciple" aria-hidden="true"><i /><b /></div><small>DISCÍPULO</small></div><div className="mission-reference"><b>JORNADA PRINCIPAL ATIVA</b><strong>{book?.name ?? "Carregando"} {chapter}</strong><small>Conclua este capítulo para liberar o próximo.</small></div><button onClick={() => { setMissionMode(false); notify("Você voltou à Bíblia livre"); }}>Sair da missão</button></div>}
+          {missionMode && <div className="mission-mode-banner"><div className="mission-disciple" aria-label="Seu Discípulo caminhando"><PixelDisciple /><small>DISCÍPULO</small></div><div className="mission-reference"><b>JORNADA PRINCIPAL ATIVA</b><strong>{book?.name ?? "Carregando"} {chapter}</strong><small>Conclua este capítulo para liberar o próximo.</small></div><button onClick={() => { setMissionMode(false); notify("Você voltou à Bíblia livre"); }}>Sair da missão</button></div>}
           <div className="reference-row">
             <div>
               <p className="eyebrow">{book?.testament === "old" ? "ANTIGO TESTAMENTO" : "NOVO TESTAMENTO"} · 66 LIVROS</p>
@@ -639,6 +639,12 @@ function ProfilePhoto({ src }: { src: string }) {
   // O endereço é definido pelo próprio usuário no perfil e pode ser externo.
   // eslint-disable-next-line @next/next/no-img-element
   return <img src={src} alt="Foto do perfil" />;
+}
+
+function PixelDisciple() {
+  // Sprite fornecido para o personagem da campanha; mantém os pixels nítidos em qualquer tela.
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img className="pixel-disciple" src="/characters/homem-50lvl-idle-south.png" alt="" aria-hidden="true" />;
 }
 
 function BookPicker({ manifest, currentSlug, close, choose }: { manifest: BibleManifest; currentSlug: string; close: () => void; choose: (slug: string) => void }) {
