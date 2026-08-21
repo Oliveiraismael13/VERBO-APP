@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { discipleTitle, getXpProgress } from "../lib/xp";
 import { campaignActs, missionForChapter, narrativeForMission } from "../lib/campaign";
 import { resizeProfilePhoto } from "../lib/profile-photo";
@@ -47,6 +47,7 @@ export default function VerboApp() {
   const [highlightColor, setHighlightColor] = useState("yellow");
   const [highlightPickerOpen, setHighlightPickerOpen] = useState(false);
   const [verseSelected, setVerseSelected] = useState(false);
+  const [selectedVerses, setSelectedVerses] = useState<number[]>([]);
   const [missionMode, setMissionMode] = useState(false);
   const [missionBriefingOpen, setMissionBriefingOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -77,14 +78,15 @@ export default function VerboApp() {
   }, [dark]);
 
   const verseKey = `${bookSlug}:${chapter}:${selectedVerse}`;
+  const selectedVerseKeys = useMemo(() => selectedVerses.map((number) => `${bookSlug}:${chapter}:${number}`), [bookSlug, chapter, selectedVerses]);
   useEffect(() => {
     const storedFavorites = (progress.favorites || JSON.parse(localStorage.getItem("verbo-mobile-favorites") || "[]")) as string[];
     const storedHighlights = (progress.highlights || JSON.parse(localStorage.getItem("verbo-mobile-highlights") || "{}")) as Record<string, string>;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- favoritos e destaques vêm do armazenamento do navegador
-    setSaved(storedFavorites.includes(verseKey));
-    setMarked(Boolean(storedHighlights[verseKey]));
+    setSaved(selectedVerseKeys.length > 0 && selectedVerseKeys.every((key) => storedFavorites.includes(key)));
+    setMarked(selectedVerseKeys.length > 0 && selectedVerseKeys.every((key) => Boolean(storedHighlights[key])));
     setHighlightColor(storedHighlights[verseKey] || "yellow");
-  }, [verseKey, progress.favorites, progress.highlights]);
+  }, [verseKey, selectedVerseKeys, progress.favorites, progress.highlights]);
 
   useEffect(() => {
     Promise.all([fetch("/api/progress"), fetch("/api/profile"), fetch("/api/library")]).then(async ([progressResponse, profileResponse, libraryResponse]) => {
@@ -195,6 +197,15 @@ export default function VerboApp() {
   };
 
   const selectVerse = (number: number) => {
+    if (selectedVerses.includes(number)) {
+      const remaining = selectedVerses.filter((item) => item !== number);
+      setSelectedVerses(remaining);
+      setVerseSelected(remaining.length > 0);
+      setSelectedVerse(remaining.at(-1) ?? number);
+      if (!remaining.length) setHighlightPickerOpen(false);
+      return;
+    }
+    setSelectedVerses([...selectedVerses, number]);
     setSelectedVerse(number);
     setVerseSelected(true);
     setHighlightPickerOpen(true);
@@ -202,33 +213,39 @@ export default function VerboApp() {
 
   const toggleFavorite = () => {
     const favorites = JSON.parse(localStorage.getItem("verbo-mobile-favorites") || "[]") as string[];
-    const nextFavorites = favorites.includes(verseKey) ? favorites.filter((item) => item !== verseKey) : [...favorites, verseKey];
+    const keys = selectedVerseKeys.length ? selectedVerseKeys : [verseKey];
+    const allSaved = keys.every((key) => favorites.includes(key));
+    const nextFavorites = allSaved ? favorites.filter((item) => !keys.includes(item)) : Array.from(new Set([...favorites, ...keys]));
     localStorage.setItem("verbo-mobile-favorites", JSON.stringify(nextFavorites));
-    setSaved(nextFavorites.includes(verseKey));
+    setSaved(!allSaved);
     setProgress((current) => ({ ...current, favorites: nextFavorites }));
     void saveRemoteLibrary({ favorites: nextFavorites });
-    notify(nextFavorites.includes(verseKey) ? "Versículo salvo" : "Removido dos favoritos");
+    notify(allSaved ? "Removido dos favoritos" : keys.length > 1 ? "Versículos salvos" : "Versículo salvo");
   };
 
   const chooseHighlight = (color: string) => {
     const highlights = JSON.parse(localStorage.getItem("verbo-mobile-highlights") || "{}") as Record<string, string>;
-    highlights[verseKey] = color;
+    const keys = selectedVerseKeys.length ? selectedVerseKeys : [verseKey];
+    keys.forEach((key) => { highlights[key] = color; });
     localStorage.setItem("verbo-mobile-highlights", JSON.stringify(highlights));
     setHighlightColor(color);
     setMarked(true);
     setProgress((current) => ({ ...current, highlights }));
     void saveRemoteLibrary({ highlights });
     setHighlightPickerOpen(false);
+    notify(keys.length > 1 ? "Versículos marcados" : "Versículo marcado");
   };
 
   const clearHighlight = () => {
     const highlights = JSON.parse(localStorage.getItem("verbo-mobile-highlights") || "{}") as Record<string, string>;
-    delete highlights[verseKey];
+    const keys = selectedVerseKeys.length ? selectedVerseKeys : [verseKey];
+    keys.forEach((key) => delete highlights[key]);
     localStorage.setItem("verbo-mobile-highlights", JSON.stringify(highlights));
     setMarked(false);
     setProgress((current) => ({ ...current, highlights }));
     void saveRemoteLibrary({ highlights });
     setHighlightPickerOpen(false);
+    notify(keys.length > 1 ? "Marcações removidas" : "Marcação removida");
   };
 
   const handleSwipe = (direction: -1 | 1) => {
@@ -268,6 +285,9 @@ export default function VerboApp() {
     setBookSlug(slug);
     setChapter(nextChapter);
     setSelectedVerse(1);
+    setSelectedVerses([]);
+    setVerseSelected(false);
+    setHighlightPickerOpen(false);
     setBookPicker(false);
     setSearchOpen(false);
   };
@@ -281,6 +301,7 @@ export default function VerboApp() {
     setBookSlug(slug);
     setChapter(nextChapter);
     setSelectedVerse(nextVerse);
+    setSelectedVerses([nextVerse]);
     setVerseSelected(true);
     go("bible");
   };
@@ -308,6 +329,9 @@ export default function VerboApp() {
       }
       setChapter(target);
       setSelectedVerse(1);
+      setSelectedVerses([]);
+      setVerseSelected(false);
+      setHighlightPickerOpen(false);
       window.scrollTo({ top: 0, behavior: "smooth" });
       return;
     }
@@ -323,6 +347,9 @@ export default function VerboApp() {
       if (missionMode && !isMainChapterUnlocked(manifest, updatedProgress, bookSlug, target)) return;
       setChapter(target);
       setSelectedVerse(1);
+      setSelectedVerses([]);
+      setVerseSelected(false);
+      setHighlightPickerOpen(false);
       window.scrollTo({ top: 0, behavior: "smooth" });
       return;
     }
@@ -332,6 +359,9 @@ export default function VerboApp() {
     setBookSlug(nextBook.slug);
     setChapter(1);
     setSelectedVerse(1);
+    setSelectedVerses([]);
+    setVerseSelected(false);
+    setHighlightPickerOpen(false);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -357,7 +387,7 @@ export default function VerboApp() {
       {screen === "journey" && <JourneyPage manifest={manifest} progress={progress} onContinue={openMissionBriefing} onOpenBible={() => { setMissionMode(false); go("bible"); }} />}
 
       {screen === "bible" && (
-        <section className="reader page-in" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd} onClick={(event) => { if (!(event.target as HTMLElement).closest("[data-verse], .verse-tools")) { setVerseSelected(false); setHighlightPickerOpen(false); } }}>
+        <section className="reader page-in" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd} onClick={(event) => { if (!(event.target as HTMLElement).closest("[data-verse], .verse-tools")) { setSelectedVerses([]); setVerseSelected(false); setHighlightPickerOpen(false); } }}>
           {missionMode && <div className="mission-mode-banner"><div className="mission-disciple" aria-label="Seu Discípulo caminhando"><PixelDisciple /><small>DISCÍPULO</small></div><div className="mission-reference"><b>JORNADA PRINCIPAL ATIVA</b><strong>{book?.name ?? "Carregando"} {chapter}</strong><small>Conclua este capítulo para liberar o próximo.</small></div><button onClick={() => { setMissionMode(false); notify("Você voltou à Bíblia livre"); }}>Sair da missão</button></div>}
           {missionMode && <MissionStoryPanel context={missionForChapter(bookSlug, chapter)} progress={progress} />}
           <div className="reference-row">
@@ -396,10 +426,11 @@ export default function VerboApp() {
             {!book && <div className="reader-loading">Carregando as Escrituras…</div>}
             {currentVerses.map(({ number, text }) => {
               const savedHighlight = progress.highlights?.[`${bookSlug}:${chapter}:${number}`];
-              const isSelected = number === selectedVerse && verseSelected;
+              const isSelected = verseSelected && selectedVerses.includes(number);
+              const isToolbarAnchor = isSelected && number === selectedVerse;
               return <div key={number} className="verse-row">
-                {isSelected && <div className="verse-tools" aria-label={`Ferramentas para ${book?.name} ${chapter}:${number}`}>
-                  <p><b>{book?.name} {chapter}:{number}</b><span>selecionado</span></p>
+                {isToolbarAnchor && <div className="verse-tools" aria-label={`Ferramentas para ${book?.name} ${chapter}:${number}`}>
+                  <p><b>{selectedVerses.length > 1 ? `${selectedVerses.length} versículos` : `${book?.name} ${chapter}:${number}`}</b><span>{selectedVerses.length > 1 ? "selecionados" : "selecionado"}</span></p>
                   <div>
                     <button onClick={() => setHighlightPickerOpen(!highlightPickerOpen)} className={marked ? "active" : ""} aria-label="Escolher cor da marcação">◒</button>
                     <button onClick={toggleFavorite} className={saved ? "active" : ""} aria-label="Favoritar">{saved ? "♥" : "♡"}</button>
