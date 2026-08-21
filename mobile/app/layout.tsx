@@ -57,8 +57,20 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        {children}
-        <AppInstall />
+        <div className="mobile-site">
+          {children}
+          <AppInstall />
+        </div>
+        <main className="desktop-gate" aria-labelledby="desktop-gate-title">
+          <section>
+            {/* Ícone estático local; manter a imagem sem otimização evita dependência de um serviço externo. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/icons/verbo-512.png" alt="" />
+            <p>VERBO · SUA JORNADA NA PALAVRA</p>
+            <h1 id="desktop-gate-title">Por enquanto, o Verbo está disponível apenas no celular.</h1>
+            <span>Abra este mesmo link no navegador do seu smartphone para ler a Bíblia, viver as missões e continuar sua jornada.</span>
+          </section>
+        </main>
       </body>
     </html>
   );
