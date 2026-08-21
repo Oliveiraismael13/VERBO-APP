@@ -456,6 +456,12 @@ export default function VerboApp() {
             <em>{savingChapter ? "…" : "›"}</em>
           </button>}
 
+          <div className="chapter-nav chapter-nav-bottom" aria-label="Navegação no fim do capítulo">
+            <button onClick={() => moveChapter(-1)} aria-label="Capítulo anterior">‹ <span>{chapter > 1 ? `${book?.name} ${chapter - 1}` : "Livro anterior"}</span></button>
+            <p>Fim do capítulo</p>
+            <button onClick={() => moveChapter(1)} aria-label="Próximo capítulo"><span>{book && chapter < book.chapters.length ? `${book.name} ${chapter + 1}` : "Próximo livro"}</span> ›</button>
+          </div>
+
         </section>
       )}
 
