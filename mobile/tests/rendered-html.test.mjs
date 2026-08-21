@@ -45,6 +45,8 @@ test("contains the authenticated Verbo application routes", async () => {
   assert.match(styles, /journey-cta\{width:100%;border:0;border-radius:10px;background:#604a8f/);
   assert.match(styles, /profile-status\{display:flex;align-items:center;gap:5px;white-space:nowrap;border:1px solid #d5c5ef/);
   assert.match(styles, /profile-avatar\{display:grid;place-items:center;width:58px;height:58px;border-radius:50%;overflow:hidden;background:#604a8f/);
+  assert.match(styles, /profile-avatar-picker\{position:relative;overflow:visible;cursor:pointer\}/);
+  assert.match(styles, /left:50%;bottom:-9px;transform:translateX\(-50%\)/);
   const missions = Array.from(campaign.matchAll(/mission\("([^"]+)", (\d+), (\d+),/g));
   assert.equal(missions.length, 74);
   for (const [, slug, from, to] of missions) {
