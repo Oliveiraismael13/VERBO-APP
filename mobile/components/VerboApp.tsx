@@ -547,7 +547,7 @@ export default function VerboApp() {
         </nav>
       )}
 
-      {bookPicker && manifest && <BookPicker manifest={manifest} currentSlug={bookSlug} close={() => setBookPicker(false)} choose={chooseBook} />}
+      {bookPicker && manifest && <BookPicker manifest={manifest} currentSlug={bookSlug} currentChapter={chapter} close={() => setBookPicker(false)} choose={chooseBook} />}
       {searchOpen && <SearchOverlay manifest={manifest} close={() => setSearchOpen(false)} choose={chooseBook} open={() => { setSearchOpen(false); go("result"); }} />}
       {missionBriefingOpen && <MissionBriefing manifest={manifest} progress={progress} start={beginMission} close={() => setMissionBriefingOpen(false)} />}
       {toast && <div className="toast">✓ {toast}</div>}
@@ -807,10 +807,14 @@ function PixelDisciple() {
   return <img className="pixel-disciple" src="/characters/homem-50lvl-idle-south.png" alt="" aria-hidden="true" />;
 }
 
-function BookPicker({ manifest, currentSlug, close, choose }: { manifest: BibleManifest; currentSlug: string; close: () => void; choose: (slug: string) => void }) {
+function BookPicker({ manifest, currentSlug, currentChapter, close, choose }: { manifest: BibleManifest; currentSlug: string; currentChapter: number; close: () => void; choose: (slug: string, chapter: number) => void }) {
   const [testament, setTestament] = useState<"old" | "new">("old");
+  const [selectedBook, setSelectedBook] = useState<ManifestBook | null>(null);
   const books = manifest.books.filter((book) => book.testament === testament);
-  return <div className="book-picker page-in"><div className="picker-head"><button onClick={close}>×</button><div><p>ESCOLHA UM LIVRO</p><h2>Bíblia Sagrada</h2></div><span>66</span></div><div className="canon-banner"><b>Cânon protestante reformado</b><span>39 livros no Antigo Testamento · 27 no Novo</span></div><div className="testament-tabs"><button className={testament === "old" ? "active" : ""} onClick={() => setTestament("old")}>Antigo Testamento <small>39</small></button><button className={testament === "new" ? "active" : ""} onClick={() => setTestament("new")}>Novo Testamento <small>27</small></button></div><div className="book-grid">{books.map((book) => <button key={book.slug} className={currentSlug === book.slug ? "current" : ""} onClick={() => choose(book.slug)}><i>{book.abbreviation}</i><span><b>{book.name}</b><small>{book.chapterCount} {book.chapterCount === 1 ? "capítulo" : "capítulos"}</small></span><em>›</em></button>)}</div><footer><b>{manifest.code}</b><span>{manifest.translation}</span></footer></div>;
+  if (selectedBook) {
+    return <div className="book-picker page-in"><div className="picker-head"><button onClick={() => setSelectedBook(null)} aria-label="Voltar para os livros">‹</button><div><p>ESCOLHA UM CAPÍTULO</p><h2>{selectedBook.name}</h2></div><span>{selectedBook.abbreviation}</span></div><div className="chapter-picker-intro"><b>{selectedBook.longName}</b><span>{selectedBook.chapterCount} {selectedBook.chapterCount === 1 ? "capítulo disponível" : "capítulos disponíveis"}</span></div><div className="chapter-grid" aria-label={`Capítulos de ${selectedBook.name}`}>{Array.from({ length: selectedBook.chapterCount }, (_, index) => index + 1).map((number) => <button key={number} className={currentSlug === selectedBook.slug && currentChapter === number ? "current" : ""} onClick={() => choose(selectedBook.slug, number)} aria-label={`${selectedBook.name}, capítulo ${number}`}>{number}</button>)}</div><footer><b>{manifest.code}</b><span>{manifest.translation}</span></footer></div>;
+  }
+  return <div className="book-picker page-in"><div className="picker-head"><button onClick={close} aria-label="Fechar seleção de livros">×</button><div><p>ESCOLHA UM LIVRO</p><h2>Bíblia Sagrada</h2></div><span>66</span></div><div className="canon-banner"><b>Cânon protestante reformado</b><span>39 livros no Antigo Testamento · 27 no Novo</span></div><div className="testament-tabs"><button className={testament === "old" ? "active" : ""} onClick={() => setTestament("old")}>Antigo Testamento <small>39</small></button><button className={testament === "new" ? "active" : ""} onClick={() => setTestament("new")}>Novo Testamento <small>27</small></button></div><div className="book-grid">{books.map((book) => <button key={book.slug} className={currentSlug === book.slug ? "current" : ""} onClick={() => setSelectedBook(book)}><i>{book.abbreviation}</i><span><b>{book.name}</b><small>{book.chapterCount} {book.chapterCount === 1 ? "capítulo" : "capítulos"}</small></span><em>›</em></button>)}</div><footer><b>{manifest.code}</b><span>{manifest.translation}</span></footer></div>;
 }
 
 function SearchOverlay({ manifest, close, choose, open }: { manifest: BibleManifest | null; close: () => void; choose: (slug: string, chapter?: number) => void; open: () => void }) {

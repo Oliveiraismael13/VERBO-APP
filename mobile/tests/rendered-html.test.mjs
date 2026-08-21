@@ -23,6 +23,9 @@ test("contains the authenticated Verbo application routes", async () => {
   assert.match(app, />Missões</);
   assert.match(app, /ANTIGO TESTAMENTO · 39 LIVROS/);
   assert.match(app, /NOVO TESTAMENTO · 27 LIVROS/);
+  assert.match(app, /ESCOLHA UM CAPÍTULO/);
+  assert.match(app, /Array\.from\(\{ length: selectedBook\.chapterCount \}/);
+  assert.match(app, /choose\(selectedBook\.slug, number\)/);
   assert.match(campaign, /A Luz sobre o Abismo/);
   assert.doesNotMatch(app, /O amor que transforma/);
   assert.match(app, /marked-\$\{savedHighlight\}/);
@@ -52,6 +55,7 @@ test("contains the authenticated Verbo application routes", async () => {
   assert.match(styles, /profile-avatar\{display:grid;place-items:center;width:58px;height:58px;border-radius:50%;overflow:hidden;background:#604a8f/);
   assert.match(styles, /profile-avatar-picker\{position:relative;overflow:visible;cursor:pointer\}/);
   assert.match(styles, /left:50%;bottom:-9px;transform:translateX\(-50%\)/);
+  assert.match(styles, /\.chapter-grid\{display:grid;grid-template-columns:repeat\(5,1fr\)/);
   const missions = Array.from(campaign.matchAll(/mission\("([^"]+)", (\d+), (\d+),/g));
   assert.equal(missions.length, 74);
   for (const [, slug, from, to] of missions) {
