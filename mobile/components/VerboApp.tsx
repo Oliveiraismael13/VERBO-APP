@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { discipleTitle, getXpProgress } from "../lib/xp";
 import { campaignActs, missionForChapter, narrativeForMission } from "../lib/campaign";
 import { resizeProfilePhoto } from "../lib/profile-photo";
+import { findBiblePassages, parseBibleReference, recognizePortugueseText, type BibleOcrCandidate } from "../lib/bible-ocr";
 
 type Screen = "journey" | "bible" | "plans" | "camera" | "studies" | "profile" | "result";
 type BibleVerse = { number: number; text: string };
@@ -73,7 +74,13 @@ export default function VerboApp() {
   const [chapter, setChapter] = useState(3);
   const [selectedVerse, setSelectedVerse] = useState(16);
   const [bookPicker, setBookPicker] = useState(false);
-  const [cameraState, setCameraState] = useState<"idle" | "live" | "scanning" | "found" | "denied">("idle");
+  const [cameraState, setCameraState] = useState<"idle" | "live" | "scanning" | "found" | "uncertain" | "retry" | "denied">("idle");
+  const [recognizedPassage, setRecognizedPassage] = useState<BibleOcrCandidate | null>(null);
+  const [recognitionOptions, setRecognitionOptions] = useState<BibleOcrCandidate[]>([]);
+  const [ocrPreview, setOcrPreview] = useState("");
+  const [manualReference, setManualReference] = useState("");
+  const [noteEditorOpen, setNoteEditorOpen] = useState(false);
+  const [noteDraft, setNoteDraft] = useState("");
   const [toast, setToast] = useState("");
   const [progress, setProgress] = useState<PlayerProgress>(emptyProgress);
   const [reward, setReward] = useState<ChapterReward | null>(null);
@@ -158,6 +165,12 @@ export default function VerboApp() {
 
   useEffect(() => () => streamRef.current?.getTracks().forEach((track) => track.stop()), []);
 
+  useEffect(() => {
+    if (screen !== "bible" || !recognizedPassage || recognizedPassage.bookSlug !== bookSlug || recognizedPassage.chapter !== chapter || !book) return;
+    const timer = window.setTimeout(() => document.querySelector(`[data-verse="${recognizedPassage.startVerse}"]`)?.scrollIntoView({ behavior: "smooth", block: "center" }), 120);
+    return () => window.clearTimeout(timer);
+  }, [screen, recognizedPassage, bookSlug, chapter, book]);
+
   const notify = (message: string) => {
     setToast(message);
     window.setTimeout(() => setToast(""), 1800);
@@ -208,16 +221,82 @@ export default function VerboApp() {
     }
   };
 
-  const scan = () => {
+  const captureCameraFrame = () => new Promise<Blob>((resolve, reject) => {
+    const video = videoRef.current;
+    if (!video || !video.videoWidth) return reject(new Error("A câmera ainda está sendo preparada."));
+    const canvas = document.createElement("canvas");
+    const cropTop = Math.round(video.videoHeight * 0.2);
+    const cropHeight = Math.round(video.videoHeight * 0.56);
+    canvas.width = video.videoWidth;
+    canvas.height = cropHeight;
+    canvas.getContext("2d")?.drawImage(video, 0, cropTop, video.videoWidth, cropHeight, 0, 0, canvas.width, canvas.height);
+    canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("Não foi possível capturar a imagem.")), "image/jpeg", 0.92);
+  });
+
+  const scan = async (file?: File) => {
+    if (!manifest) {
+      notify("A Bíblia ainda está sendo carregada");
+      return;
+    }
     setCameraState("scanning");
-    window.setTimeout(() => setCameraState("found"), 1400);
+    setRecognizedPassage(null);
+    setRecognitionOptions([]);
+    try {
+      const source = file || await captureCameraFrame();
+      const ocr = await recognizePortugueseText(source);
+      setOcrPreview(ocr.text);
+      if (ocr.text.trim().length < 12) {
+        setCameraState("retry");
+        return;
+      }
+      const candidates = await findBiblePassages(ocr.text, translations[translation].path, manifest.books);
+      if (!candidates.length) {
+        setCameraState("retry");
+        return;
+      }
+      const [best, ...alternatives] = candidates;
+      setRecognizedPassage(best);
+      setRecognitionOptions(alternatives);
+      setManualReference(`${best.bookName} ${best.chapter}:${best.startVerse}${best.endVerse > best.startVerse ? `-${best.endVerse}` : ""}`);
+      setCameraState(best.confidence >= 88 && ocr.confidence >= 55 ? "found" : "uncertain");
+    } catch (error) {
+      setCameraState("retry");
+      notify(error instanceof Error ? error.message : "Não foi possível ler a imagem");
+    }
   };
 
-  const openResult = () => {
+  const openRecognizedPassage = useCallback((candidate = recognizedPassage) => {
+    if (!candidate) return;
     streamRef.current?.getTracks().forEach((track) => track.stop());
     setCameraState("idle");
-    go("result");
+    setMissionMode(false);
+    setBookSlug(candidate.bookSlug);
+    setChapter(candidate.chapter);
+    setSelectedVerse(candidate.startVerse);
+    setSelectedVerses(Array.from({ length: candidate.endVerse - candidate.startVerse + 1 }, (_, index) => candidate.startVerse + index));
+    setVerseSelected(true);
+    setHighlightPickerOpen(false);
+    setScreen("bible");
+    setSearchOpen(false);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, [recognizedPassage]);
+
+  const confirmManualReference = () => {
+    if (!manifest) return;
+    const parsed = parseBibleReference(manualReference, manifest.books);
+    if (!parsed || parsed.chapter < 1 || parsed.chapter > parsed.book.chapterCount || parsed.startVerse < 1 || parsed.endVerse < parsed.startVerse) {
+      notify("Use um formato como João 3:16");
+      return;
+    }
+    const candidate: BibleOcrCandidate = { bookSlug: parsed.book.slug, bookName: parsed.book.name, chapter: parsed.chapter, startVerse: parsed.startVerse, endVerse: parsed.endVerse, confidence: recognizedPassage?.confidence || 0, excerpt: recognizedPassage?.excerpt || "" };
+    openRecognizedPassage(candidate);
   };
+
+  useEffect(() => {
+    if (cameraState !== "found" || !recognizedPassage) return;
+    const timer = window.setTimeout(() => openRecognizedPassage(), 1800);
+    return () => window.clearTimeout(timer);
+  }, [cameraState, recognizedPassage, openRecognizedPassage]);
 
   const completeChapter = async () => {
     if (!missionMode) {
@@ -297,6 +376,37 @@ export default function VerboApp() {
     void saveRemoteLibrary({ highlights });
     setHighlightPickerOpen(false);
     notify(keys.length > 1 ? "Marcações removidas" : "Marcação removida");
+  };
+
+  const openNoteEditor = () => {
+    const keys = selectedVerseKeys.length ? selectedVerseKeys : [verseKey];
+    setNoteDraft(progress.notes?.[keys[0]] || localStorage.getItem(`verbo-mobile-note-${keys[0]}`) || "");
+    setNoteEditorOpen(true);
+  };
+
+  const saveNote = () => {
+    const keys = selectedVerseKeys.length ? selectedVerseKeys : [verseKey];
+    const notes = { ...(progress.notes || JSON.parse(localStorage.getItem("verbo-mobile-notes") || "{}")) } as Record<string, string>;
+    keys.forEach((key) => {
+      if (noteDraft.trim()) notes[key] = noteDraft.trim();
+      else delete notes[key];
+    });
+    localStorage.setItem("verbo-mobile-notes", JSON.stringify(notes));
+    setProgress((current) => ({ ...current, notes }));
+    void saveRemoteLibrary({ notes });
+    setNoteEditorOpen(false);
+    notify(noteDraft.trim() ? "Anotação salva" : "Anotação removida");
+  };
+
+  const shareSelection = async () => {
+    const selected = currentVerses.filter((verse) => selectedVerseKeys.includes(`${bookSlug}:${chapter}:${verse.number}`));
+    const content = selected.length ? selected.map((verse) => `${verse.number}. ${verse.text}`).join(" ") : currentVerses.find((verse) => verse.number === selectedVerse)?.text || "";
+    const reference = `${book?.name} ${chapter}:${selectedVerses[0] || selectedVerse}${selectedVerses.length > 1 ? `-${selectedVerses.at(-1)}` : ""}`;
+    if (navigator.share) await navigator.share({ title: reference, text: `${reference} — ${content}` });
+    else {
+      await navigator.clipboard?.writeText(`${reference} — ${content}`);
+      notify("Passagem copiada para compartilhar");
+    }
   };
 
   const handleSwipe = (direction: -1 | 1) => {
@@ -510,22 +620,23 @@ export default function VerboApp() {
               const savedHighlight = progress.highlights?.[`${bookSlug}:${chapter}:${number}`];
               const isSelected = verseSelected && selectedVerses.includes(number);
               const isToolbarAnchor = isSelected && number === selectedVerse;
+              const isCameraDetected = recognizedPassage?.bookSlug === bookSlug && recognizedPassage.chapter === chapter && number >= recognizedPassage.startVerse && number <= recognizedPassage.endVerse;
               return <div key={number} className="verse-row">
                 {isToolbarAnchor && <div className="verse-tools" aria-label={`Ferramentas para ${book?.name} ${chapter}:${number}`}>
                   <p><b>{selectedVerses.length > 1 ? `${selectedVerses.length} versículos` : `${book?.name} ${chapter}:${number}`}</b><span>{selectedVerses.length > 1 ? "selecionados" : "selecionado"}</span></p>
                   <div>
                     <button onClick={() => setHighlightPickerOpen(!highlightPickerOpen)} className={marked ? "active" : ""} aria-label="Escolher cor da marcação">◒</button>
                     <button onClick={toggleFavorite} className={saved ? "active" : ""} aria-label="Favoritar">{saved ? "♥" : "♡"}</button>
-                    <button onClick={() => notify("Anotação pronta para editar")} aria-label="Criar anotação">▱</button>
+                    <button onClick={openNoteEditor} aria-label="Criar anotação">▱</button>
                     <button onClick={() => navigator.clipboard?.writeText(`${book?.name} ${chapter}:${number} — ${text}`).then(() => notify("Versículo copiado"))} aria-label="Copiar">⧉</button>
-                    <button onClick={() => openResult()} aria-label="Estudar">↗</button>
+                    <button onClick={() => void shareSelection()} aria-label="Compartilhar">↗</button>
                   </div>
                   {highlightPickerOpen && <div className="mobile-highlight-colors" aria-label="Cores da marcação">
                     {[["yellow", "Amarelo"], ["green", "Verde"], ["blue", "Azul"], ["rose", "Rosa"]].map(([color, label]) => <button key={color} className={`mobile-color ${color} ${highlightColor === color && marked ? "active" : ""}`} onClick={() => chooseHighlight(color)} aria-label={`Marcar em ${label.toLowerCase()}`} />)}
                     <button className="mobile-clear-highlight" onClick={clearHighlight}>Limpar</button>
                   </div>}
                 </div>}
-                <button data-verse={number} className={`verse ${isSelected ? "selected" : ""} ${savedHighlight ? `marked marked-${savedHighlight}` : ""}`} onClick={() => selectVerse(number)}>
+                <button data-verse={number} className={`verse ${isSelected ? "selected" : ""} ${isCameraDetected ? "camera-detected" : ""} ${savedHighlight ? `marked marked-${savedHighlight}` : ""}`} onClick={() => selectVerse(number)}>
                   <sup>{number}</sup>{text}
                 </button>
               </div>;
@@ -557,23 +668,28 @@ export default function VerboApp() {
           <div className="viewfinder">
             {cameraState === "live" && <video ref={videoRef} autoPlay muted playsInline />}
             {(cameraState === "idle" || cameraState === "denied") && (
-              <div className="camera-empty"><span>⌁</span><b>{cameraState === "denied" ? "Câmera não autorizada" : "Encontre a referência em segundos"}</b><p>{cameraState === "denied" ? "Você ainda pode enviar uma foto ou usar a demonstração." : "Aponte para um trecho bíblico impresso ou em outra tela."}</p><button onClick={openCamera}>Ativar câmera</button></div>
+              <div className="camera-empty"><span>⌁</span><b>{cameraState === "denied" ? "Câmera não autorizada" : "Encontre a referência em segundos"}</b><p>{cameraState === "denied" ? "Envie uma foto da página ou permita o uso da câmera nas configurações." : "Aponte para um trecho bíblico impresso ou em outra tela."}</p><button onClick={openCamera}>Ativar câmera</button></div>
             )}
             {cameraState === "scanning" && <div className="scanning"><i /><b>Lendo o texto...</b><span>Comparando com a base bíblica</span></div>}
-            {cameraState === "found" && (
+            {(cameraState === "found" || cameraState === "uncertain") && recognizedPassage && (
               <div className="found-card">
-                <span className="check">✓</span><p>ENCONTRAMOS ESTE VERSÍCULO</p><h2>João 3:16</h2><blockquote>“Porque Deus amou o mundo de tal maneira...”</blockquote><div className="confidence"><span>Correspondência</span><b>98%</b></div><button onClick={openResult}>Abrir versículo</button><button className="secondary" onClick={openResult}>Estudar agora</button><small>Outra possibilidade: <u>1 João 4:9</u></small>
+                <span className="check">✓</span><p>{cameraState === "found" ? "PASSAGEM IDENTIFICADA" : "CONFIRME A PASSAGEM"}</p><h2>{recognizedPassage.bookName} {recognizedPassage.chapter}:{recognizedPassage.startVerse}{recognizedPassage.endVerse > recognizedPassage.startVerse ? `-${recognizedPassage.endVerse}` : ""}</h2><blockquote>“{recognizedPassage.excerpt}”</blockquote><div className="confidence"><span>Correspondência</span><b>{recognizedPassage.confidence}%</b></div>
+                {cameraState === "found" ? <><button onClick={() => openRecognizedPassage()}>Abrir na Bíblia</button><small>Abrindo automaticamente… toque para continuar agora</small></> : <><label className="manual-reference"><span>Referência correta</span><input value={manualReference} onChange={(event) => setManualReference(event.target.value)} placeholder="Ex.: João 3:16" /></label><button onClick={confirmManualReference}>Confirmar passagem</button>{recognitionOptions.length > 0 && <div className="ocr-options">{recognitionOptions.map((candidate) => <button key={`${candidate.bookSlug}:${candidate.chapter}:${candidate.startVerse}`} className="secondary" onClick={() => openRecognizedPassage(candidate)}>{candidate.bookName} {candidate.chapter}:{candidate.startVerse}</button>)}</div>}</>}
               </div>
             )}
-            <div className="focus-corners"><i /><i /><i /><i /></div>
+            {cameraState === "uncertain" && !recognizedPassage && (
+              <div className="found-card manual-card"><span className="check">⌕</span><p>INFORME A REFERÊNCIA</p><h2>Vamos abrir o trecho certo</h2><blockquote>Digite o livro, capítulo e versículo que você está lendo.</blockquote><label className="manual-reference"><span>Referência bíblica</span><input value={manualReference} onChange={(event) => setManualReference(event.target.value)} placeholder="Ex.: João 3:16-17" autoFocus /></label><button onClick={confirmManualReference}>Abrir na Bíblia</button></div>
+            )}
+            {cameraState === "retry" && <div className="found-card retry-card"><span className="check">!</span><p>NÃO CONSEGUIMOS LER COM SEGURANÇA</p><h2>Tente novamente</h2><blockquote>Melhore a luz, aproxime o texto e mantenha a página imóvel.</blockquote>{ocrPreview && <small className="ocr-preview">Texto lido: “{ocrPreview.slice(0, 95)}”</small>}<button onClick={() => setCameraState("live")}>Tentar de novo</button><button className="secondary" onClick={() => setCameraState("uncertain")}>Informar referência</button></div>}
+            {cameraState === "live" && <div className="focus-corners"><i /><i /><i /><i /></div>}
             {cameraState === "live" && <div className="scan-hint">Enquadre apenas o trecho principal</div>}
           </div>
           <div className="camera-controls">
-            <label className="upload">▧<input type="file" accept="image/*" onChange={scan} /><span>Galeria</span></label>
-            <button className="shutter" onClick={scan} disabled={cameraState === "scanning" || cameraState === "found"}><i /></button>
-            <button className="demo" onClick={scan}>✦<span>Demo</span></button>
+            <label className="upload">▧<input type="file" accept="image/*" onChange={(event) => { const file = event.target.files?.[0]; if (file) void scan(file); }} /><span>Galeria</span></label>
+            <button className="shutter" onClick={() => void scan()} disabled={cameraState !== "live"}><i /></button>
+            <button className="demo" onClick={() => { setManualReference(""); setRecognitionOptions([]); setRecognizedPassage(null); setCameraState("uncertain"); }}>⌕<span>Referência</span></button>
           </div>
-          <p className="prototype-note">Protótipo: a captura é real; o reconhecimento exibido usa um resultado demonstrativo.</p>
+          <p className="prototype-note">O texto é processado no seu dispositivo e comparado com a Bíblia disponível no app.</p>
         </section>
       )}
 
@@ -595,6 +711,7 @@ export default function VerboApp() {
       {bookPicker && manifest && <BookPicker manifest={manifest} currentSlug={bookSlug} currentChapter={chapter} close={() => setBookPicker(false)} choose={chooseBook} />}
       {searchOpen && <SearchOverlay manifest={manifest} close={() => setSearchOpen(false)} choose={chooseBook} open={() => { setSearchOpen(false); go("result"); }} />}
       {missionBriefingOpen && <MissionBriefing manifest={manifest} progress={progress} start={beginMission} close={() => setMissionBriefingOpen(false)} />}
+      {noteEditorOpen && <div className="note-overlay" role="dialog" aria-modal="true" aria-label="Nova anotação"><section><button className="note-close" onClick={() => setNoteEditorOpen(false)} aria-label="Fechar">×</button><p className="eyebrow">ANOTAÇÃO PESSOAL</p><h2>{book?.name} {chapter}:{selectedVerses[0] || selectedVerse}{selectedVerses.length > 1 ? `-${selectedVerses.at(-1)}` : ""}</h2><textarea value={noteDraft} onChange={(event) => setNoteDraft(event.target.value)} placeholder="O que Deus falou com você neste trecho?" autoFocus /><div><button className="secondary-note" onClick={() => { setNoteDraft(""); }}>Limpar</button><button className="save-note" onClick={saveNote}>Salvar anotação</button></div></section></div>}
       {toast && <div className="toast">✓ {toast}</div>}
       {reward && <RewardModal reward={reward} level={progress.level} close={() => setReward(null)} />}
     </main>
