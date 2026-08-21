@@ -13,6 +13,14 @@ Para testar a Web com dois cliques, abra o atalho **Verbo Web** criado na Área 
 
 Não abra `web/index.html` diretamente: a Bíblia e as interações precisam ser carregadas por esse servidor local. Se o Python não estiver instalado, o lançador usa o servidor PowerShell incluído em [`Servidor-Verbo-Web.ps1`](./Servidor-Verbo-Web.ps1). Não há dependências, compilação ou código da versão mobile na pasta `web/`.
 
+### Login na publicação web
+
+O login precisa apontar para o Worker que hospeda a API. Quando a pasta `web/`
+for publicada separadamente, defina a URL pública do Worker em
+[`web/js/auth-config.js`](./web/js/auth-config.js). Para preservar o cookie de
+sessão, a opção recomendada é publicar a interface e a API no mesmo domínio
+(ou encaminhar `/api/*` para o Worker por um proxy reverso).
+
 ### Mobile
 
 ```powershell

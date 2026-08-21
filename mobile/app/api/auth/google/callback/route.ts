@@ -39,7 +39,7 @@ export async function GET(request: Request) {
     const user = await authenticateGoogle(profile.email, profile.name || profile.email.split("@")[0]);
     const secure = new URL(request.url).protocol === "https:" ? "; Secure" : "";
     const response = Response.redirect(new URL("/", request.url), 302);
-    response.headers.append("Set-Cookie", await startSession(user.userId));
+    response.headers.append("Set-Cookie", await startSession(user.userId, new URL(request.url).protocol === "https:"));
     response.headers.append("Set-Cookie", `verbo_google_state=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${secure}`);
     return response;
   } catch (error) {

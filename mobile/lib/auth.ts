@@ -7,6 +7,13 @@ const PASSWORD_ITERATIONS = 120000;
 
 type User = { id: string; email: string; displayName: string };
 
+export class InvalidCredentialsError extends Error {
+  constructor() {
+    super("E-mail ou senha incorretos.");
+    this.name = "InvalidCredentialsError";
+  }
+}
+
 function toBase64Url(value: ArrayBuffer | Uint8Array) {
   const bytes = value instanceof Uint8Array ? value : new Uint8Array(value);
   let binary = "";
@@ -66,9 +73,9 @@ export async function authenticate(email: string, password: string) {
   await ensureAuthSchema();
   const normalizedEmail = email.trim().toLowerCase();
   const row = await env.DB.prepare("SELECT id, email, display_name, password_hash, password_salt FROM users WHERE lower(email) = ?").bind(normalizedEmail).first<{ id: string; email: string; display_name: string; password_hash: string | null; password_salt: string | null }>();
-  if (!row?.password_hash || !row.password_salt) throw new Error("E-mail ou senha inválidos.");
+  if (!row?.password_hash || !row.password_salt) throw new InvalidCredentialsError();
   const passwordHash = await hashPassword(password, fromBase64Url(row.password_salt));
-  if (passwordHash !== row.password_hash) throw new Error("E-mail ou senha inválidos.");
+  if (passwordHash !== row.password_hash) throw new InvalidCredentialsError();
   return { userId: row.id, email: row.email, displayName: row.display_name };
 }
 
@@ -87,13 +94,13 @@ export async function authenticateGoogle(email: string, displayName: string) {
   return { userId, email: normalizedEmail, displayName: safeDisplayName };
 }
 
-export async function startSession(userId: string) {
+export async function startSession(userId: string, secure = false) {
   const token = toBase64Url(crypto.getRandomValues(new Uint8Array(32)));
   const tokenHash = toBase64Url(await digest(token));
   const now = Date.now();
   const expiresAt = now + SESSION_DAYS * 24 * 60 * 60 * 1000;
   await env.DB.prepare("INSERT INTO sessions (token_hash, user_id, expires_at, created_at) VALUES (?, ?, ?, ?)").bind(tokenHash, userId, expiresAt, now).run();
-  return `verbo_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_DAYS * 24 * 60 * 60}${process.env.NODE_ENV === "production" ? "; Secure" : ""}`;
+  return `verbo_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_DAYS * 24 * 60 * 60}${secure ? "; Secure" : ""}`;
 }
 
 export async function currentUser(): Promise<User | null> {
@@ -106,6 +113,6 @@ export async function currentUser(): Promise<User | null> {
   return { id: row.id, email: row.email, displayName: row.display_name };
 }
 
-export function clearSessionCookie() {
-  return `${SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${process.env.NODE_ENV === "production" ? "; Secure" : ""}`;
+export function clearSessionCookie(secure = false) {
+  return `${SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${secure ? "; Secure" : ""}`;
 }

@@ -16,6 +16,8 @@ test("contains the authenticated Verbo application routes", async () => {
   assert.match(page, /currentUser\(\)/);
   assert.match(page, /<AuthPage \/>/);
   assert.match(auth, /\/api\/auth\/\$\{mode\}/);
+  assert.match(auth, /password-toggle/);
+  assert.match(auth, /Continuar com Google/);
   assert.match(progress, /getSessionUser/);
 });
 
@@ -31,6 +33,7 @@ test("contains the account and session implementation", async () => {
 
   assert.match(auth, /PBKDF2/);
   assert.match(auth, /HttpOnly/);
+  assert.match(auth, /InvalidCredentialsError/);
   assert.match(auth, /sessions/);
   assert.match(migration, /password_hash/);
   assert.match(migration, /CREATE TABLE `sessions`/);
@@ -46,6 +49,7 @@ test("keeps the web profile and deep-link behavior available", async () => {
   assert.match(script, /openSectionFromHash/);
   assert.match(script, /profilePhoto/);
   assert.match(script, /api\/auth\/register/);
+  assert.match(script, /VERBO_AUTH_API_BASE/);
 });
 
 test("does not expose a public preview directory", async () => {
