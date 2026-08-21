@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { headers } from "next/headers";
+import AppInstall from "../components/AppInstall";
 import "./globals.css";
 import "./rpg.css";
 
@@ -23,7 +24,9 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     title: "Verbo — Sua jornada na Palavra",
     description: "Leia a Bíblia, conclua capítulos, ganhe XP e avance em uma jornada de fé e constância.",
-    icons: { icon: "/favicon.svg", shortcut: "/favicon.svg" },
+    manifest: "/manifest.webmanifest",
+    icons: { icon: "/favicon.svg", shortcut: "/favicon.svg", apple: "/icons/verbo-192.png" },
+    appleWebApp: { capable: true, title: "Verbo", statusBarStyle: "black-translucent" },
     openGraph: {
       title: "Verbo — Sua jornada na Palavra",
       description: "Leia capítulos, ganhe XP e avance em uma jornada bíblica gamificada.",
@@ -49,6 +52,7 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         {children}
+        <AppInstall />
       </body>
     </html>
   );

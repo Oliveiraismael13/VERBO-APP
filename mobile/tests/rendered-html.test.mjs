@@ -87,6 +87,23 @@ test("does not expose a public preview directory", async () => {
   await assert.rejects(access(new URL("public/_sites-preview", root)));
 });
 
+test("is installable as a mobile application", async () => {
+  const layout = await text("app/layout.tsx");
+  const install = await text("components/AppInstall.tsx");
+  const manifest = await text("public/manifest.webmanifest");
+  const worker = await text("public/sw.js");
+
+  assert.match(layout, /manifest: "\/manifest\.webmanifest"/);
+  assert.match(layout, /<AppInstall \/>/);
+  assert.match(manifest, /"display": "standalone"/);
+  assert.match(manifest, /"short_name": "Verbo"/);
+  assert.match(manifest, /"src": "\/icons\/verbo-192\.png"/);
+  assert.match(manifest, /"src": "\/icons\/verbo-512\.png"/);
+  assert.match(install, /beforeinstallprompt/);
+  assert.match(install, /serviceWorker\.register\("\/sw\.js"\)/);
+  assert.match(worker, /!url\.pathname\.startsWith\("\/api\/"\)/);
+});
+
 test("deploys Google credentials as Worker secrets", async () => {
   const workflow = await readFile(new URL("../.github/workflows/deploy-mobile.yml", root), "utf8");
 
