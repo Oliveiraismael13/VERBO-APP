@@ -102,7 +102,7 @@ test("is installable as a mobile application", async () => {
   assert.match(manifest, /"src": "\/icons\/verbo-512\.png"/);
   assert.match(install, /beforeinstallprompt/);
   assert.match(install, /serviceWorker\.register\("\/sw\.js"\)/);
-  assert.match(layout, /apple-touch-icon" sizes="180x180" href="\/icons\/verbo-180\.png\?v=1"/);
+  assert.match(layout, /apple-touch-icon" sizes="180x180" href="\/icons\/verbo-180\.png\?v=2"/);
   assert.match(worker, /!url\.pathname\.startsWith\("\/api\/"\)/);
 });
 
