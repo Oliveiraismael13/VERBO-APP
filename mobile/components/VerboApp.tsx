@@ -44,7 +44,7 @@ type Translation = keyof typeof translations;
 type LastReading = { bookSlug: string; chapter: number };
 type PlayerProgress = { xp: number; level: number; coins: number; streak: number; completed: string[]; achievements: string[]; dailyNoteCompleted?: boolean; xpBonusPercent?: number; missedStreakDays?: number; displayName?: string; profilePhoto?: string; favorites?: string[]; highlights?: Record<string, string>; notes?: Record<string, string>; plans?: string[]; lastReading?: LastReading | null };
 type ChapterReward = { xp: number; coins: number; levelUp: boolean; unlocked: string[]; missionCompleted?: boolean; missionTitle?: string; secondaryMissionCompleted?: boolean; actCompleted?: boolean; actTitle?: string };
-type SecondaryMissionStatus = { id: string; unlocked: boolean; active: boolean; completed: boolean; done: number; total: number };
+type SecondaryMissionStatus = { id: string; unlocked: boolean; active: boolean; completed: boolean; replaying: boolean; done: number; total: number };
 
 const emptyProgress: PlayerProgress = { xp: 0, level: 1, coins: 0, streak: 0, completed: [], achievements: [], dailyNoteCompleted: false };
 
@@ -152,6 +152,7 @@ export default function VerboApp() {
 
   const activeSecondaryStatus = secondaryMissionStates.find((mission) => mission.active) || null;
   const activeSecondaryMission = activeSecondaryStatus ? secondaryMissionById(activeSecondaryStatus.id) : null;
+  const replayingSecondaryMission = Boolean(activeSecondaryStatus?.replaying);
 
   const verseKey = `${bookSlug}:${chapter}:${selectedVerse}`;
   const selectedVerseKeys = useMemo(() => selectedVerses.map((number) => `${bookSlug}:${chapter}:${number}`), [bookSlug, chapter, selectedVerses]);
@@ -691,11 +692,11 @@ export default function VerboApp() {
         </header>
       )}
 
-      {screen === "journey" && <JourneyPage manifest={manifest} progress={progress} activeSecondaryMission={activeSecondaryMission} onContinue={openMissionBriefing} onContinueSecondary={beginSecondaryMission} onOpenBible={() => { setMissionMode(false); go("bible"); }} onRestoreStreak={() => void restoreStreak()} />}
+      {screen === "journey" && <JourneyPage manifest={manifest} progress={progress} activeSecondaryMission={activeSecondaryMission} replayingSecondaryMission={replayingSecondaryMission} onContinue={openMissionBriefing} onContinueSecondary={beginSecondaryMission} onOpenBible={() => { setMissionMode(false); go("bible"); }} onRestoreStreak={() => void restoreStreak()} />}
 
       {screen === "bible" && (
         <section className="reader page-in" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd} onClick={(event) => { if (!(event.target as HTMLElement).closest("[data-verse], .verse-tools")) { setSelectedVerses([]); setVerseSelected(false); setHighlightPickerOpen(false); } }}>
-          {(missionMode || activeSecondaryMission) && <div className="mission-mode-banner"><div className="mission-disciple" aria-label="Seu Discípulo caminhando"><PixelDisciple /><small>DISCÍPULO</small></div><div className="mission-reference"><b>{activeSecondaryMission ? "MISSÃO SECUNDÁRIA ATIVA" : "JORNADA PRINCIPAL ATIVA"}</b><strong>{activeSecondaryMission ? activeSecondaryMission.title : `${book?.name ?? "Carregando"} ${chapter}`}</strong><small>{activeSecondaryMission ? `${activeSecondaryMission.subtitle} · Mateus ${activeSecondaryMission.from}–${activeSecondaryMission.to}` : "Conclua este capítulo para liberar o próximo."}</small></div><button onClick={() => activeSecondaryMission ? go("studies") : (setMissionMode(false), notify("Você voltou à Bíblia livre"))}>{activeSecondaryMission ? "Ver missão" : "Sair da missão"}</button></div>}
+          {(missionMode || activeSecondaryMission) && <div className="mission-mode-banner"><div className="mission-disciple" aria-label="Seu Discípulo caminhando"><PixelDisciple /><small>DISCÍPULO</small></div><div className="mission-reference"><b>{activeSecondaryMission ? replayingSecondaryMission ? "RELEITURA ATIVA" : "MISSÃO SECUNDÁRIA ATIVA" : "JORNADA PRINCIPAL ATIVA"}</b><strong>{activeSecondaryMission ? activeSecondaryMission.title : `${book?.name ?? "Carregando"} ${chapter}`}</strong><small>{activeSecondaryMission ? replayingSecondaryMission ? `Releia Mateus ${activeSecondaryMission.from}–${activeSecondaryMission.to}, sem recompensas adicionais.` : `${activeSecondaryMission.subtitle} · Mateus ${activeSecondaryMission.from}–${activeSecondaryMission.to}` : "Conclua este capítulo para liberar o próximo."}</small></div><button onClick={() => activeSecondaryMission ? go("studies") : (setMissionMode(false), notify("Você voltou à Bíblia livre"))}>{activeSecondaryMission ? "Ver missão" : "Sair da missão"}</button></div>}
           {missionMode && <MissionStoryPanel context={missionForChapter(bookSlug, chapter)} progress={progress} />}
           {activeSecondaryMission && <SecondaryMissionStoryPanel mission={activeSecondaryMission} progress={progress} />}
           <div className="reference-row">
@@ -868,7 +869,7 @@ function isActComplete(act: (typeof campaignActs)[number], completed: string[]) 
   });
 }
 
-function JourneyPage({ manifest, progress, activeSecondaryMission, onContinue, onContinueSecondary, onOpenBible, onRestoreStreak }: { manifest: BibleManifest | null; progress: PlayerProgress; activeSecondaryMission: SecondaryMission | null; onContinue: () => void; onContinueSecondary: (mission: SecondaryMission) => void; onOpenBible: () => void; onRestoreStreak: () => void }) {
+function JourneyPage({ manifest, progress, activeSecondaryMission, replayingSecondaryMission, onContinue, onContinueSecondary, onOpenBible, onRestoreStreak }: { manifest: BibleManifest | null; progress: PlayerProgress; activeSecondaryMission: SecondaryMission | null; replayingSecondaryMission: boolean; onContinue: () => void; onContinueSecondary: (mission: SecondaryMission) => void; onOpenBible: () => void; onRestoreStreak: () => void }) {
   const completedCount = progress.completed.length;
   const noteCompleted = Boolean(progress.dailyNoteCompleted);
   const xpProgress = getXpProgress(progress.xp);
@@ -888,7 +889,7 @@ function JourneyPage({ manifest, progress, activeSecondaryMission, onContinue, o
 
     <article className={`active-quest ${activeSecondaryMission ? "secondary-active-quest" : ""}`}>
       <div className="quest-glow" />
-      <p><span>{activeSecondaryMission ? "MISSÃO SECUNDÁRIA ATIVA" : "MISSÃO ATUAL"}</span><b>{activeSecondaryMission ? `+${activeSecondaryMission.completionXp} XP` : "+40 XP"}</b></p>
+      <p><span>{activeSecondaryMission ? replayingSecondaryMission ? "RELEITURA ATIVA" : "MISSÃO SECUNDÁRIA ATIVA" : "MISSÃO ATUAL"}</span><b>{activeSecondaryMission ? replayingSecondaryMission ? "SEM NOVO XP" : `+${activeSecondaryMission.completionXp} XP` : "+40 XP"}</b></p>
       <h2>{activeSecondaryMission?.title || "A Grande História"}</h2>
       <blockquote>{activeSecondaryMission ? activeSecondaryMission.subtitle : mission ? `Continue pela Palavra em ${mission.name} ${mission.chapter}.` : "Você concluiu a missão principal."}</blockquote>
       <div><span>{activeSecondaryMission && secondaryProgress ? `${secondaryProgress.done}/${secondaryProgress.total} capítulos · ${activeSecondaryMission.bookSlug === "mat" ? "Mateus" : activeSecondaryMission.bookSlug} ${activeSecondaryMission.from}–${activeSecondaryMission.to}` : mission ? `${mission.name} ${mission.chapter} · próximo capítulo` : "Missão concluída"}</span><button onClick={() => activeSecondaryMission ? onContinueSecondary(activeSecondaryMission) : onContinue()} disabled={!activeSecondaryMission && !mission}>{activeSecondaryMission ? "Continuar missão" : mission ? "Continuar missão" : "Jornada concluída"} →</button></div>
@@ -1057,7 +1058,7 @@ function StudiesPage({ manifest, progress, secondaryMissionStates, onStart, onUn
       <button className="journey-cta mission-current-cta" onClick={onStart} disabled={!activeMission}> {activeMission ? `Abrir missão atual · ${activeMission.name} ${activeMission.chapter}` : "Campanha concluída"} <b>→</b></button>
       {nextAct && <div className="campaign-next"><span>PRÓXIMO ATO</span><b>{nextAct.title}</b><small>Desbloqueado após a conclusão de {actChapters}.</small></div>}
     </section>
-    <section className="secondary-missions"><div className="campaign-heading"><div><p className="eyebrow">CONTEÚDO OPCIONAL</p><h2>Missões secundárias</h2></div><span className="campaign-status">ESPECIAIS</span></div><p>Jornadas curtas, cuidadosamente preparadas para aprofundar grandes trechos das Escrituras. Desbloqueie com siclos de prata e receba a mesma recompensa de conclusão da missão principal.</p><div className="secondary-mission-list">{secondaryMissions.map((mission) => { const state = secondaryMissionStates.find((item) => item.id === mission.id); const status = secondaryMissionProgress(mission, progress.completed); const active = Boolean(state?.active); const complete = Boolean(state?.completed); return <article key={mission.id} className={`${active ? "active" : ""} ${complete ? "complete" : ""}`}><div className="secondary-mission-icon">✦</div><div><small>{active ? "MISSÃO ATIVA" : complete ? "JORNADA CONCLUÍDA" : state?.unlocked ? "DESBLOQUEADA" : `DESBLOQUEAR · ◆ ${mission.cost}`}</small><h3>{mission.title}</h3><p>{mission.subtitle}</p><span>Mateus {mission.from}–{mission.to} · {status.total} capítulos · +{mission.completionXp} XP ao concluir</span>{(state?.unlocked || complete) && <i><em style={{ width: `${status.percent}%` }} /></i>}</div><button onClick={() => state?.unlocked ? onContinueSecondary(mission) : onUnlockSecondary(mission.id)} disabled={complete}>{complete ? "Concluída" : active ? "Continuar" : state?.unlocked ? "Iniciar" : `◆ ${mission.cost}`}</button></article>; })}</div></section>
+    <section className="secondary-missions"><div className="campaign-heading"><div><p className="eyebrow">CONTEÚDO OPCIONAL</p><h2>Missões secundárias</h2></div><span className="campaign-status">ESPECIAIS</span></div><p>Jornadas curtas, cuidadosamente preparadas para aprofundar grandes trechos das Escrituras. Desbloqueie com siclos de prata e receba a mesma recompensa de conclusão da missão principal.</p><div className="secondary-mission-list">{secondaryMissions.map((mission) => { const state = secondaryMissionStates.find((item) => item.id === mission.id); const status = secondaryMissionProgress(mission, progress.completed); const active = Boolean(state?.active); const complete = Boolean(state?.completed); const replaying = Boolean(state?.replaying); return <article key={mission.id} className={`${active ? "active" : ""} ${complete ? "complete" : ""}`}><div className="secondary-mission-icon">✦</div><div><small>{replaying ? "RELEITURA ATIVA · SEM NOVO XP" : active ? "MISSÃO ATIVA" : complete ? "JORNADA CONCLUÍDA · RELEITURA DISPONÍVEL" : state?.unlocked ? "DESBLOQUEADA" : `DESBLOQUEAR · ◆ ${mission.cost}`}</small><h3>{mission.title}</h3><p>{mission.subtitle}</p><span>Mateus {mission.from}–{mission.to} · {status.total} capítulos · {complete ? "releitura sem recompensa adicional" : `+${mission.completionXp} XP na primeira conclusão`}</span>{(state?.unlocked || complete) && <i><em style={{ width: `${status.percent}%` }} /></i>}</div><button onClick={() => state?.unlocked ? onContinueSecondary(mission) : onUnlockSecondary(mission.id)}>{replaying ? "Continuar releitura" : active ? "Continuar" : complete ? "Reler missão" : state?.unlocked ? "Iniciar" : `◆ ${mission.cost}`}</button></article>; })}</div></section>
   </section>;
 }
 

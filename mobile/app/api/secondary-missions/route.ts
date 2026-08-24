@@ -31,7 +31,7 @@ async function stateFor(userId: string) {
       const record = records.results.find((item) => item.mission_id === mission.id);
       const total = mission.to - mission.from + 1;
       const done = Array.from({ length: total }, (_, index) => completed.has(`${mission.bookSlug}:${mission.from + index}`)).filter(Boolean).length;
-      return { id: mission.id, unlocked: Boolean(record), active: Boolean(record?.active) && !record?.completed_at, completed: Boolean(record?.completed_at), done, total };
+      return { id: mission.id, unlocked: Boolean(record), active: Boolean(record?.active), completed: Boolean(record?.completed_at), replaying: Boolean(record?.active && record?.completed_at), done, total };
     }),
   };
 }
@@ -61,7 +61,7 @@ export async function POST(request: Request) {
       if (!paid.meta.changes) return withCors(Response.json({ error: `Você precisa de ${mission.cost} siclos de prata para desbloquear esta missão.` }, { status: 400 }));
       await env.DB.prepare("INSERT INTO user_secondary_missions (user_id, mission_id, unlocked_at, active) VALUES (?, ?, ?, 1)").bind(user.id, mission.id, Date.now()).run();
     } else {
-      await env.DB.prepare("UPDATE user_secondary_missions SET active = 1 WHERE user_id = ? AND mission_id = ? AND completed_at IS NULL").bind(user.id, mission.id).run();
+      await env.DB.prepare("UPDATE user_secondary_missions SET active = 1 WHERE user_id = ? AND mission_id = ?").bind(user.id, mission.id).run();
     }
     await env.DB.prepare("UPDATE user_secondary_missions SET active = 0 WHERE user_id = ? AND mission_id <> ?").bind(user.id, mission.id).run();
     return withCors(Response.json(await stateFor(user.id)));
