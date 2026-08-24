@@ -450,12 +450,14 @@ export default function VerboApp() {
       if (!response.ok) throw new Error(data.error);
       const { reward: earned, ...nextProgress } = data;
       const secondaryScrolls = secondaryChapterActive && activeSecondaryMission?.insights[chapter] ? activeSecondaryMission.insights[chapter].map((_, index) => `secondary:${activeSecondaryMission.id}:${chapter}:${index}`) : [];
-      const updatedProgress = { ...progress, ...nextProgress, foundScrolls: Array.from(new Set([...(progress.foundScrolls || []), ...secondaryScrolls])) };
+      const primaryScrollFoundOnCompletion = Boolean(missionMode && primaryMissionScroll?.requirement === "complete" && !progress.foundScrolls?.includes(primaryScrollKey) && nextProgress.completed.includes(`${bookSlug}:${chapter}`));
+      const foundOnCompletion = [...secondaryScrolls, ...(primaryScrollFoundOnCompletion ? [primaryScrollKey] : [])];
+      const updatedProgress = { ...progress, ...nextProgress, foundScrolls: Array.from(new Set([...(progress.foundScrolls || []), ...foundOnCompletion])) };
       setProgress(updatedProgress);
       if (earned) {
-        earned.scrollsUnlocked = secondaryMissions.find((mission) => mission.bookSlug === bookSlug)?.insights[chapter]?.length || 0;
+        earned.scrollsUnlocked = foundOnCompletion.length;
         setReward(earned);
-        if (secondaryScrolls.length) void saveRemoteLibrary({ foundScrolls: updatedProgress.foundScrolls }, updatedProgress);
+        if (foundOnCompletion.length) void saveRemoteLibrary({ foundScrolls: updatedProgress.foundScrolls }, updatedProgress);
         unlockPrimaryScrollIfReady(updatedProgress);
         if (earned.secondaryMissionCompleted) void loadSecondaryMissions();
         advanceToNextChapter(updatedProgress);
@@ -1100,7 +1102,7 @@ function RewardModal({ reward, level, close }: { reward: ChapterReward; level: n
   const completedMission = reward.missionTitle ? campaignActs.flatMap((act) => act.missions).find((mission) => mission.title === reward.missionTitle) : undefined;
   const secondaryMission = reward.secondaryMissionCompleted || reward.replayCompleted ? secondaryMissions.find((mission) => mission.title === reward.missionTitle) : undefined;
   const narrative = completedMission ? narrativeForMission(completedMission) : secondaryMission || null;
-  return <div className="reward-backdrop"><div className="reward-modal" role="dialog" aria-modal="true" aria-label="Recompensa da missão"><div className="reward-rays" /><span className="reward-chest">♛</span><p>{reward.replayCompleted ? `RELEITURA CONCLUÍDA · ${reward.missionTitle}` : reward.actCompleted ? `ATO CONCLUÍDO · ${reward.actTitle}` : reward.missionCompleted ? `MISSÃO CONCLUÍDA · ${reward.missionTitle}` : reward.levelUp ? "NOVO NÍVEL ALCANÇADO" : "CAPÍTULO CONCLUÍDO"}</p><h2>{reward.replayCompleted ? "Jornada revisitada" : reward.levelUp ? `Nível ${level}` : "Recompensa obtida"}</h2>{reward.replayCompleted ? <div><b>SEM<small>XP ADICIONAL</small></b><b>SEM<small>SICLOS ADICIONAIS</small></b></div> : <div><b>+{reward.xp}<small>XP</small></b><b>+{reward.coins}<small>SICLOS DE PRATA</small></b></div>}{reward.scrollsUnlocked ? <em>▤ {reward.scrollsUnlocked} {reward.scrollsUnlocked === 1 ? "pergaminho disponível" : "pergaminhos disponíveis"} na Bíblia</em> : null}{narrative && <blockquote className="mission-reveal"><b>{narrative.discovery}</b><span>{narrative.next}</span></blockquote>}{reward.unlocked.length > 0 && <em>✦ Nova conquista desbloqueada</em>}<button onClick={close}>Continuar jornada</button></div></div>;
+  return <div className="reward-backdrop"><div className="reward-modal" role="dialog" aria-modal="true" aria-label="Recompensa da missão"><div className="reward-rays" /><span className="reward-chest">♛</span><p>{reward.replayCompleted ? `RELEITURA CONCLUÍDA · ${reward.missionTitle}` : reward.actCompleted ? `ATO CONCLUÍDO · ${reward.actTitle}` : reward.missionCompleted ? `MISSÃO CONCLUÍDA · ${reward.missionTitle}` : reward.levelUp ? "NOVO NÍVEL ALCANÇADO" : "CAPÍTULO CONCLUÍDO"}</p><h2>{reward.replayCompleted ? "Jornada revisitada" : reward.levelUp ? `Nível ${level}` : "Recompensa obtida"}</h2>{reward.replayCompleted ? <div><b>SEM<small>XP ADICIONAL</small></b><b>SEM<small>SICLOS ADICIONAIS</small></b></div> : <div><b>+{reward.xp}<small>XP</small></b><b>+{reward.coins}<small>SICLOS DE PRATA</small></b></div>}{reward.scrollsUnlocked ? <em>▤ {reward.scrollsUnlocked} {reward.scrollsUnlocked === 1 ? "pergaminho encontrado" : "pergaminhos encontrados"} · disponível na Bíblia</em> : null}{narrative && <blockquote className="mission-reveal"><b>{narrative.discovery}</b><span>{narrative.next}</span></blockquote>}{reward.unlocked.length > 0 && <em>✦ Nova conquista desbloqueada</em>}<button onClick={close}>Continuar jornada</button></div></div>;
 }
 
 function StudyResult({ translation, setTranslation, saved, setSaved, notify }: { translation: Translation; setTranslation: (value: Translation) => void; saved: boolean; setSaved: (value: boolean) => void; notify: (value: string) => void }) {

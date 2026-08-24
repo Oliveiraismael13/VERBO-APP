@@ -42,6 +42,8 @@ test("contains the authenticated Verbo application routes", async () => {
   assert.match(app, /mainMissionScrollForChapter/);
   assert.match(app, /mainScrollRequirementLabels/);
   assert.match(app, /unlockPrimaryScrollIfReady/);
+  assert.match(app, /primaryScrollFoundOnCompletion/);
+  assert.match(app, /pergaminho encontrado/);
   assert.match(app, /foundScrolls/);
   assert.match(app, /shared/);
   assert.match(app, /pergaminhos encontrados/);
