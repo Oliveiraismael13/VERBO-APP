@@ -133,7 +133,11 @@ test("keeps social privacy behind authenticated public identifiers", async () =>
   const profile = await text("app/api/social/profiles/[handle]/route.ts");
   const feed = await text("app/api/social/feed/route.ts");
   const reaction = await text("app/api/social/activities/[id]/reaction/route.ts");
+  const notifications = await text("app/api/social/notifications/route.ts");
+  const blocks = await text("app/api/social/blocks/[handle]/route.ts");
+  const friendship = await text("app/api/social/friends/[handle]/route.ts");
   const migration = await text("drizzle/0006_social_foundation.sql");
+  const socialSafetyMigration = await text("drizzle/0007_social_notifications_blocks.sql");
 
   assert.match(social, /public_handle/);
   assert.match(social, /social_privacy_settings/);
@@ -148,15 +152,23 @@ test("keeps social privacy behind authenticated public identifiers", async () =>
   assert.match(social, /respondToFriendRequest/);
   assert.match(social, /recordSocialActivity/);
   assert.match(social, /setSocialReaction/);
+  assert.match(social, /listSocialNotifications/);
+  assert.match(social, /blockSocialUser/);
+  assert.match(social, /areUsersBlocked/);
   assert.match(social, /profileVisible/);
   assert.match(friends, /createFriendRequest/);
   assert.match(requests, /body\.action !== "accept"/);
   assert.match(profile, /getSocialProfile/);
   assert.match(feed, /listSocialFeed/);
   assert.match(reaction, /body\.reaction !== "amen"/);
+  assert.match(notifications, /markSocialNotificationsRead/);
+  assert.match(blocks, /blockSocialUser/);
+  assert.match(friendship, /removeFriend/);
   assert.doesNotMatch(friends, /email/);
   assert.doesNotMatch(profile, /email/);
   assert.match(migration, /CREATE TABLE `social_privacy_settings`/);
+  assert.match(socialSafetyMigration, /CREATE TABLE `social_notifications`/);
+  assert.match(socialSafetyMigration, /CREATE TABLE `user_blocks`/);
 });
 
 test("is installable as a mobile application", async () => {

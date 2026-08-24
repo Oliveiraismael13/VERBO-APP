@@ -40,6 +40,15 @@ export type SocialActivity = {
   reactions: { amen: number; celebrate: number; viewer?: "amen" | "celebrate" };
 };
 
+export type SocialNotification = {
+  id: number;
+  kind: "friend_request" | "friend_accepted" | "reaction";
+  createdAt: number;
+  read: boolean;
+  actor: SocialContact;
+  activityTitle?: string;
+};
+
 type UserRow = { public_handle: string | null };
 type PrivacyRow = {
   profile_visibility: "friends" | "private";
@@ -88,6 +97,10 @@ export async function ensureSocialSchema() {
     env.DB.prepare("CREATE TABLE IF NOT EXISTS social_activities (id INTEGER PRIMARY KEY AUTOINCREMENT, actor_id TEXT NOT NULL, kind TEXT NOT NULL CHECK(kind IN ('mission_completed', 'chapter_completed', 'streak_milestone', 'achievement_unlocked')), payload_json TEXT NOT NULL DEFAULT '{}', visibility TEXT NOT NULL DEFAULT 'friends' CHECK(visibility IN ('friends', 'private')), created_at INTEGER NOT NULL, FOREIGN KEY (actor_id) REFERENCES users(id))"),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_social_activities_actor_created ON social_activities(actor_id, created_at)"),
     env.DB.prepare("CREATE TABLE IF NOT EXISTS social_reactions (activity_id INTEGER NOT NULL, user_id TEXT NOT NULL, reaction TEXT NOT NULL CHECK(reaction IN ('amen', 'celebrate')), created_at INTEGER NOT NULL, PRIMARY KEY (activity_id, user_id), FOREIGN KEY (activity_id) REFERENCES social_activities(id), FOREIGN KEY (user_id) REFERENCES users(id))"),
+    env.DB.prepare("CREATE TABLE IF NOT EXISTS social_notifications (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT NOT NULL, actor_id TEXT NOT NULL, kind TEXT NOT NULL CHECK(kind IN ('friend_request', 'friend_accepted', 'reaction')), activity_id INTEGER, read_at INTEGER, created_at INTEGER NOT NULL, FOREIGN KEY (user_id) REFERENCES users(id), FOREIGN KEY (actor_id) REFERENCES users(id), FOREIGN KEY (activity_id) REFERENCES social_activities(id))"),
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_social_notifications_user_read_created ON social_notifications(user_id, read_at, created_at)"),
+    env.DB.prepare("CREATE TABLE IF NOT EXISTS user_blocks (blocker_id TEXT NOT NULL, blocked_id TEXT NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY (blocker_id, blocked_id), FOREIGN KEY (blocker_id) REFERENCES users(id), FOREIGN KEY (blocked_id) REFERENCES users(id), CHECK(blocker_id <> blocked_id))"),
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_user_blocks_blocked ON user_blocks(blocked_id)"),
   ]);
 }
 
@@ -160,6 +173,22 @@ export async function areFriends(firstUserId: string, secondUserId: string) {
   return Boolean(friendship);
 }
 
+export async function areUsersBlocked(firstUserId: string, secondUserId: string) {
+  if (firstUserId === secondUserId) return false;
+  await ensureSocialSchema();
+  const block = await env.DB.prepare("SELECT 1 AS found FROM user_blocks WHERE (blocker_id = ? AND blocked_id = ?) OR (blocker_id = ? AND blocked_id = ?)")
+    .bind(firstUserId, secondUserId, secondUserId, firstUserId)
+    .first<{ found: number }>();
+  return Boolean(block);
+}
+
+async function createSocialNotification(userId: string, actorId: string, kind: SocialNotification["kind"], activityId?: number) {
+  if (userId === actorId) return;
+  await env.DB.prepare("INSERT INTO social_notifications (user_id, actor_id, kind, activity_id, created_at) VALUES (?, ?, ?, ?, ?)")
+    .bind(userId, actorId, kind, activityId ?? null, Date.now())
+    .run();
+}
+
 export function contactFromRow(row: Pick<SocialUserRow, "public_handle" | "display_name" | "profile_photo">): SocialContact {
   return {
     publicHandle: row.public_handle,
@@ -202,6 +231,7 @@ export async function getSocialProfile(viewerId: string, publicHandle: string): 
   await ensureSocialUser(viewerId);
   const target = await findSocialUser(publicHandle);
   if (!target) return null;
+  if (target.id !== viewerId && await areUsersBlocked(viewerId, target.id)) return null;
 
   const relationship: SocialProfile["relationship"] = target.id === viewerId ? "self" : await areFriends(viewerId, target.id) ? "friend" : "none";
   const profileVisible = relationship === "self" || (relationship === "friend" && (target.profile_visibility ?? defaults.profileVisibility) === "friends");
@@ -229,6 +259,48 @@ export async function listFriends(userId: string): Promise<SocialContact[]> {
   return rows.results.map(contactFromRow);
 }
 
+export async function listBlockedUsers(userId: string): Promise<SocialContact[]> {
+  await ensureSocialUser(userId);
+  const rows = await env.DB.prepare("SELECT users.public_handle, users.display_name, users.profile_photo FROM user_blocks JOIN users ON users.id = user_blocks.blocked_id WHERE user_blocks.blocker_id = ? ORDER BY user_blocks.created_at DESC")
+    .bind(userId)
+    .all<Pick<SocialUserRow, "public_handle" | "display_name" | "profile_photo">>();
+  return rows.results.map(contactFromRow);
+}
+
+export async function removeFriend(userId: string, publicHandle: string) {
+  await ensureSocialUser(userId);
+  const target = await findSocialUser(publicHandle);
+  if (!target || target.id === userId) return { ok: false as const, status: 404, error: "Amizade não encontrada" };
+  const [userAId, userBId] = orderedPair(userId, target.id);
+  const result = await env.DB.prepare("DELETE FROM friendships WHERE user_a_id = ? AND user_b_id = ?").bind(userAId, userBId).run();
+  if (!result.meta.changes) return { ok: false as const, status: 404, error: "Amizade não encontrada" };
+  return { ok: true as const };
+}
+
+export async function blockSocialUser(userId: string, publicHandle: string) {
+  await ensureSocialUser(userId);
+  const target = await findSocialUser(publicHandle);
+  if (!target || target.id === userId) return { ok: false as const, status: 404, error: "Perfil não encontrado" };
+  const [userAId, userBId] = orderedPair(userId, target.id);
+  const now = Date.now();
+  await env.DB.batch([
+    env.DB.prepare("INSERT OR IGNORE INTO user_blocks (blocker_id, blocked_id, created_at) VALUES (?, ?, ?)").bind(userId, target.id, now),
+    env.DB.prepare("DELETE FROM friendships WHERE user_a_id = ? AND user_b_id = ?").bind(userAId, userBId),
+    env.DB.prepare("UPDATE friend_requests SET status = 'cancelled', responded_at = ? WHERE status = 'pending' AND ((sender_id = ? AND recipient_id = ?) OR (sender_id = ? AND recipient_id = ?))").bind(now, userId, target.id, target.id, userId),
+    env.DB.prepare("DELETE FROM social_notifications WHERE user_id = ? AND actor_id = ?").bind(userId, target.id),
+  ]);
+  return { ok: true as const };
+}
+
+export async function unblockSocialUser(userId: string, publicHandle: string) {
+  await ensureSocialUser(userId);
+  const target = await findSocialUser(publicHandle);
+  if (!target) return { ok: false as const, status: 404, error: "Perfil não encontrado" };
+  const result = await env.DB.prepare("DELETE FROM user_blocks WHERE blocker_id = ? AND blocked_id = ?").bind(userId, target.id).run();
+  if (!result.meta.changes) return { ok: false as const, status: 404, error: "Bloqueio não encontrado" };
+  return { ok: true as const };
+}
+
 export async function listFriendRequests(userId: string) {
   await ensureSocialUser(userId);
   const [incoming, outgoing] = await Promise.all([
@@ -247,6 +319,7 @@ export async function createFriendRequest(senderId: string, recipientHandle: str
   await ensureSocialUser(senderId);
   const recipient = await findSocialUser(recipientHandle);
   if (!recipient || recipient.id === senderId || !Boolean(recipient.allow_friend_requests ?? defaults.allowFriendRequests)) return { ok: false as const, status: 404, error: "Este perfil não está disponível para pedidos de amizade" };
+  if (await areUsersBlocked(senderId, recipient.id)) return { ok: false as const, status: 404, error: "Este perfil não está disponível para pedidos de amizade" };
   if (await areFriends(senderId, recipient.id)) return { ok: false as const, status: 409, error: "Vocês já são amigos" };
 
   const pending = await env.DB.prepare("SELECT id, sender_id FROM friend_requests WHERE status = 'pending' AND ((sender_id = ? AND recipient_id = ?) OR (sender_id = ? AND recipient_id = ?)) ORDER BY created_at DESC LIMIT 1")
@@ -259,6 +332,7 @@ export async function createFriendRequest(senderId: string, recipientHandle: str
   }
 
   const result = await env.DB.prepare("INSERT INTO friend_requests (sender_id, recipient_id, status, created_at) VALUES (?, ?, 'pending', ?)").bind(senderId, recipient.id, Date.now()).run();
+  await createSocialNotification(recipient.id, senderId, "friend_request");
   return { ok: true as const, requestId: result.meta.last_row_id, recipient: contactFromRow(recipient) };
 }
 
@@ -270,6 +344,7 @@ export async function respondToFriendRequest(userId: string, requestId: number, 
   const isSender = request.sender_id === userId;
   if ((action === "accept" || action === "decline") && !isRecipient) return { ok: false as const, status: 403, error: "Você não pode responder a este pedido" };
   if (action === "cancel" && !isSender) return { ok: false as const, status: 403, error: "Você não pode cancelar este pedido" };
+  if (action === "accept" && await areUsersBlocked(userId, request.sender_id)) return { ok: false as const, status: 404, error: "Pedido de amizade não encontrado" };
 
   const status = action === "accept" ? "accepted" : action === "decline" ? "declined" : "cancelled";
   const statements = [env.DB.prepare("UPDATE friend_requests SET status = ?, responded_at = ? WHERE id = ? AND status = 'pending'").bind(status, Date.now(), requestId)];
@@ -278,6 +353,7 @@ export async function respondToFriendRequest(userId: string, requestId: number, 
     statements.push(env.DB.prepare("INSERT OR IGNORE INTO friendships (user_a_id, user_b_id, created_at) VALUES (?, ?, ?)").bind(userAId, userBId, Date.now()));
   }
   await env.DB.batch(statements);
+  if (action === "accept") await createSocialNotification(request.sender_id, userId, "friend_accepted");
   return { ok: true as const, status };
 }
 
@@ -326,8 +402,8 @@ export async function recordSocialActivity(userId: string, kind: SocialActivityK
 
 export async function listSocialFeed(viewerId: string): Promise<SocialActivity[]> {
   await ensureSocialUser(viewerId);
-  const rows = await env.DB.prepare("SELECT social_activities.id, social_activities.actor_id, social_activities.kind, social_activities.payload_json, social_activities.created_at, users.public_handle, users.display_name, users.profile_photo, COALESCE(SUM(CASE WHEN social_reactions.reaction = 'amen' THEN 1 ELSE 0 END), 0) AS amen_count, COALESCE(SUM(CASE WHEN social_reactions.reaction = 'celebrate' THEN 1 ELSE 0 END), 0) AS celebrate_count, MAX(CASE WHEN social_reactions.user_id = ? THEN social_reactions.reaction ELSE NULL END) AS viewer_reaction FROM social_activities JOIN users ON users.id = social_activities.actor_id LEFT JOIN social_reactions ON social_reactions.activity_id = social_activities.id WHERE social_activities.actor_id = ? OR (social_activities.visibility = 'friends' AND EXISTS (SELECT 1 FROM friendships WHERE (friendships.user_a_id = ? AND friendships.user_b_id = social_activities.actor_id) OR (friendships.user_b_id = ? AND friendships.user_a_id = social_activities.actor_id))) GROUP BY social_activities.id ORDER BY social_activities.created_at DESC LIMIT 40")
-    .bind(viewerId, viewerId, viewerId, viewerId)
+  const rows = await env.DB.prepare("SELECT social_activities.id, social_activities.actor_id, social_activities.kind, social_activities.payload_json, social_activities.created_at, users.public_handle, users.display_name, users.profile_photo, COALESCE(SUM(CASE WHEN social_reactions.reaction = 'amen' THEN 1 ELSE 0 END), 0) AS amen_count, COALESCE(SUM(CASE WHEN social_reactions.reaction = 'celebrate' THEN 1 ELSE 0 END), 0) AS celebrate_count, MAX(CASE WHEN social_reactions.user_id = ? THEN social_reactions.reaction ELSE NULL END) AS viewer_reaction FROM social_activities JOIN users ON users.id = social_activities.actor_id LEFT JOIN social_reactions ON social_reactions.activity_id = social_activities.id WHERE (social_activities.actor_id = ? OR (social_activities.visibility = 'friends' AND EXISTS (SELECT 1 FROM friendships WHERE (friendships.user_a_id = ? AND friendships.user_b_id = social_activities.actor_id) OR (friendships.user_b_id = ? AND friendships.user_a_id = social_activities.actor_id)))) AND NOT EXISTS (SELECT 1 FROM user_blocks WHERE (user_blocks.blocker_id = ? AND user_blocks.blocked_id = social_activities.actor_id) OR (user_blocks.blocker_id = social_activities.actor_id AND user_blocks.blocked_id = ?)) GROUP BY social_activities.id ORDER BY social_activities.created_at DESC LIMIT 40")
+    .bind(viewerId, viewerId, viewerId, viewerId, viewerId, viewerId)
     .all<ActivityRow>();
   return rows.results.map((row) => ({
     id: row.id,
@@ -342,6 +418,7 @@ export async function listSocialFeed(viewerId: string): Promise<SocialActivity[]
 async function canViewActivity(viewerId: string, activityId: number) {
   const activity = await env.DB.prepare("SELECT actor_id, visibility FROM social_activities WHERE id = ?").bind(activityId).first<{ actor_id: string; visibility: "friends" | "private" }>();
   if (!activity) return null;
+  if (activity.actor_id !== viewerId && await areUsersBlocked(viewerId, activity.actor_id)) return null;
   if (activity.actor_id === viewerId) return activity;
   if (activity.visibility !== "friends" || !await areFriends(viewerId, activity.actor_id)) return null;
   return activity;
@@ -349,13 +426,29 @@ async function canViewActivity(viewerId: string, activityId: number) {
 
 export async function setSocialReaction(viewerId: string, activityId: number, reaction: "amen" | "celebrate" | null) {
   await ensureSocialUser(viewerId);
-  if (!await canViewActivity(viewerId, activityId)) return { ok: false as const, status: 404, error: "Atividade não encontrada" };
+  const activity = await canViewActivity(viewerId, activityId);
+  if (!activity) return { ok: false as const, status: 404, error: "Atividade não encontrada" };
   if (!reaction) {
     await env.DB.prepare("DELETE FROM social_reactions WHERE activity_id = ? AND user_id = ?").bind(activityId, viewerId).run();
     return { ok: true as const, reaction: null };
   }
+  const existing = await env.DB.prepare("SELECT reaction FROM social_reactions WHERE activity_id = ? AND user_id = ?").bind(activityId, viewerId).first<{ reaction: string }>();
   await env.DB.prepare("INSERT INTO social_reactions (activity_id, user_id, reaction, created_at) VALUES (?, ?, ?, ?) ON CONFLICT(activity_id, user_id) DO UPDATE SET reaction = excluded.reaction, created_at = excluded.created_at")
     .bind(activityId, viewerId, reaction, Date.now())
     .run();
+  if (!existing && activity.actor_id !== viewerId) await createSocialNotification(activity.actor_id, viewerId, "reaction", activityId);
   return { ok: true as const, reaction };
+}
+
+export async function listSocialNotifications(userId: string): Promise<SocialNotification[]> {
+  await ensureSocialUser(userId);
+  const rows = await env.DB.prepare("SELECT social_notifications.id, social_notifications.kind, social_notifications.activity_id, social_notifications.read_at, social_notifications.created_at, users.public_handle, users.display_name, users.profile_photo, social_activities.payload_json FROM social_notifications JOIN users ON users.id = social_notifications.actor_id LEFT JOIN social_activities ON social_activities.id = social_notifications.activity_id WHERE social_notifications.user_id = ? AND NOT EXISTS (SELECT 1 FROM user_blocks WHERE (user_blocks.blocker_id = ? AND user_blocks.blocked_id = social_notifications.actor_id) OR (user_blocks.blocker_id = social_notifications.actor_id AND user_blocks.blocked_id = ?)) ORDER BY social_notifications.read_at IS NOT NULL, social_notifications.created_at DESC LIMIT 30")
+    .bind(userId, userId, userId)
+    .all<{ id: number; kind: SocialNotification["kind"]; activity_id: number | null; read_at: number | null; created_at: number; payload_json: string | null } & Pick<SocialUserRow, "public_handle" | "display_name" | "profile_photo">>();
+  return rows.results.map((row) => ({ id: row.id, kind: row.kind, createdAt: row.created_at, read: Boolean(row.read_at), actor: contactFromRow(row), ...(row.kind === "reaction" && row.payload_json ? { activityTitle: parseActivityPayload(row.payload_json).title } : {}) }));
+}
+
+export async function markSocialNotificationsRead(userId: string) {
+  await ensureSocialUser(userId);
+  await env.DB.prepare("UPDATE social_notifications SET read_at = ? WHERE user_id = ? AND read_at IS NULL").bind(Date.now(), userId).run();
 }

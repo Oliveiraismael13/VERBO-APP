@@ -138,3 +138,19 @@ export const socialReactions = sqliteTable("social_reactions", {
   reaction: text("reaction", { enum: ["amen", "celebrate"] }).notNull(),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
 }, (t) => [primaryKey({ columns: [t.activityId, t.userId] })]);
+
+export const socialNotifications = sqliteTable("social_notifications", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: text("user_id").notNull().references(() => users.id),
+  actorId: text("actor_id").notNull().references(() => users.id),
+  kind: text("kind", { enum: ["friend_request", "friend_accepted", "reaction"] }).notNull(),
+  activityId: integer("activity_id").references(() => socialActivities.id),
+  readAt: integer("read_at", { mode: "timestamp" }),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+}, (t) => [index("idx_social_notifications_user_read_created").on(t.userId, t.readAt, t.createdAt)]);
+
+export const userBlocks = sqliteTable("user_blocks", {
+  blockerId: text("blocker_id").notNull().references(() => users.id),
+  blockedId: text("blocked_id").notNull().references(() => users.id),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+}, (t) => [primaryKey({ columns: [t.blockerId, t.blockedId] }), index("idx_user_blocks_blocked").on(t.blockedId)]);
