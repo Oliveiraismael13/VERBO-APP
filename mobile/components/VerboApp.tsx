@@ -44,7 +44,7 @@ const translations = {
 type Translation = keyof typeof translations;
 type LastReading = { bookSlug: string; chapter: number };
 type PlayerProgress = { xp: number; level: number; coins: number; streak: number; completed: string[]; achievements: string[]; dailyNoteCompleted?: boolean; xpBonusPercent?: number; missedStreakDays?: number; displayName?: string; profilePhoto?: string; favorites?: string[]; highlights?: Record<string, string>; notes?: Record<string, string>; plans?: string[]; shared?: string[]; foundScrolls?: string[]; lastReading?: LastReading | null };
-type ChapterReward = { xp: number; coins: number; levelUp: boolean; unlocked: string[]; scrollsUnlocked?: number; missionCompleted?: boolean; missionTitle?: string; secondaryMissionCompleted?: boolean; replayCompleted?: boolean; actCompleted?: boolean; actTitle?: string };
+type ChapterReward = { xp: number; coins: number; levelUp: boolean; unlocked: string[]; scrollsUnlocked?: number; scrollXp?: number; missionCompleted?: boolean; missionTitle?: string; secondaryMissionCompleted?: boolean; replayCompleted?: boolean; actCompleted?: boolean; actTitle?: string };
 type SecondaryMissionStatus = { id: string; unlocked: boolean; active: boolean; completed: boolean; replaying: boolean; replayChapters: string[]; done: number; total: number };
 
 const emptyProgress: PlayerProgress = { xp: 0, level: 1, coins: 0, streak: 0, completed: [], achievements: [], dailyNoteCompleted: false };
@@ -245,6 +245,19 @@ export default function VerboApp() {
     await fetch("/api/library", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ favorites: base.favorites || [], highlights: base.highlights || {}, notes: base.notes || {}, plans: base.plans || [], shared: base.shared || [], foundScrolls: base.foundScrolls || [], lastReading: lastReadingRef.current, ...next }) }).catch(() => undefined);
   };
 
+  const awardScrollXp = async (scrollKeys: string[]) => {
+    if (!scrollKeys.length) return { progress: null as PlayerProgress | null, xp: 0, levelUp: false };
+    try {
+      const response = await fetch("/api/progress", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "scroll", scrollKeys }) });
+      const data = await response.json() as PlayerProgress & { reward?: { xp?: number; levelUp?: boolean } | null };
+      if (!response.ok) throw new Error("scroll-reward");
+      const { reward: scrollReward, ...remoteProgress } = data;
+      return { progress: remoteProgress, xp: scrollReward?.xp || 0, levelUp: Boolean(scrollReward?.levelUp) };
+    } catch {
+      return { progress: null as PlayerProgress | null, xp: 0, levelUp: false };
+    }
+  };
+
   const primaryRequirementMet = (candidate: PlayerProgress) => {
     if (!primaryMissionScroll) return false;
     const versePrefix = `${bookSlug}:${chapter}:`;
@@ -256,13 +269,14 @@ export default function VerboApp() {
     return candidate.shared?.includes(`${bookSlug}:${chapter}`) || false;
   };
 
-  const unlockPrimaryScrollIfReady = (candidate: PlayerProgress) => {
+  const unlockPrimaryScrollIfReady = async (candidate: PlayerProgress) => {
     if (!missionMode || !primaryMissionScroll || candidate.foundScrolls?.includes(primaryScrollKey) || !primaryRequirementMet(candidate)) return;
     const foundScrolls = Array.from(new Set([...(candidate.foundScrolls || []), primaryScrollKey]));
-    const updated = { ...candidate, foundScrolls };
+    const scrollReward = await awardScrollXp([primaryScrollKey]);
+    const updated = { ...candidate, ...(scrollReward.progress || {}), foundScrolls };
     setProgress(updated);
     void saveRemoteLibrary({ foundScrolls }, updated);
-    notify("Pergaminho da Grande Jornada descoberto");
+    notify(`Pergaminho da Grande Jornada descoberto${scrollReward.xp ? ` · +${scrollReward.xp} XP` : ""}`);
   };
 
   useEffect(() => {
@@ -452,10 +466,15 @@ export default function VerboApp() {
       const secondaryScrolls = secondaryChapterActive && activeSecondaryMission?.insights[chapter] ? activeSecondaryMission.insights[chapter].map((_, index) => `secondary:${activeSecondaryMission.id}:${chapter}:${index}`) : [];
       const primaryScrollFoundOnCompletion = Boolean(missionMode && primaryMissionScroll?.requirement === "complete" && !progress.foundScrolls?.includes(primaryScrollKey) && nextProgress.completed.includes(`${bookSlug}:${chapter}`));
       const foundOnCompletion = [...secondaryScrolls, ...(primaryScrollFoundOnCompletion ? [primaryScrollKey] : [])];
-      const updatedProgress = { ...progress, ...nextProgress, foundScrolls: Array.from(new Set([...(progress.foundScrolls || []), ...foundOnCompletion])) };
+      const initialProgress = { ...progress, ...nextProgress, foundScrolls: Array.from(new Set([...(progress.foundScrolls || []), ...foundOnCompletion])) };
+      const scrollReward = await awardScrollXp(foundOnCompletion);
+      const updatedProgress = { ...initialProgress, ...(scrollReward.progress || {}), foundScrolls: initialProgress.foundScrolls };
       setProgress(updatedProgress);
       if (earned) {
+        earned.xp += scrollReward.xp;
+        earned.levelUp ||= scrollReward.levelUp;
         earned.scrollsUnlocked = foundOnCompletion.length;
+        earned.scrollXp = scrollReward.xp;
         setReward(earned);
         if (foundOnCompletion.length) void saveRemoteLibrary({ foundScrolls: updatedProgress.foundScrolls }, updatedProgress);
         unlockPrimaryScrollIfReady(updatedProgress);
@@ -1102,7 +1121,7 @@ function RewardModal({ reward, level, close }: { reward: ChapterReward; level: n
   const completedMission = reward.missionTitle ? campaignActs.flatMap((act) => act.missions).find((mission) => mission.title === reward.missionTitle) : undefined;
   const secondaryMission = reward.secondaryMissionCompleted || reward.replayCompleted ? secondaryMissions.find((mission) => mission.title === reward.missionTitle) : undefined;
   const narrative = completedMission ? narrativeForMission(completedMission) : secondaryMission || null;
-  return <div className="reward-backdrop"><div className="reward-modal" role="dialog" aria-modal="true" aria-label="Recompensa da missão"><div className="reward-rays" /><span className="reward-chest">♛</span><p>{reward.replayCompleted ? `RELEITURA CONCLUÍDA · ${reward.missionTitle}` : reward.actCompleted ? `ATO CONCLUÍDO · ${reward.actTitle}` : reward.missionCompleted ? `MISSÃO CONCLUÍDA · ${reward.missionTitle}` : reward.levelUp ? "NOVO NÍVEL ALCANÇADO" : "CAPÍTULO CONCLUÍDO"}</p><h2>{reward.replayCompleted ? "Jornada revisitada" : reward.levelUp ? `Nível ${level}` : "Recompensa obtida"}</h2>{reward.replayCompleted ? <div><b>SEM<small>XP ADICIONAL</small></b><b>SEM<small>SICLOS ADICIONAIS</small></b></div> : <div><b>+{reward.xp}<small>XP</small></b><b>+{reward.coins}<small>SICLOS DE PRATA</small></b></div>}{reward.scrollsUnlocked ? <em>▤ {reward.scrollsUnlocked} {reward.scrollsUnlocked === 1 ? "pergaminho encontrado" : "pergaminhos encontrados"} · disponível na Bíblia</em> : null}{narrative && <blockquote className="mission-reveal"><b>{narrative.discovery}</b><span>{narrative.next}</span></blockquote>}{reward.unlocked.length > 0 && <em>✦ Nova conquista desbloqueada</em>}<button onClick={close}>Continuar jornada</button></div></div>;
+  return <div className="reward-backdrop"><div className="reward-modal" role="dialog" aria-modal="true" aria-label="Recompensa da missão"><div className="reward-rays" /><span className="reward-chest">♛</span><p>{reward.replayCompleted ? `RELEITURA CONCLUÍDA · ${reward.missionTitle}` : reward.actCompleted ? `ATO CONCLUÍDO · ${reward.actTitle}` : reward.missionCompleted ? `MISSÃO CONCLUÍDA · ${reward.missionTitle}` : reward.levelUp ? "NOVO NÍVEL ALCANÇADO" : "CAPÍTULO CONCLUÍDO"}</p><h2>{reward.replayCompleted ? "Jornada revisitada" : reward.levelUp ? `Nível ${level}` : "Recompensa obtida"}</h2>{reward.replayCompleted ? <div><b>SEM<small>XP ADICIONAL</small></b><b>SEM<small>SICLOS ADICIONAIS</small></b></div> : <div><b>+{reward.xp}<small>XP</small></b><b>+{reward.coins}<small>SICLOS DE PRATA</small></b></div>}{reward.scrollsUnlocked ? <em>▤ {reward.scrollsUnlocked} {reward.scrollsUnlocked === 1 ? "pergaminho encontrado" : "pergaminhos encontrados"} · +{reward.scrollXp || reward.scrollsUnlocked * 20} XP · disponível na Bíblia</em> : null}{narrative && <blockquote className="mission-reveal"><b>{narrative.discovery}</b><span>{narrative.next}</span></blockquote>}{reward.unlocked.length > 0 && <em>✦ Nova conquista desbloqueada</em>}<button onClick={close}>Continuar jornada</button></div></div>;
 }
 
 function StudyResult({ translation, setTranslation, saved, setSaved, notify }: { translation: Translation; setTranslation: (value: Translation) => void; saved: boolean; setSaved: (value: boolean) => void; notify: (value: string) => void }) {

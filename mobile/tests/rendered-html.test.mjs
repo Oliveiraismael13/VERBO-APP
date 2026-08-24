@@ -44,6 +44,8 @@ test("contains the authenticated Verbo application routes", async () => {
   assert.match(app, /unlockPrimaryScrollIfReady/);
   assert.match(app, /primaryScrollFoundOnCompletion/);
   assert.match(app, /pergaminho encontrado/);
+  assert.match(app, /awardScrollXp/);
+  assert.match(app, /scrollXp/);
   assert.match(app, /foundScrolls/);
   assert.match(app, /shared/);
   assert.match(app, /pergaminhos encontrados/);
@@ -154,6 +156,9 @@ assert.match(app, /A Edição Chama da Fé não é usada nas missões/);
   assert.match(secondaryMissionsRoute, /user_secondary_mission_replays/);
   assert.match(secondaryMissionsRoute, /record-replay/);
   assert.match(progress, /getSessionUser/);
+  assert.match(progress, /const SCROLL_XP = 20/);
+  assert.match(progress, /user_scroll_rewards/);
+  assert.match(progress, /action === "scroll"/);
   const libraryRoute = await text("app/api/library/route.ts");
   assert.match(libraryRoute, /last_reading_json/);
   assert.match(libraryRoute, /found_scrolls_json/);

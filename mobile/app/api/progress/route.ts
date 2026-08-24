@@ -24,6 +24,7 @@ type ProgressRow = {
 };
 
 const NOTE_XP = 15;
+const SCROLL_XP = 20;
 const STREAK_RESTORE_COIN_COST = 100;
 const defaultProgress = { xp: 0, level: 1, coins: 0, streak: 0, completed: [] as string[], achievements: [] as string[], dailyNoteCompleted: false };
 function todayInBrazil() {
@@ -83,6 +84,7 @@ async function ensureSchema() {
     env.DB.prepare("CREATE TABLE IF NOT EXISTS user_secondary_missions (user_id TEXT NOT NULL, mission_id TEXT NOT NULL, unlocked_at INTEGER NOT NULL, active INTEGER NOT NULL DEFAULT 0 CHECK(active IN (0, 1)), completed_at INTEGER, PRIMARY KEY(user_id, mission_id), FOREIGN KEY (user_id) REFERENCES users(id))"),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_user_secondary_missions_active ON user_secondary_missions(user_id, active)"),
     env.DB.prepare("CREATE TABLE IF NOT EXISTS user_achievements (user_id TEXT NOT NULL, code TEXT NOT NULL, unlocked_at INTEGER NOT NULL, PRIMARY KEY (user_id, code), FOREIGN KEY (user_id) REFERENCES users(id))"),
+    env.DB.prepare("CREATE TABLE IF NOT EXISTS user_scroll_rewards (user_id TEXT NOT NULL, scroll_key TEXT NOT NULL, found_at INTEGER NOT NULL, PRIMARY KEY(user_id, scroll_key), FOREIGN KEY (user_id) REFERENCES users(id))"),
   ]);
   const columns = await env.DB.prepare("PRAGMA table_info(user_progress)").all<{ name: string }>();
   if (!columns.results.some((column) => column.name === "last_login_date")) {
@@ -142,11 +144,41 @@ export async function GET() {
 export async function POST(request: Request) {
   const user = await currentUser();
   if (!user) return withCors(Response.json({ error: "Não autenticado" }, { status: 401 }));
-  const body = await request.json() as { action?: "note" | "restore-streak"; bookSlug?: string; chapter?: number };
+  const body = await request.json() as { action?: "note" | "restore-streak" | "scroll"; bookSlug?: string; chapter?: number; scrollKeys?: string[] };
 
   try {
     await ensureSchema();
     await ensureUser(user);
+    if (body.action === "scroll") {
+      const scrollKeys = Array.isArray(body.scrollKeys) ? body.scrollKeys : [];
+      const requestedKeys = Array.from(new Set(scrollKeys.filter((key): key is string => typeof key === "string"))).slice(0, 2);
+      if (!requestedKeys.length) return withCors(Response.json({ error: "Pergaminho inválido" }, { status: 400 }));
+
+      for (const key of requestedKeys) {
+        const primary = /^primary:([a-z0-9]+):(\d+)$/.exec(key);
+        const secondary = /^secondary:([a-z0-9-]+):(\d+):(\d+)$/.exec(key);
+        const bookSlug = primary?.[1] || (secondary ? secondaryMissionById(secondary[1])?.bookSlug : undefined);
+        const chapter = Number(primary?.[2] || secondary?.[2]);
+        if (!bookSlug || !Number.isInteger(chapter) || chapter < 1) return withCors(Response.json({ error: "Pergaminho inválido" }, { status: 400 }));
+        if (primary && !missionForChapter(bookSlug, chapter)) return withCors(Response.json({ error: "Pergaminho inválido" }, { status: 400 }));
+        if (secondary) {
+          const mission = secondaryMissionById(secondary[1]);
+          if (!mission || chapter < mission.from || chapter > mission.to || Number(secondary[3]) > 1) return withCors(Response.json({ error: "Pergaminho inválido" }, { status: 400 }));
+          const completed = await env.DB.prepare("SELECT 1 FROM completed_chapters WHERE user_id = ? AND book_slug = ? AND chapter = ?").bind(user.id, bookSlug, chapter).first();
+          if (!completed) return withCors(Response.json({ error: "Conclua o capítulo para encontrar este pergaminho." }, { status: 400 }));
+        }
+      }
+
+      const inserts = await env.DB.batch(requestedKeys.map((key) => env.DB.prepare("INSERT OR IGNORE INTO user_scroll_rewards (user_id, scroll_key, found_at) VALUES (?, ?, ?)").bind(user.id, key, Date.now())));
+      const awardedCount = inserts.filter((result) => result.meta.changes > 0).length;
+      if (!awardedCount) return withCors(Response.json({ ...(await loadProgress(user.id)), reward: null }));
+      const current = await env.DB.prepare("SELECT xp, level FROM user_progress WHERE user_id = ?").bind(user.id).first<ProgressRow>();
+      const xpGain = SCROLL_XP * awardedCount;
+      const nextXp = (current?.xp ?? 0) + xpGain;
+      const nextLevel = levelForXp(nextXp);
+      await env.DB.prepare("UPDATE user_progress SET xp = ?, level = ?, updated_at = ? WHERE user_id = ?").bind(nextXp, nextLevel, Date.now(), user.id).run();
+      return withCors(Response.json({ ...(await loadProgress(user.id)), reward: { xp: xpGain, coins: 0, levelUp: nextLevel > (current?.level ?? 1), scrollsAwarded: awardedCount } }));
+    }
     if (body.action === "restore-streak") {
       const current = await env.DB.prepare("SELECT coins, streak_before_break, missed_streak_days FROM user_progress WHERE user_id = ?").bind(user.id).first<ProgressRow>();
       const missedDays = current?.missed_streak_days ?? 0;
