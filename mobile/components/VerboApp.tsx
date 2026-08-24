@@ -840,6 +840,8 @@ export default function VerboApp() {
             })}
           </article>
 
+          {activeSecondaryMission && activeSecondaryMission.bookSlug === bookSlug && activeSecondaryMission.insights[chapter] && <MissionInsights insights={activeSecondaryMission.insights[chapter]} chapter={chapter} />}
+
           {(missionMode || Boolean(activeSecondaryMission && activeSecondaryMission.bookSlug === bookSlug && chapter >= activeSecondaryMission.from && chapter <= activeSecondaryMission.to)) && <button className={`chapter-complete ${(replayingSecondaryMission ? replayChapterComplete : progress.completed.includes(`${bookSlug}:${chapter}`)) ? "done" : ""}`} onClick={completeChapter} disabled={savingChapter || (replayingSecondaryMission ? replayChapterComplete : progress.completed.includes(`${bookSlug}:${chapter}`))}>
             <span>{replayingSecondaryMission ? replayChapterComplete ? "✓" : "⚔" : progress.completed.includes(`${bookSlug}:${chapter}`) ? "✓" : "⚔"}</span>
             <div><b>{replayingSecondaryMission ? replayChapterComplete ? "Capítulo relido" : "Marcar capítulo como relido" : progress.completed.includes(`${bookSlug}:${chapter}`) ? "Capítulo concluído" : "Marcar capítulo como lido"}</b><small>{replayingSecondaryMission ? replayChapterComplete ? "Releitura registrada" : "Sem XP ou siclos adicionais" : progress.completed.includes(`${bookSlug}:${chapter}`) ? "Recompensa conquistada" : "+40 XP · +4 siclos de prata"}</small></div>
@@ -1031,6 +1033,11 @@ function MissionStoryPanel({ context, progress }: { context: ReturnType<typeof m
   const progressInAct = actProgress(context.act, progress.completed);
   const progressInStage = stageProgress(context.mission, progress.completed);
   return <aside className="mission-story-panel"><div><p>MISSÃO {index} DE {context.act.missions.length} · ATO {context.act.number}</p><h2>{context.mission.title}</h2><span>{narrative.introduction}</span></div><div className="mission-story-progress"><div className="mission-stage-progress"><small>CAPÍTULOS PARA CONCLUSÃO <HelpButton title="Capítulos para conclusão" text="Marque os capítulos da missão como lidos para avançar. Ao concluir todos, a próxima missão é liberada." /></small><b>{progressInStage.done}/{progressInStage.total}</b><i><em style={{ width: `${progressInStage.percent}%` }} /></i></div><div><small>ATO</small><b>{progressInAct.done}/{progressInAct.total}</b><i><em style={{ width: `${progressInAct.percent}%` }} /></i></div></div><blockquote><small>CONTEXTO HISTÓRICO</small>{narrative.historicalContext}</blockquote></aside>;
+}
+
+function MissionInsights({ insights, chapter }: { insights: SecondaryMission["insights"][number]; chapter: number }) {
+  const [open, setOpen] = useState(false);
+  return <aside className={`mission-insights ${open ? "open" : ""}`}><button onClick={() => setOpen(!open)} aria-expanded={open}><span>◈</span><div><small>PARA APROFUNDAR · MATEUS {chapter}</small><b>{open ? "Ocultar contexto" : `${insights.length} insights do texto`}</b></div><i>{open ? "−" : "+"}</i></button>{open && <div className="mission-insight-list">{insights.map((insight) => <article key={insight.title}><small>{insight.kind} · {insight.reference}</small><h3>{insight.title}</h3><p>{insight.content}</p></article>)}</div>}</aside>;
 }
 
 function SecondaryMissionStoryPanel({ mission, progress, status }: { mission: SecondaryMission; progress: PlayerProgress; status: SecondaryMissionStatus | null }) {
