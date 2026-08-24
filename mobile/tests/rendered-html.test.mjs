@@ -48,7 +48,7 @@ assert.match(app, /A Edição Chama da Fé não é usada nas missões/);
   assert.match(app, /function stageProgress/);
   assert.match(app, /CONTEXTO HISTÓRICO/);
   assert.doesNotMatch(app, /MOMENTO DE REFLEXÃO/);
-  assert.match(app, /ETAPA ATUAL · \{progressInStage\.done\} de \{progressInStage\.total\}/);
+  assert.match(app, /MISSÃO ATUAL · \{progressInStage\.done\} de \{progressInStage\.total\}/);
   assert.match(app, /progress\.profilePhoto \? <ProfilePhoto src=\{progress\.profilePhoto\}/);
   assert.match(app, /className="crest-level"/);
   assert.match(app, /const \[selectedVerses, setSelectedVerses\] = useState<number\[\]>\(\[\]\)/);
