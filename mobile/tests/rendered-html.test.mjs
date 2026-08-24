@@ -33,7 +33,8 @@ test("contains the authenticated Verbo application routes", async () => {
   assert.match(app, /screen === "journey" \? "journey-surface"/);
   assert.match(app, /social-profile-page/);
   assert.match(app, /profile-disciple-label/);
-  assert.match(app, /Usuário do VERBO/);
+  assert.match(app, /Nome da sua conta/);
+  assert.match(app, /<PixelDisciple turning \/>/);
   assert.doesNotMatch(app, />Perfil<\/button>/);
   assert.doesNotMatch(app, /go\("profile"\)/);
   assert.match(app, /ANTIGO TESTAMENTO · \$\{oldTestamentBookCount\} LIVROS/);
@@ -81,7 +82,7 @@ assert.match(app, /A Edição Chama da Fé não é usada nas missões/);
   assert.match(rpgStyles, /\.social-page\{min-height:calc\(100dvh - 148px\)/);
   assert.match(rpgStyles, /\.rpg-shell\.journey-surface,\.rpg-shell\.social-surface\{background:#0b0e18\}/);
   assert.match(rpgStyles, /\.social-profile-page\{min-height:calc\(100dvh - 148px\)/);
-  assert.match(rpgStyles, /@keyframes profile-disciple-spin/);
+  assert.match(rpgStyles, /@keyframes profile-disciple-turn/);
   assert.match(styles, /left:50%;bottom:-9px;transform:translateX\(-50%\)/);
   assert.match(styles, /\.chapter-grid\{display:grid;grid-template-columns:repeat\(5,1fr\)/);
   assert.match(styles, /\.deuterocanonical-note\{display:flex/);
