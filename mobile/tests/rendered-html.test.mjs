@@ -28,6 +28,8 @@ test("contains the authenticated Verbo application routes", async () => {
   assert.match(app, /\/api\/social\/profiles/);
   assert.match(app, /\/api\/social\/feed/);
   assert.match(app, /Meu perfil/);
+  assert.match(app, /social-nav-icon/);
+  assert.doesNotMatch(app, /♧/);
   assert.doesNotMatch(app, />Perfil<\/button>/);
   assert.doesNotMatch(app, /go\("profile"\)/);
   assert.match(app, /ANTIGO TESTAMENTO · \$\{oldTestamentBookCount\} LIVROS/);
