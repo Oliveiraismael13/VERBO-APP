@@ -1,4 +1,4 @@
-export type MissionInsight = { kind: "Expressão" | "Curiosidade"; title: string; reference: string; content: string };
+export type MissionInsight = { kind: "Palavra no original" | "Curiosidade"; title: string; reference: string; original?: string; transliteration?: string; meaning?: string; content: string };
 
 export type SecondaryMission = {
   id: string;
@@ -33,16 +33,16 @@ export const secondaryMissions: SecondaryMission[] = [{
   next: "Leve a leitura para a prática: ouça as palavras de Jesus e construa sobre a rocha.",
   insights: {
     5: [
-      { kind: "Expressão", title: "Bem-aventurados", reference: "Mateus 5:3", content: "A palavra usada no texto transmite mais que uma alegria passageira: descreve a condição de quem é alcançado pelo favor de Deus." },
+      { kind: "Palavra no original", title: "Bem-aventurados", reference: "Mateus 5:3", original: "μακάριοι", transliteration: "makárioi", meaning: "felizes, favorecidos", content: "Não descreve uma alegria que depende do momento, mas a condição de quem recebe o favor de Deus." },
       { kind: "Curiosidade", title: "Sal e luz", reference: "Mateus 5:13–16", content: "O sal era parte comum da vida diária, usado para dar sabor e ajudar na conservação. Jesus usa imagens simples e visíveis para falar de uma fé que alcança o mundo." },
     ],
     6: [
-      { kind: "Expressão", title: "Hipócritas", reference: "Mateus 6:2", content: "O termo grego podia ser usado para atores. Aqui, Jesus critica a prática religiosa feita para ser vista, como se a devoção fosse uma apresentação." },
-      { kind: "Curiosidade", title: "Mamom", reference: "Mateus 6:24", content: "A expressão se refere às riquezas ou posses quando elas passam a ocupar o lugar de senhor. O contraste de Jesus não é entre ter bens e adorar a Deus, mas entre dois mestres." },
+      { kind: "Palavra no original", title: "Hipócritas", reference: "Mateus 6:2", original: "ὑποκριταί", transliteration: "hypokritaí", meaning: "atores, pessoas que representam um papel", content: "O termo podia ser usado para atores. Jesus critica uma devoção encenada para receber a aprovação das pessoas." },
+      { kind: "Curiosidade", title: "Mamom", reference: "Mateus 6:24", content: "A forma grega μαμωνᾶς preserva uma palavra semítica ligada às riquezas. Jesus contrasta dois senhores: Deus e os bens quando eles passam a exigir o lugar de Deus." },
     ],
     7: [
-      { kind: "Expressão", title: "A porta estreita", reference: "Mateus 7:13–14", content: "Jesus fala de dois caminhos para destacar que segui-lo envolve uma decisão real. A imagem aponta para direção e prática, não apenas conhecimento." },
-      { kind: "Curiosidade", title: "Casa sobre a rocha", reference: "Mateus 7:24–27", content: "O sermão termina retomando seu tema central: ouvir as palavras de Jesus precisa conduzir à prática. A rocha é a obediência que permanece quando chegam as tempestades." },
+      { kind: "Palavra no original", title: "A porta estreita", reference: "Mateus 7:13–14", original: "στενὴ ἡ πύλη", transliteration: "stenē hē pýlē", meaning: "apertada é a porta", content: "A imagem torna concreta a escolha de seguir Jesus: um caminho que pede decisão e prática, não somente conhecimento." },
+      { kind: "Palavra no original", title: "Casa sobre a rocha", reference: "Mateus 7:24–27", original: "πέτρα", transliteration: "pétra", meaning: "rocha, pedra firme", content: "O sermão termina com uma imagem de fundamento. Ouvir as palavras de Jesus se torna estabilidade quando conduz à prática." },
     ],
   },
 }];
