@@ -21,7 +21,7 @@ const localPersonalTranslation = (code: string, label: string): TranslationDefin
   note: `${label} · disponível somente para a sua conta.`,
   license: "BIBLIOTECA PESSOAL",
   canon: "protestant-66",
-  missions: false,
+  missions: true,
   private: true,
 });
 
@@ -773,7 +773,7 @@ export default function VerboApp() {
     if (!mission) return;
     if (!translations[translation].missions) {
       changeTranslation("BLIVRE");
-      notify("As missões usam a Bíblia Livre e o cânon protestante de 66 livros");
+      notify("A edição católica de 73 livros não é usada nas missões");
     }
     chooseBook(mission.slug, mission.chapter);
     setMissionMode(true);
