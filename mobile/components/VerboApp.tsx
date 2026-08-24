@@ -6,7 +6,7 @@ import { campaignActs, missionForChapter, narrativeForMission } from "../lib/cam
 import { resizeProfilePhoto } from "../lib/profile-photo";
 import { findBiblePassages, parseBibleReference, recognizePortugueseText, type BibleOcrCandidate } from "../lib/bible-ocr";
 import { secondaryMissionById, secondaryMissions, secondaryMissionProgress, type SecondaryMission } from "../lib/secondary-missions";
-import { mainMissionScrollForChapter } from "../lib/main-mission-scrolls";
+import { mainMissionScrollForChapter, mainScrollRequirementLabels } from "../lib/main-mission-scrolls";
 
 type Screen = "journey" | "bible" | "plans" | "camera" | "studies" | "social" | "result";
 type BibleVerse = { number: number; text: string };
@@ -43,7 +43,7 @@ const translations = {
 
 type Translation = keyof typeof translations;
 type LastReading = { bookSlug: string; chapter: number };
-type PlayerProgress = { xp: number; level: number; coins: number; streak: number; completed: string[]; achievements: string[]; dailyNoteCompleted?: boolean; xpBonusPercent?: number; missedStreakDays?: number; displayName?: string; profilePhoto?: string; favorites?: string[]; highlights?: Record<string, string>; notes?: Record<string, string>; plans?: string[]; lastReading?: LastReading | null };
+type PlayerProgress = { xp: number; level: number; coins: number; streak: number; completed: string[]; achievements: string[]; dailyNoteCompleted?: boolean; xpBonusPercent?: number; missedStreakDays?: number; displayName?: string; profilePhoto?: string; favorites?: string[]; highlights?: Record<string, string>; notes?: Record<string, string>; plans?: string[]; shared?: string[]; foundScrolls?: string[]; lastReading?: LastReading | null };
 type ChapterReward = { xp: number; coins: number; levelUp: boolean; unlocked: string[]; scrollsUnlocked?: number; missionCompleted?: boolean; missionTitle?: string; secondaryMissionCompleted?: boolean; replayCompleted?: boolean; actCompleted?: boolean; actTitle?: string };
 type SecondaryMissionStatus = { id: string; unlocked: boolean; active: boolean; completed: boolean; replaying: boolean; replayChapters: string[]; done: number; total: number };
 
@@ -178,6 +178,8 @@ export default function VerboApp() {
   const chapterInsightsUnlocked = progress.completed.includes(`${bookSlug}:${chapter}`);
   const primaryMissionScroll = book && missionForChapter(bookSlug, chapter) ? mainMissionScrollForChapter(bookSlug, chapter, book.testament) : null;
   const secondaryMissionUnlocked = Boolean(insightMission && secondaryMissionStates.find((state) => state.id === insightMission.id)?.unlocked);
+  const primaryScrollKey = `primary:${bookSlug}:${chapter}`;
+  const primaryScrollUnlocked = Boolean(primaryMissionScroll && progress.foundScrolls?.includes(primaryScrollKey));
 
   const verseKey = `${bookSlug}:${chapter}:${selectedVerse}`;
   const selectedVerseKeys = useMemo(() => selectedVerses.map((number) => `${bookSlug}:${chapter}:${number}`), [bookSlug, chapter, selectedVerses]);
@@ -239,8 +241,28 @@ export default function VerboApp() {
     window.setTimeout(() => setToast(""), 1800);
   };
 
-  const saveRemoteLibrary = async (next: Partial<Pick<PlayerProgress, "favorites" | "highlights" | "notes" | "plans">>) => {
-    await fetch("/api/library", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ favorites: progress.favorites || [], highlights: progress.highlights || {}, notes: progress.notes || {}, plans: progress.plans || [], lastReading: lastReadingRef.current, ...next }) }).catch(() => undefined);
+  const saveRemoteLibrary = async (next: Partial<Pick<PlayerProgress, "favorites" | "highlights" | "notes" | "plans" | "shared" | "foundScrolls">>, base = progress) => {
+    await fetch("/api/library", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ favorites: base.favorites || [], highlights: base.highlights || {}, notes: base.notes || {}, plans: base.plans || [], shared: base.shared || [], foundScrolls: base.foundScrolls || [], lastReading: lastReadingRef.current, ...next }) }).catch(() => undefined);
+  };
+
+  const primaryRequirementMet = (candidate: PlayerProgress) => {
+    if (!primaryMissionScroll) return false;
+    const versePrefix = `${bookSlug}:${chapter}:`;
+    if (primaryMissionScroll.requirement === "complete") return candidate.completed.includes(`${bookSlug}:${chapter}`);
+    if (primaryMissionScroll.requirement === "favorite") return Boolean(candidate.favorites?.some((key) => key.startsWith(versePrefix)));
+    if (primaryMissionScroll.requirement === "highlight-one") return Object.keys(candidate.highlights || {}).some((key) => key.startsWith(versePrefix));
+    if (primaryMissionScroll.requirement === "highlight-three") return Object.keys(candidate.highlights || {}).filter((key) => key.startsWith(versePrefix)).length >= 3;
+    if (primaryMissionScroll.requirement === "note") return Object.keys(candidate.notes || {}).some((key) => key.startsWith(versePrefix) && Boolean(candidate.notes?.[key]?.trim()));
+    return candidate.shared?.includes(`${bookSlug}:${chapter}`) || false;
+  };
+
+  const unlockPrimaryScrollIfReady = (candidate: PlayerProgress) => {
+    if (!missionMode || !primaryMissionScroll || candidate.foundScrolls?.includes(primaryScrollKey) || !primaryRequirementMet(candidate)) return;
+    const foundScrolls = Array.from(new Set([...(candidate.foundScrolls || []), primaryScrollKey]));
+    const updated = { ...candidate, foundScrolls };
+    setProgress(updated);
+    void saveRemoteLibrary({ foundScrolls }, updated);
+    notify("Pergaminho da Grande Jornada descoberto");
   };
 
   useEffect(() => {
@@ -427,12 +449,16 @@ export default function VerboApp() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error);
       const { reward: earned, ...nextProgress } = data;
-      setProgress(nextProgress);
+      const secondaryScrolls = secondaryChapterActive && activeSecondaryMission?.insights[chapter] ? activeSecondaryMission.insights[chapter].map((_, index) => `secondary:${activeSecondaryMission.id}:${chapter}:${index}`) : [];
+      const updatedProgress = { ...progress, ...nextProgress, foundScrolls: Array.from(new Set([...(progress.foundScrolls || []), ...secondaryScrolls])) };
+      setProgress(updatedProgress);
       if (earned) {
         earned.scrollsUnlocked = secondaryMissions.find((mission) => mission.bookSlug === bookSlug)?.insights[chapter]?.length || 0;
         setReward(earned);
+        if (secondaryScrolls.length) void saveRemoteLibrary({ foundScrolls: updatedProgress.foundScrolls }, updatedProgress);
+        unlockPrimaryScrollIfReady(updatedProgress);
         if (earned.secondaryMissionCompleted) void loadSecondaryMissions();
-        advanceToNextChapter(nextProgress);
+        advanceToNextChapter(updatedProgress);
       }
     } catch {
       notify("Não foi possível salvar o progresso");
@@ -463,8 +489,10 @@ export default function VerboApp() {
     const nextFavorites = allSaved ? favorites.filter((item) => !keys.includes(item)) : Array.from(new Set([...favorites, ...keys]));
     localStorage.setItem("verbo-mobile-favorites", JSON.stringify(nextFavorites));
     setSaved(!allSaved);
-    setProgress((current) => ({ ...current, favorites: nextFavorites }));
-    void saveRemoteLibrary({ favorites: nextFavorites });
+    const updated = { ...progress, favorites: nextFavorites };
+    setProgress(updated);
+    void saveRemoteLibrary({ favorites: nextFavorites }, updated);
+    unlockPrimaryScrollIfReady(updated);
     notify(allSaved ? "Removido dos favoritos" : keys.length > 1 ? "Versículos salvos" : "Versículo salvo");
   };
 
@@ -475,8 +503,10 @@ export default function VerboApp() {
     localStorage.setItem("verbo-mobile-highlights", JSON.stringify(highlights));
     setHighlightColor(color);
     setMarked(true);
-    setProgress((current) => ({ ...current, highlights }));
-    void saveRemoteLibrary({ highlights });
+    const updated = { ...progress, highlights };
+    setProgress(updated);
+    void saveRemoteLibrary({ highlights }, updated);
+    unlockPrimaryScrollIfReady(updated);
     setHighlightPickerOpen(false);
     notify(keys.length > 1 ? "Versículos marcados" : "Versículo marcado");
   };
@@ -529,8 +559,10 @@ export default function VerboApp() {
       else delete notes[key];
     });
     localStorage.setItem("verbo-mobile-notes", JSON.stringify(notes));
-    setProgress((current) => ({ ...current, notes }));
-    void saveRemoteLibrary({ notes });
+    const updated = { ...progress, notes };
+    setProgress(updated);
+    void saveRemoteLibrary({ notes }, updated);
+    unlockPrimaryScrollIfReady(updated);
     setNoteEditorOpen(false);
     const earnedXp = savedNote ? await awardDailyNoteXp() : 0;
     notify(savedNote ? earnedXp ? `Anotação salva · +${earnedXp} XP` : "Anotação salva" : "Anotação removida");
@@ -540,10 +572,19 @@ export default function VerboApp() {
     const selected = currentVerses.filter((verse) => selectedVerseKeys.includes(`${bookSlug}:${chapter}:${verse.number}`));
     const content = selected.length ? selected.map((verse) => `${verse.number}. ${verse.text}`).join(" ") : currentVerses.find((verse) => verse.number === selectedVerse)?.text || "";
     const reference = `${book?.name} ${chapter}:${selectedVerses[0] || selectedVerse}${selectedVerses.length > 1 ? `-${selectedVerses.at(-1)}` : ""}`;
-    if (navigator.share) await navigator.share({ title: reference, text: `${reference} — ${content}` });
-    else {
-      await navigator.clipboard?.writeText(`${reference} — ${content}`);
-      notify("Passagem copiada para compartilhar");
+    try {
+      if (navigator.share) await navigator.share({ title: reference, text: `${reference} — ${content}` });
+      else {
+        await navigator.clipboard?.writeText(`${reference} — ${content}`);
+        notify("Passagem copiada para compartilhar");
+      }
+      const shared = Array.from(new Set([...(progress.shared || []), `${bookSlug}:${chapter}`]));
+      const updated = { ...progress, shared };
+      setProgress(updated);
+      void saveRemoteLibrary({ shared }, updated);
+      unlockPrimaryScrollIfReady(updated);
+    } catch (error) {
+      if (!(error instanceof DOMException && error.name === "AbortError")) notify("Não foi possível compartilhar agora");
     }
   };
 
@@ -846,7 +887,7 @@ export default function VerboApp() {
             })}
           </article>
 
-          {primaryMissionScroll && (missionMode || (chapterInsightsUnlocked && !insightMission)) && <MissionInsights insights={[primaryMissionScroll]} chapter={chapter} unlocked={chapterInsightsUnlocked} source="primary" language={book?.testament === "old" ? "hebraico bíblico" : "grego bíblico"} />}
+          {primaryMissionScroll && (missionMode || primaryScrollUnlocked) && <MissionInsights insights={[primaryMissionScroll]} chapter={chapter} unlocked={primaryScrollUnlocked} source="primary" language={book?.testament === "old" ? "hebraico bíblico" : "grego bíblico"} unlockHint={mainScrollRequirementLabels[primaryMissionScroll.requirement]} />}
           {insightMission && (secondaryMissionUnlocked || activeSecondaryMission?.id === insightMission.id) && (chapterInsightsUnlocked || activeSecondaryMission?.id === insightMission.id) && <MissionInsights insights={insightMission.insights[chapter]} chapter={chapter} unlocked={chapterInsightsUnlocked} source="secondary" language="grego bíblico" />}
 
           {(missionMode || Boolean(activeSecondaryMission && activeSecondaryMission.bookSlug === bookSlug && chapter >= activeSecondaryMission.from && chapter <= activeSecondaryMission.to)) && <button className={`chapter-complete ${(replayingSecondaryMission ? replayChapterComplete : progress.completed.includes(`${bookSlug}:${chapter}`)) ? "done" : ""}`} onClick={completeChapter} disabled={savingChapter || (replayingSecondaryMission ? replayChapterComplete : progress.completed.includes(`${bookSlug}:${chapter}`))}>
@@ -1042,10 +1083,10 @@ function MissionStoryPanel({ context, progress }: { context: ReturnType<typeof m
   return <aside className="mission-story-panel"><div><p>MISSÃO {index} DE {context.act.missions.length} · ATO {context.act.number}</p><h2>{context.mission.title}</h2><span>{narrative.introduction}</span></div><div className="mission-story-progress"><div className="mission-stage-progress"><small>CAPÍTULOS PARA CONCLUSÃO <HelpButton title="Capítulos para conclusão" text="Marque os capítulos da missão como lidos para avançar. Ao concluir todos, a próxima missão é liberada." /></small><b>{progressInStage.done}/{progressInStage.total}</b><i><em style={{ width: `${progressInStage.percent}%` }} /></i></div><div><small>ATO</small><b>{progressInAct.done}/{progressInAct.total}</b><i><em style={{ width: `${progressInAct.percent}%` }} /></i></div></div><blockquote><small>CONTEXTO HISTÓRICO</small>{narrative.historicalContext}</blockquote></aside>;
 }
 
-function MissionInsights({ insights, chapter, unlocked, source, language }: { insights: SecondaryMission["insights"][number]; chapter: number; unlocked: boolean; source: "primary" | "secondary"; language: "hebraico bíblico" | "grego bíblico" }) {
+function MissionInsights({ insights, chapter, unlocked, source, language, unlockHint = "Conclua este capítulo" }: { insights: SecondaryMission["insights"][number]; chapter: number; unlocked: boolean; source: "primary" | "secondary"; language: "hebraico bíblico" | "grego bíblico"; unlockHint?: string }) {
   const [open, setOpen] = useState(false);
   const collection = source === "primary" ? "GRANDE JORNADA" : "MISSÃO SECUNDÁRIA";
-  if (!unlocked) return <aside className={`mission-insights mission-insights-locked ${source}-scroll`}><div className="scroll-seal">✦</div><div><small>PERGAMINHO · {collection} · CAPÍTULO {chapter}</small><b>{insights.length} {insights.length === 1 ? "pergaminho aguarda" : "pergaminhos aguardam"} você</b><p>Conclua este capítulo para romper o selo e guardar esta descoberta na sua Bíblia.</p></div></aside>;
+  if (!unlocked) return <aside className={`mission-insights mission-insights-locked ${source}-scroll`}><div className="scroll-seal">✦</div><div><small>PERGAMINHO · {collection} · CAPÍTULO {chapter}</small><b>{insights.length} {insights.length === 1 ? "pergaminho aguarda" : "pergaminhos aguardam"} você</b><p>{unlockHint} para romper o selo e guardar esta descoberta na sua Bíblia.</p></div></aside>;
   return <aside className={`mission-insights mission-scrolls ${source}-scroll ${open ? "open" : ""}`}><button onClick={() => setOpen(!open)} aria-expanded={open}><span className="scroll-mark">▤</span><div><small>PERGAMINHOS · {collection} · CAPÍTULO {chapter}</small><b>{open ? "Recolher pergaminhos" : `${insights.length} ${insights.length === 1 ? "pergaminho descoberto" : "pergaminhos descobertos"}`}</b></div><i>{open ? "−" : "+"}</i></button>{open && <div className="mission-insight-list">{insights.map((insight) => <article key={insight.title} className="original-word"><small>{insight.kind} · {insight.reference}</small><h3>{insight.title}</h3><div className="original-language"><b>{insight.original}</b><span>Transliteração · {insight.transliteration}</span><em><small>Significado no {language}</small>{insight.meaning}</em></div><p>{insight.content}</p></article>)}</div>}</aside>;
 }
 
@@ -1453,7 +1494,7 @@ function ProfilePage({ dark, setDark, progress, manifest, onOpenFavorite, onProf
     <div className="profile-heading"><div><p className="eyebrow">SUA JORNADA</p><h1>Perfil</h1><p className="lead">Acompanhe sua constância, suas conquistas e o próximo passo na Palavra.</p></div><span className="profile-status"><i />Jornada ativa</span></div>
     <section className="profile-summary"><span className="profile-avatar">{progress.profilePhoto ? <ProfilePhoto src={progress.profilePhoto} /> : xpProgress.level}</span><div className="profile-identity"><p className="eyebrow profile-disciple-label">DISCÍPULO <span aria-hidden="true"><PixelDisciple turning /></span></p><h2>{progress.displayName?.trim() || "Nome da sua conta"}</h2><button type="button" className="profile-name-trigger" onClick={() => { setNameDraft(progress.displayName || ""); setProfileEditorOpen(true); }}>Editar perfil</button><p className="profile-rank">Nível {xpProgress.level} <span>·</span> {discipleTitle(xpProgress.level)}</p><div className="profile-xp-meta"><span>{progress.xp.toLocaleString("pt-BR")} XP acumulados</span><b>{xpProgress.isMaxLevel ? "NÍVEL MÁXIMO · 50" : `${xpProgress.current - xpProgress.currentLevelXp} / ${xpProgress.needed} XP`}</b></div><div className="profile-xp"><i style={{ width: `${xpProgress.progress}%` }} /></div><small>{xpProgress.isMaxLevel ? "Você completou toda a progressão disponível." : `Faltam ${xpProgress.remaining} XP para o nível ${xpProgress.level + 1}`}</small></div><div className="profile-next"><span>PRÓXIMO MARCO</span><b>{xpProgress.isMaxLevel ? "NÍVEL MÁXIMO" : `NÍVEL ${xpProgress.level + 1}`}</b><i>Continue lendo<br />para avançar</i></div></section>
     {profileEditorOpen && <section className="profile-panel profile-edit-panel"><div className="profile-section-heading"><div><p className="eyebrow">SEU PERFIL</p><h2>Editar perfil</h2></div><button type="button" className="profile-editor-close" onClick={() => setProfileEditorOpen(false)} aria-label="Fechar edição do perfil">×</button></div><div className="profile-edit-photo"><label className="profile-avatar profile-avatar-picker profile-editor-avatar">{progress.profilePhoto ? <ProfilePhoto src={progress.profilePhoto} /> : xpProgress.level}<input type="file" accept="image/*" aria-label="Escolher nova foto de perfil" onChange={(event) => { const file = event.target.files?.[0]; if (file) void onProfilePhotoChange(file); }} /><small>Trocar foto</small></label><span><b>Foto do perfil</b><small>Toque na imagem para escolher outra foto.</small></span></div><form className="profile-name-edit" onSubmit={async (event) => { event.preventDefault(); setSavingName(true); const saved = await onDisplayNameChange(nameDraft.trim()); setSavingName(false); if (saved) setProfileEditorOpen(false); }}><label htmlFor="profile-display-name">Nome do perfil</label><div><input id="profile-display-name" value={nameDraft} onChange={(event) => setNameDraft(event.target.value)} minLength={2} maxLength={24} required autoFocus /><button disabled={savingName}>{savingName ? "Salvando…" : "Salvar"}</button><button type="button" onClick={() => { setNameDraft(progress.displayName || ""); setProfileEditorOpen(false); }} disabled={savingName}>Cancelar</button></div><small>De 2 a 24 caracteres.</small></form><p className="profile-edit-note">Suas preferências de privacidade e aparência ficam logo abaixo, na área de preferências.</p></section>}
-    <section className="profile-stats"><article><span>✦</span><div><b>{progress.completed.length}</b><small>capítulos lidos</small></div></article><article><span>🔥</span><div><b>{progress.streak}</b><small>dias de sequência</small></div></article><article><span>◆</span><div><b>{progress.coins}</b><small>siclos de prata</small></div></article><article><span>▤</span><div><b>{progress.completed.length}</b><small>pergaminhos encontrados</small></div></article></section>
+    <section className="profile-stats"><article><span>✦</span><div><b>{progress.completed.length}</b><small>capítulos lidos</small></div></article><article><span>🔥</span><div><b>{progress.streak}</b><small>dias de sequência</small></div></article><article><span>◆</span><div><b>{progress.coins}</b><small>siclos de prata</small></div></article><article><span>▤</span><div><b>{progress.foundScrolls?.length || 0}</b><small>pergaminhos encontrados</small></div></article></section>
     <section className="profile-panel"><div className="profile-section-heading"><div><p className="eyebrow">CONQUISTAS</p><h2>Marcos da jornada</h2></div><span>{achievements.filter((item) => item.unlocked).length} de {achievements.length} conquistadas</span></div><div className="achievement-row">{visibleAchievements.map((item) => <article key={item.name} className={item.unlocked ? "earned" : ""}><i>{item.icon}</i><b>{item.name}</b></article>)}</div><button className="profile-action" onClick={() => setExpanded(!expanded)}>{expanded ? "Exibir menos" : "Exibir mais conquistas"}</button></section>
     <section className="profile-panel"><div className="profile-section-heading"><div><p className="eyebrow">BIBLIOTECA</p><h2>Seu acervo</h2></div><span>Leitura</span></div><div className="library-items"><div><i>♡</i><span>Versículos favoritos<small><b>{favorites.length}</b> salvos para revisitar</small></span></div><div><i>✎</i><span>Anotações<small><b>{notes.length}</b> reflexões salvas na Bíblia</small></span></div><div><i>▥</i><span>Capítulos concluídos<small><b>{progress.completed.length}</b> registrados na jornada</small></span></div></div><div className="library-actions"><button className="profile-action" onClick={() => setLibraryView(libraryView === "favorites" ? null : "favorites")}>{libraryView === "favorites" ? "Fechar favoritos" : "Abrir favoritos"} <b>→</b></button><button className="profile-action" onClick={() => setLibraryView(libraryView === "notes" ? null : "notes")}>{libraryView === "notes" ? "Fechar anotações" : "Abrir anotações"} <b>→</b></button></div>{libraryView === "favorites" && <div className="favorites-list">{favorites.length ? favorites.map((reference) => { const [slug, chapter, verse] = reference.split(":"); const book = manifest?.books.find((item) => item.slug === slug); return <button key={reference} onClick={() => onOpenFavorite(reference)}><span>♡</span><div><b>{book?.name || slug} {chapter}:{verse}</b><small>Abrir na Bíblia</small></div><em>›</em></button>; }) : <p>Você ainda não salvou versículos.</p>}</div>}{libraryView === "notes" && <div className="favorites-list notes-list">{notes.length ? notes.map(([reference, note]) => { const [slug, chapter, verse] = reference.split(":"); const book = manifest?.books.find((item) => item.slug === slug); return <button key={reference} onClick={() => onOpenFavorite(reference)}><span>✎</span><div><b>{book?.name || slug} {chapter}:{verse}</b><small>{note}</small></div><em>›</em></button>; }) : <p>Suas anotações salvas aparecerão aqui.</p>}</div>}</section>
     <h3 className="list-heading">Preferências</h3><div className="settings-list"><button onClick={() => setDark(!dark)}><i>{dark ? "☾" : "☀"}</i><span>Aparência<small>{dark ? "Modo escuro" : "Modo claro"}</small></span><em className={`switch ${dark ? "on" : ""}`}><u /></em></button><button><i>⇩</i><span>Conteúdo bíblico<small>3 traduções · cânones de 66 e 73 livros</small></span><b>›</b></button><button><i>©</i><span>Créditos das traduções<small>Domínio público + CC BY</small></span><b>›</b></button></div>

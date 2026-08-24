@@ -40,6 +40,10 @@ test("contains the authenticated Verbo application routes", async () => {
   assert.match(app, /original-language/);
   assert.match(app, /Significado no \{language\}/);
   assert.match(app, /mainMissionScrollForChapter/);
+  assert.match(app, /mainScrollRequirementLabels/);
+  assert.match(app, /unlockPrimaryScrollIfReady/);
+  assert.match(app, /foundScrolls/);
+  assert.match(app, /shared/);
   assert.match(app, /pergaminhos encontrados/);
   assert.doesNotMatch(app, /níveis disponíveis/);
   assert.match(app, /source="primary"/);
@@ -50,6 +54,7 @@ test("contains the authenticated Verbo application routes", async () => {
   assert.match(mainMissionScrolls, /hebrewScrolls/);
   assert.match(mainMissionScrolls, /greekScrolls/);
   assert.match(mainMissionScrolls, /mainMissionScrollForChapter/);
+  assert.match(mainMissionScrolls, /highlight-three/);
   assert.match(app, />Social</);
   assert.match(app, /function SocialPage/);
   assert.match(app, /\/api\/social\/friends/);
@@ -92,7 +97,7 @@ assert.match(app, /A Edição Chama da Fé não é usada nas missões/);
   assert.match(app, /localStorage\.setItem\("verbo-last-reading", JSON\.stringify\(reading\)\)/);
   assert.match(app, /lastReading: lastReadingRef\.current/);
   assert.match(app, /chapter-complete/);
-  assert.match(app, /setReward\(earned\);[\s\S]{0,140}advanceToNextChapter\(nextProgress\);/);
+  assert.match(app, /setReward\(earned\);[\s\S]{0,420}advanceToNextChapter\(updatedProgress\);/);
   assert.doesNotMatch(app, /pendingAdvance/);
   assert.match(app, /className="verse-row"/);
   assert.match(app, /verse-tools" aria-label=\{`Ferramentas para/);
@@ -149,6 +154,8 @@ assert.match(app, /A Edição Chama da Fé não é usada nas missões/);
   assert.match(progress, /getSessionUser/);
   const libraryRoute = await text("app/api/library/route.ts");
   assert.match(libraryRoute, /last_reading_json/);
+  assert.match(libraryRoute, /found_scrolls_json/);
+  assert.match(libraryRoute, /shared_json/);
   assert.match(libraryRoute, /lastReading: parseLastReading/);
 });
 
