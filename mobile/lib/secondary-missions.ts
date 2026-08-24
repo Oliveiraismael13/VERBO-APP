@@ -1,4 +1,4 @@
-export type MissionInsight = { kind: "Palavra no original" | "Curiosidade"; title: string; reference: string; original?: string; transliteration?: string; meaning?: string; content: string };
+export type MissionInsight = { kind: "Palavra no original"; title: string; reference: string; original: string; transliteration: string; meaning: string; content: string };
 
 export type SecondaryMission = {
   id: string;
@@ -34,11 +34,11 @@ export const secondaryMissions: SecondaryMission[] = [{
   insights: {
     5: [
       { kind: "Palavra no original", title: "Bem-aventurados", reference: "Mateus 5:3", original: "μακάριοι", transliteration: "makárioi", meaning: "felizes, favorecidos", content: "Não descreve uma alegria que depende do momento, mas a condição de quem recebe o favor de Deus." },
-      { kind: "Curiosidade", title: "Sal e luz", reference: "Mateus 5:13–16", content: "O sal era parte comum da vida diária, usado para dar sabor e ajudar na conservação. Jesus usa imagens simples e visíveis para falar de uma fé que alcança o mundo." },
+      { kind: "Palavra no original", title: "Sal", reference: "Mateus 5:13", original: "ἅλας", transliteration: "hálas", meaning: "sal", content: "Uma imagem cotidiana e concreta. Jesus usa o sal para falar de uma fé que tem presença real e perceptível no mundo." },
     ],
     6: [
       { kind: "Palavra no original", title: "Hipócritas", reference: "Mateus 6:2", original: "ὑποκριταί", transliteration: "hypokritaí", meaning: "atores, pessoas que representam um papel", content: "O termo podia ser usado para atores. Jesus critica uma devoção encenada para receber a aprovação das pessoas." },
-      { kind: "Curiosidade", title: "Mamom", reference: "Mateus 6:24", content: "A forma grega μαμωνᾶς preserva uma palavra semítica ligada às riquezas. Jesus contrasta dois senhores: Deus e os bens quando eles passam a exigir o lugar de Deus." },
+      { kind: "Palavra no original", title: "Mamom", reference: "Mateus 6:24", original: "μαμωνᾶς", transliteration: "mamōnás", meaning: "riqueza, bens", content: "A forma grega preserva uma palavra semítica ligada às riquezas. Jesus contrasta dois senhores: Deus e os bens quando eles passam a exigir o lugar de Deus." },
     ],
     7: [
       { kind: "Palavra no original", title: "A porta estreita", reference: "Mateus 7:13–14", original: "στενὴ ἡ πύλη", transliteration: "stenē hē pýlē", meaning: "apertada é a porta", content: "A imagem torna concreta a escolha de seguir Jesus: um caminho que pede decisão e prática, não somente conhecimento." },

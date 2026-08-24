@@ -22,6 +22,7 @@ test("contains the authenticated Verbo application routes", async () => {
   const styles = await text("app/globals.css");
   const rpgStyles = await text("app/rpg.css");
   const campaign = await text("lib/campaign.ts");
+  const secondaryMissionContent = await text("lib/secondary-missions.ts");
   assert.match(app, />Missões</);
   assert.match(app, /secondaryMissionById/);
   assert.match(app, /MISSÃO SECUNDÁRIA ATIVA/);
@@ -37,6 +38,8 @@ test("contains the authenticated Verbo application routes", async () => {
   assert.match(app, /chapterInsightsUnlocked/);
   assert.match(app, /original-language/);
   assert.match(app, /scrollsUnlocked/);
+  assert.doesNotMatch(secondaryMissionContent, /Curiosidade/);
+  assert.equal((secondaryMissionContent.match(/\{ kind: "Palavra no original"/g) || []).length, 7);
   assert.match(app, />Social</);
   assert.match(app, /function SocialPage/);
   assert.match(app, /\/api\/social\/friends/);
