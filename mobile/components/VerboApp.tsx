@@ -223,6 +223,20 @@ export default function VerboApp() {
     }
   };
 
+  const updateDisplayName = async (displayName: string) => {
+    try {
+      const response = await fetch("/api/profile", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ displayName, profilePhoto: progress.profilePhoto || "" }) });
+      const updated = await response.json();
+      if (!response.ok) throw new Error(updated.error || "Não foi possível salvar o nome.");
+      setProgress((current) => ({ ...current, ...updated }));
+      notify("Nome do perfil atualizado");
+      return true;
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Não foi possível atualizar o nome");
+      return false;
+    }
+  };
+
   const go = (next: Screen) => {
     if (next !== "camera") {
       stopCamera();
@@ -754,7 +768,7 @@ export default function VerboApp() {
       {screen === "result" && <StudyResult translation={translation} setTranslation={changeTranslation} saved={saved} setSaved={setSaved} notify={notify} />}
       {screen === "studies" && <StudiesPage manifest={manifest} progress={progress} onStart={openMissionBriefing} />}
       {screen === "plans" && <PlansPage />}
-      {screen === "social" && <SocialPage notify={notify} dark={dark} setDark={setDark} progress={progress} manifest={manifest} onOpenFavorite={openFavorite} onProfilePhotoChange={updateProfilePhoto} />}
+      {screen === "social" && <SocialPage notify={notify} dark={dark} setDark={setDark} progress={progress} manifest={manifest} onOpenFavorite={openFavorite} onProfilePhotoChange={updateProfilePhoto} onDisplayNameChange={updateDisplayName} />}
 
       {screen !== "camera" && (
         <nav className="bottom-nav" aria-label="Navegação principal">
@@ -1018,7 +1032,7 @@ function SocialAvatar({ contact, small = false }: { contact: Pick<SocialContact,
   return <span className={`social-avatar ${small ? "small" : ""}`}>{contact.profilePhoto ? <ProfilePhoto src={contact.profilePhoto} /> : contact.displayName.slice(0, 1).toUpperCase()}</span>;
 }
 
-function SocialPage({ notify, dark, setDark, progress, manifest, onOpenFavorite, onProfilePhotoChange }: { notify: (message: string) => void; dark: boolean; setDark: (value: boolean) => void; progress: PlayerProgress; manifest: BibleManifest | null; onOpenFavorite: (reference: string) => void; onProfilePhotoChange: (file: File) => void }) {
+function SocialPage({ notify, dark, setDark, progress, manifest, onOpenFavorite, onProfilePhotoChange, onDisplayNameChange }: { notify: (message: string) => void; dark: boolean; setDark: (value: boolean) => void; progress: PlayerProgress; manifest: BibleManifest | null; onOpenFavorite: (reference: string) => void; onProfilePhotoChange: (file: File) => void; onDisplayNameChange: (displayName: string) => Promise<boolean> }) {
   const [data, setData] = useState<SocialData>(emptySocial);
   const [activities, setActivities] = useState<FeedActivity[]>([]);
   const [notifications, setNotifications] = useState<SocialNotification[]>([]);
@@ -1211,7 +1225,7 @@ function SocialPage({ notify, dark, setDark, progress, manifest, onOpenFavorite,
 
   if (accountView) {
     return <>
-      <ProfilePage dark={dark} setDark={setDark} progress={progress} manifest={manifest} onOpenFavorite={onOpenFavorite} onProfilePhotoChange={onProfilePhotoChange} />
+      <ProfilePage dark={dark} setDark={setDark} progress={progress} manifest={manifest} onOpenFavorite={onOpenFavorite} onProfilePhotoChange={onProfilePhotoChange} onDisplayNameChange={onDisplayNameChange} />
       <section className="generic-page social-page social-account-page page-in">
         <button className="social-back" onClick={() => setAccountView(false)}>‹ Voltar à comunidade</button>
         <section className="social-handle"><p>SEU IDENTIFICADOR PÚBLICO</p><b>{publicHandle ? `@${publicHandle}` : "Preparando seu identificador…"}</b><button onClick={() => void copyHandle()} disabled={!publicHandle}>Copiar</button><small>Compartilhe somente este código para receber pedidos. Seu e-mail nunca aparece.</small></section>
@@ -1260,10 +1274,13 @@ function SocialPage({ notify, dark, setDark, progress, manifest, onOpenFavorite,
   </section>;
 }
 
-function ProfilePage({ dark, setDark, progress, manifest, onOpenFavorite, onProfilePhotoChange }: { dark: boolean; setDark: (value: boolean) => void; progress: PlayerProgress; manifest: BibleManifest | null; onOpenFavorite: (reference: string) => void; onProfilePhotoChange: (file: File) => void }) {
+function ProfilePage({ dark, setDark, progress, manifest, onOpenFavorite, onProfilePhotoChange, onDisplayNameChange }: { dark: boolean; setDark: (value: boolean) => void; progress: PlayerProgress; manifest: BibleManifest | null; onOpenFavorite: (reference: string) => void; onProfilePhotoChange: (file: File) => void; onDisplayNameChange: (displayName: string) => Promise<boolean> }) {
   const xpProgress = getXpProgress(progress.xp);
   const [expanded, setExpanded] = useState(false);
   const [libraryView, setLibraryView] = useState<"favorites" | "notes" | null>(null);
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState(progress.displayName || "");
+  const [savingName, setSavingName] = useState(false);
   const achievements = [
     { icon: "✦", name: "Primeiro passo", unlocked: progress.completed.length >= 1 },
     { icon: "🔥", name: "Leitor fiel", unlocked: progress.completed.length >= 5 },
@@ -1277,7 +1294,7 @@ function ProfilePage({ dark, setDark, progress, manifest, onOpenFavorite, onProf
   const visibleAchievements = expanded ? achievements : achievements.slice(0, 3);
   return <section className="generic-page profile-page social-profile-page page-in">
     <div className="profile-heading"><div><p className="eyebrow">SUA JORNADA</p><h1>Perfil</h1><p className="lead">Acompanhe sua constância, suas conquistas e o próximo passo na Palavra.</p></div><span className="profile-status"><i />Jornada ativa</span></div>
-    <section className="profile-summary"><label className="profile-avatar profile-avatar-picker">{progress.profilePhoto ? <ProfilePhoto src={progress.profilePhoto} /> : xpProgress.level}<input type="file" accept="image/*" aria-label="Alterar foto do perfil" onChange={(event) => { const file = event.target.files?.[0]; if (file) onProfilePhotoChange(file); }} /><small>Alterar</small></label><div className="profile-identity"><p className="eyebrow profile-disciple-label">DISCÍPULO <span aria-hidden="true"><PixelDisciple turning /></span></p><h2>{progress.displayName?.trim() || "Nome da sua conta"}</h2><p className="profile-rank">Nível {xpProgress.level} <span>·</span> {discipleTitle(xpProgress.level)}</p><div className="profile-xp-meta"><span>{progress.xp.toLocaleString("pt-BR")} XP acumulados</span><b>{xpProgress.isMaxLevel ? "NÍVEL MÁXIMO · 50" : `${xpProgress.current - xpProgress.currentLevelXp} / ${xpProgress.needed} XP`}</b></div><div className="profile-xp"><i style={{ width: `${xpProgress.progress}%` }} /></div><small>{xpProgress.isMaxLevel ? "Você completou toda a progressão disponível." : `Faltam ${xpProgress.remaining} XP para o nível ${xpProgress.level + 1}`}</small></div><div className="profile-next"><span>PRÓXIMO MARCO</span><b>{xpProgress.isMaxLevel ? "NÍVEL MÁXIMO" : `NÍVEL ${xpProgress.level + 1}`}</b><i>Continue lendo<br />para avançar</i></div></section>
+    <section className="profile-summary"><label className="profile-avatar profile-avatar-picker">{progress.profilePhoto ? <ProfilePhoto src={progress.profilePhoto} /> : xpProgress.level}<input type="file" accept="image/*" aria-label="Alterar foto do perfil" onChange={(event) => { const file = event.target.files?.[0]; if (file) onProfilePhotoChange(file); }} /><small>Alterar</small></label><div className="profile-identity"><p className="eyebrow profile-disciple-label">DISCÍPULO <span aria-hidden="true"><PixelDisciple turning /></span></p><h2>{progress.displayName?.trim() || "Nome da sua conta"}</h2>{editingName ? <form className="profile-name-edit" onSubmit={async (event) => { event.preventDefault(); setSavingName(true); const saved = await onDisplayNameChange(nameDraft.trim()); setSavingName(false); if (saved) setEditingName(false); }}><label htmlFor="profile-display-name">Nome do perfil</label><div><input id="profile-display-name" value={nameDraft} onChange={(event) => setNameDraft(event.target.value)} minLength={2} maxLength={24} required autoFocus /><button disabled={savingName}>{savingName ? "Salvando…" : "Salvar"}</button><button type="button" onClick={() => { setNameDraft(progress.displayName || ""); setEditingName(false); }} disabled={savingName}>Cancelar</button></div><small>De 2 a 24 caracteres.</small></form> : <button type="button" className="profile-name-trigger" onClick={() => { setNameDraft(progress.displayName || ""); setEditingName(true); }}>Alterar nome</button>}<p className="profile-rank">Nível {xpProgress.level} <span>·</span> {discipleTitle(xpProgress.level)}</p><div className="profile-xp-meta"><span>{progress.xp.toLocaleString("pt-BR")} XP acumulados</span><b>{xpProgress.isMaxLevel ? "NÍVEL MÁXIMO · 50" : `${xpProgress.current - xpProgress.currentLevelXp} / ${xpProgress.needed} XP`}</b></div><div className="profile-xp"><i style={{ width: `${xpProgress.progress}%` }} /></div><small>{xpProgress.isMaxLevel ? "Você completou toda a progressão disponível." : `Faltam ${xpProgress.remaining} XP para o nível ${xpProgress.level + 1}`}</small></div><div className="profile-next"><span>PRÓXIMO MARCO</span><b>{xpProgress.isMaxLevel ? "NÍVEL MÁXIMO" : `NÍVEL ${xpProgress.level + 1}`}</b><i>Continue lendo<br />para avançar</i></div></section>
     <section className="profile-stats"><article><span>✦</span><div><b>{progress.completed.length}</b><small>capítulos lidos</small></div></article><article><span>🔥</span><div><b>{progress.streak}</b><small>dias de sequência</small></div></article><article><span>◆</span><div><b>{progress.coins}</b><small>siclos de prata</small></div></article><article><span>◎</span><div><b>50</b><small>níveis disponíveis</small></div></article></section>
     <section className="profile-panel"><div className="profile-section-heading"><div><p className="eyebrow">CONQUISTAS</p><h2>Marcos da jornada</h2></div><span>{achievements.filter((item) => item.unlocked).length} de {achievements.length} conquistadas</span></div><div className="achievement-row">{visibleAchievements.map((item) => <article key={item.name} className={item.unlocked ? "earned" : ""}><i>{item.icon}</i><b>{item.name}</b></article>)}</div><button className="profile-action" onClick={() => setExpanded(!expanded)}>{expanded ? "Exibir menos" : "Exibir mais conquistas"}</button></section>
     <section className="profile-panel"><div className="profile-section-heading"><div><p className="eyebrow">BIBLIOTECA</p><h2>Seu acervo</h2></div><span>Leitura</span></div><div className="library-items"><div><i>♡</i><span>Versículos favoritos<small><b>{favorites.length}</b> salvos para revisitar</small></span></div><div><i>✎</i><span>Anotações<small><b>{notes.length}</b> reflexões salvas na Bíblia</small></span></div><div><i>▥</i><span>Capítulos concluídos<small><b>{progress.completed.length}</b> registrados na jornada</small></span></div></div><div className="library-actions"><button className="profile-action" onClick={() => setLibraryView(libraryView === "favorites" ? null : "favorites")}>{libraryView === "favorites" ? "Fechar favoritos" : "Abrir favoritos"} <b>→</b></button><button className="profile-action" onClick={() => setLibraryView(libraryView === "notes" ? null : "notes")}>{libraryView === "notes" ? "Fechar anotações" : "Abrir anotações"} <b>→</b></button></div>{libraryView === "favorites" && <div className="favorites-list">{favorites.length ? favorites.map((reference) => { const [slug, chapter, verse] = reference.split(":"); const book = manifest?.books.find((item) => item.slug === slug); return <button key={reference} onClick={() => onOpenFavorite(reference)}><span>♡</span><div><b>{book?.name || slug} {chapter}:{verse}</b><small>Abrir na Bíblia</small></div><em>›</em></button>; }) : <p>Você ainda não salvou versículos.</p>}</div>}{libraryView === "notes" && <div className="favorites-list notes-list">{notes.length ? notes.map(([reference, note]) => { const [slug, chapter, verse] = reference.split(":"); const book = manifest?.books.find((item) => item.slug === slug); return <button key={reference} onClick={() => onOpenFavorite(reference)}><span>✎</span><div><b>{book?.name || slug} {chapter}:{verse}</b><small>{note}</small></div><em>›</em></button>; }) : <p>Suas anotações salvas aparecerão aqui.</p>}</div>}</section>
