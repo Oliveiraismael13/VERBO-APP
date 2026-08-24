@@ -75,6 +75,7 @@ export default function VerboApp() {
   const [selectedVerse, setSelectedVerse] = useState(16);
   const [bookPicker, setBookPicker] = useState(false);
   const [cameraState, setCameraState] = useState<"idle" | "live" | "scanning" | "found" | "uncertain" | "retry" | "denied">("idle");
+  const [cameraError, setCameraError] = useState("");
   const [recognizedPassage, setRecognizedPassage] = useState<BibleOcrCandidate | null>(null);
   const [recognitionOptions, setRecognitionOptions] = useState<BibleOcrCandidate[]>([]);
   const [ocrPreview, setOcrPreview] = useState("");
@@ -90,6 +91,12 @@ export default function VerboApp() {
   const lastReadingRef = useRef<LastReading | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+
+  const stopCamera = useCallback(() => {
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+    if (videoRef.current) videoRef.current.srcObject = null;
+  }, []);
 
   useEffect(() => {
     const savedTheme = localStorage.getItem("verbo-theme");
@@ -163,7 +170,22 @@ export default function VerboApp() {
     return () => controller.abort();
   }, [bookSlug, translation]);
 
-  useEffect(() => () => streamRef.current?.getTracks().forEach((track) => track.stop()), []);
+  useEffect(() => () => stopCamera(), [stopCamera]);
+
+  // O elemento de vídeo só é montado depois de `cameraState` passar para "live".
+  // Conectar o stream no mesmo clique de getUserMedia deixava videoRef nulo e a
+  // prévia ficava vazia em celulares.
+  useEffect(() => {
+    const video = videoRef.current;
+    const stream = streamRef.current;
+    if (screen !== "camera" || cameraState !== "live" || !video || !stream) return;
+
+    video.srcObject = stream;
+    void video.play().catch(() => {
+      setCameraError("Não foi possível iniciar a prévia da câmera. Tente novamente.");
+      setCameraState("denied");
+    });
+  }, [cameraState, screen]);
 
   useEffect(() => {
     if (screen !== "bible" || !recognizedPassage || recognizedPassage.bookSlug !== bookSlug || recognizedPassage.chapter !== chapter || !book) return;
@@ -204,7 +226,10 @@ export default function VerboApp() {
   };
 
   const go = (next: Screen) => {
-    if (next !== "camera") streamRef.current?.getTracks().forEach((track) => track.stop());
+    if (next !== "camera") {
+      stopCamera();
+      setCameraState("idle");
+    }
     setScreen(next);
     setSearchOpen(false);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -212,11 +237,22 @@ export default function VerboApp() {
 
   const openCamera = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+      stopCamera();
+      if (!window.isSecureContext) throw new Error("A câmera só funciona em uma conexão segura (HTTPS).");
+      if (!navigator.mediaDevices?.getUserMedia) throw new Error("Este navegador não oferece acesso à câmera.");
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: "environment" } } });
       streamRef.current = stream;
-      if (videoRef.current) videoRef.current.srcObject = stream;
+      setCameraError("");
       setCameraState("live");
-    } catch {
+    } catch (error) {
+      const message = error instanceof DOMException && error.name === "NotAllowedError"
+        ? "Permita o uso da câmera nas configurações do navegador."
+        : error instanceof DOMException && error.name === "NotFoundError"
+          ? "Nenhuma câmera foi encontrada neste dispositivo."
+          : error instanceof DOMException && error.name === "NotReadableError"
+            ? "A câmera está sendo usada por outro aplicativo."
+            : error instanceof Error ? error.message : "Não foi possível abrir a câmera.";
+      setCameraError(message);
       setCameraState("denied");
     }
   };
@@ -229,7 +265,9 @@ export default function VerboApp() {
     const cropHeight = Math.round(video.videoHeight * 0.56);
     canvas.width = video.videoWidth;
     canvas.height = cropHeight;
-    canvas.getContext("2d")?.drawImage(video, 0, cropTop, video.videoWidth, cropHeight, 0, 0, canvas.width, canvas.height);
+    const context = canvas.getContext("2d");
+    if (!context) return reject(new Error("Não foi possível preparar a imagem da câmera."));
+    context.drawImage(video, 0, cropTop, video.videoWidth, cropHeight, 0, 0, canvas.width, canvas.height);
     canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("Não foi possível capturar a imagem.")), "image/jpeg", 0.92);
   });
 
@@ -267,7 +305,7 @@ export default function VerboApp() {
 
   const openRecognizedPassage = useCallback((candidate = recognizedPassage) => {
     if (!candidate) return;
-    streamRef.current?.getTracks().forEach((track) => track.stop());
+    stopCamera();
     setCameraState("idle");
     setMissionMode(false);
     setBookSlug(candidate.bookSlug);
@@ -279,7 +317,7 @@ export default function VerboApp() {
     setScreen("bible");
     setSearchOpen(false);
     window.scrollTo({ top: 0, behavior: "smooth" });
-  }, [recognizedPassage]);
+  }, [recognizedPassage, stopCamera]);
 
   const confirmManualReference = () => {
     if (!manifest) return;
@@ -668,7 +706,7 @@ export default function VerboApp() {
           <div className="viewfinder">
             {cameraState === "live" && <video ref={videoRef} autoPlay muted playsInline />}
             {(cameraState === "idle" || cameraState === "denied") && (
-              <div className="camera-empty"><span>⌁</span><b>{cameraState === "denied" ? "Câmera não autorizada" : "Encontre a referência em segundos"}</b><p>{cameraState === "denied" ? "Envie uma foto da página ou permita o uso da câmera nas configurações." : "Aponte para um trecho bíblico impresso ou em outra tela."}</p><button onClick={openCamera}>Ativar câmera</button></div>
+              <div className="camera-empty"><span>⌁</span><b>{cameraState === "denied" ? "Não foi possível abrir a câmera" : "Encontre a referência em segundos"}</b><p>{cameraState === "denied" ? cameraError || "Envie uma foto da página ou permita o uso da câmera nas configurações." : "Aponte para um trecho bíblico impresso ou em outra tela."}</p><button onClick={openCamera}>Ativar câmera</button></div>
             )}
             {cameraState === "scanning" && <div className="scanning"><i /><b>Lendo o texto...</b><span>Comparando com a base bíblica</span></div>}
             {(cameraState === "found" || cameraState === "uncertain") && recognizedPassage && (
@@ -702,7 +740,7 @@ export default function VerboApp() {
         <nav className="bottom-nav" aria-label="Navegação principal">
           <button className={screen === "journey" ? "selected" : ""} onClick={() => go("journey")}><span>♜</span>Jornada</button>
           <button className={screen === "bible" ? "selected" : ""} onClick={() => { setMissionMode(false); go("bible"); }}><span>▥</span>Bíblia</button>
-          <button className="camera" onClick={() => go("camera")}><i>⌁</i><span>Câmera</span></button>
+          <button className="camera" onClick={() => { go("camera"); void openCamera(); }}><i>⌁</i><span>Câmera</span></button>
           <button className={screen === "studies" || screen === "result" ? "selected" : ""} onClick={() => go("studies")}><span>✧</span>Missões</button>
           <button className={screen === "profile" ? "selected" : ""} onClick={() => go("profile")}><span>◎</span>Perfil</button>
         </nav>
