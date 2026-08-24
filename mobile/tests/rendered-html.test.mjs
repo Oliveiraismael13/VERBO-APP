@@ -72,7 +72,8 @@ assert.match(app, /A Edição Chama da Fé não é usada nas missões/);
     assert.match(campaign, new RegExp(`"${slug}:${from}-${to}": "`));
   }
   const progressRoute = await text("app/api/progress/route.ts");
-  assert.match(progressRoute, /const xpGain = actCompleted \? 100 : missionCompleted \? 80 : 40/);
+  assert.match(progressRoute, /const baseXpGain = actCompleted \? 100 : missionCompleted \? 80 : 40/);
+  assert.match(progressRoute, /function xpWithStreakBonus/);
   assert.match(progressRoute, /const coinGain = actCompleted \? 10 : missionCompleted \? 8 : 4/);
   assert.match(progress, /getSessionUser/);
   const libraryRoute = await text("app/api/library/route.ts");
