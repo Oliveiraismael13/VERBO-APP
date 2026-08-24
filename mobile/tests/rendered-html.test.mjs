@@ -36,7 +36,7 @@ test("contains the authenticated Verbo application routes", async () => {
   assert.match(app, /Conclua o capítulo atual para liberar o próximo da missão/);
   assert.match(app, /function MissionInsights/);
   assert.match(app, /PERGAMINHOS · \{collection\}/);
-  assert.match(app, /chapterInsightsUnlocked/);
+  assert.match(app, /secondaryScrollUnlocked/);
   assert.match(app, /original-language/);
   assert.match(app, /Significado no \{language\}/);
   assert.match(app, /mainMissionScrollForChapter/);
@@ -48,6 +48,8 @@ test("contains the authenticated Verbo application routes", async () => {
   assert.match(app, /ScrollDiscoveryModal/);
   assert.match(app, /Há diversos pergaminhos de estudo espalhados pela Bíblia/);
   assert.doesNotMatch(app, /unlockHint/);
+  assert.match(app, /secondaryScrollUnlocked/);
+  assert.match(app, /secondaryMissionActive \|\| secondaryScrollUnlocked/);
   assert.match(app, /foundScrolls/);
   assert.match(app, /shared/);
   assert.match(app, /pergaminhos encontrados/);
