@@ -51,11 +51,15 @@ export async function POST(request: Request) {
   const user = await currentUser();
   if (!user) return withCors(Response.json({ error: "Não autenticado" }, { status: 401 }));
   try {
-    const body = await request.json() as { missionId?: string };
+    const body = await request.json() as { missionId?: string; action?: "pause" };
     const mission = secondaryMissionById(String(body.missionId || ""));
     if (!mission) return withCors(Response.json({ error: "Missão secundária inválida" }, { status: 400 }));
     await ensureSchema();
     const existing = await env.DB.prepare("SELECT mission_id FROM user_secondary_missions WHERE user_id = ? AND mission_id = ?").bind(user.id, mission.id).first<MissionRow>();
+    if (body.action === "pause") {
+      if (existing) await env.DB.prepare("UPDATE user_secondary_missions SET active = 0 WHERE user_id = ? AND mission_id = ?").bind(user.id, mission.id).run();
+      return withCors(Response.json(await stateFor(user.id)));
+    }
     if (!existing) {
       const paid = await env.DB.prepare("UPDATE user_progress SET coins = coins - ? WHERE user_id = ? AND coins >= ?").bind(mission.cost, user.id, mission.cost).run();
       if (!paid.meta.changes) return withCors(Response.json({ error: `Você precisa de ${mission.cost} siclos de prata para desbloquear esta missão.` }, { status: 400 }));

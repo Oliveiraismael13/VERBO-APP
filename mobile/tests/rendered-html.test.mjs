@@ -26,6 +26,8 @@ test("contains the authenticated Verbo application routes", async () => {
   assert.match(app, /secondaryMissionById/);
   assert.match(app, /MISSÃO SECUNDÁRIA ATIVA/);
   assert.match(app, /secondary-missions/);
+  assert.match(app, /Deseja sair da missão\?/);
+  assert.match(app, /leaveActiveMission/);
   assert.match(app, />Social</);
   assert.match(app, /function SocialPage/);
   assert.match(app, /\/api\/social\/friends/);
@@ -115,6 +117,7 @@ assert.match(app, /A Edição Chama da Fé não é usada nas missões/);
   assert.match(secondaryMissionsRoute, /replaying: Boolean\(record\?\.active && record\?\.completed_at\)/);
   assert.match(secondaryMissionsRoute, /SET active = 1 WHERE user_id = \? AND mission_id = \?/
   );
+  assert.match(secondaryMissionsRoute, /body\.action === "pause"/);
   assert.match(progress, /getSessionUser/);
   const libraryRoute = await text("app/api/library/route.ts");
   assert.match(libraryRoute, /last_reading_json/);

@@ -88,6 +88,8 @@ export default function VerboApp() {
   const [progress, setProgress] = useState<PlayerProgress>(emptyProgress);
   const [secondaryMissionStates, setSecondaryMissionStates] = useState<SecondaryMissionStatus[]>([]);
   const [secondaryBriefingId, setSecondaryBriefingId] = useState<string | null>(null);
+  const [leaveMissionDialog, setLeaveMissionDialog] = useState(false);
+  const [pendingScreen, setPendingScreen] = useState<Screen | null>(null);
   const [reward, setReward] = useState<ChapterReward | null>(null);
   const [savingChapter, setSavingChapter] = useState(false);
   const [lastReadingReady, setLastReadingReady] = useState(false);
@@ -255,7 +257,7 @@ export default function VerboApp() {
     }
   };
 
-  const go = (next: Screen) => {
+  const navigate = (next: Screen) => {
     if (next !== "camera") {
       stopCamera();
       setCameraState("idle");
@@ -263,6 +265,16 @@ export default function VerboApp() {
     setScreen(next);
     setSearchOpen(false);
     window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const go = (next: Screen) => {
+    if (screen === "bible" && next !== "bible" && (missionMode || activeSecondaryMission)) {
+      setPendingScreen(next);
+      setLeaveMissionDialog(true);
+      return false;
+    }
+    navigate(next);
+    return true;
   };
 
   const openCamera = async () => {
@@ -601,6 +613,25 @@ export default function VerboApp() {
     go("bible");
   };
 
+  const leaveActiveMission = async () => {
+    const next = pendingScreen;
+    setLeaveMissionDialog(false);
+    setPendingScreen(null);
+    setMissionMode(false);
+    if (activeSecondaryStatus) {
+      const missionId = activeSecondaryStatus.id;
+      setSecondaryMissionStates((current) => current.map((mission) => mission.id === missionId ? { ...mission, active: false, replaying: false } : mission));
+      try {
+        const response = await fetch("/api/secondary-missions", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ missionId, action: "pause" }) });
+        const data = await response.json() as { missions?: SecondaryMissionStatus[] };
+        if (response.ok) setSecondaryMissionStates(data.missions || []);
+      } catch {
+        notify("Não foi possível pausar a missão agora.");
+      }
+    }
+    if (next) navigate(next);
+  };
+
   const changeTranslation = (next: Translation) => {
     if ((missionMode || activeSecondaryMission) && !translations[next].missions) {
       notify("A Edição Chama da Fé não é usada nas missões");
@@ -818,8 +849,8 @@ export default function VerboApp() {
       {screen !== "camera" && (
         <nav className="bottom-nav" aria-label="Navegação principal">
           <button className={screen === "journey" ? "selected" : ""} onClick={() => go("journey")}><span>♜</span>Jornada</button>
-          <button className={screen === "bible" ? "selected" : ""} onClick={() => { setMissionMode(false); go("bible"); }}><span>▥</span>Bíblia</button>
-          <button className="camera" onClick={() => { go("camera"); void openCamera(); }}><i>⌁</i><span>Câmera</span></button>
+          <button className={screen === "bible" ? "selected" : ""} onClick={() => go("bible")}><span>▥</span>Bíblia</button>
+          <button className="camera" onClick={() => { if (go("camera")) void openCamera(); }}><i>⌁</i><span>Câmera</span></button>
           <button className={`social-nav ${screen === "social" ? "selected" : ""}`} onClick={() => go("social")}><span className="social-nav-icon" aria-hidden="true"><i /><i /></span>Social</button>
           <button className={screen === "studies" || screen === "result" ? "selected" : ""} onClick={() => go("studies")}><span>✧</span>Missões</button>
         </nav>
@@ -829,6 +860,7 @@ export default function VerboApp() {
       {searchOpen && <SearchOverlay manifest={manifest} close={() => setSearchOpen(false)} choose={chooseBook} open={() => { setSearchOpen(false); go("result"); }} />}
       {missionBriefingOpen && <MissionBriefing manifest={manifest} progress={progress} start={beginMission} close={() => setMissionBriefingOpen(false)} />}
       {secondaryBriefingId && secondaryMissionById(secondaryBriefingId) && <SecondaryMissionBriefing mission={secondaryMissionById(secondaryBriefingId)!} progress={progress} start={beginSecondaryMission} close={() => setSecondaryBriefingId(null)} />}
+      {leaveMissionDialog && <div className="leave-mission-backdrop" role="presentation"><section className="leave-mission-dialog" role="dialog" aria-modal="true" aria-label="Sair da missão"><p>MISSÃO EM ANDAMENTO</p><h2>Deseja sair da missão?</h2><span>Seu progresso fica salvo e você poderá continuar mais tarde pela aba Missões.</span><div><button className="secondary" onClick={() => { setLeaveMissionDialog(false); setPendingScreen(null); }}>Continuar missão</button><button onClick={() => void leaveActiveMission()}>Sair da missão</button></div></section></div>}
       {noteEditorOpen && <div className="note-overlay" role="dialog" aria-modal="true" aria-label="Nova anotação"><section><button className="note-close" onClick={() => setNoteEditorOpen(false)} aria-label="Fechar">×</button><p className="eyebrow">ANOTAÇÃO PESSOAL</p><h2>{book?.name} {chapter}:{selectedVerses[0] || selectedVerse}{selectedVerses.length > 1 ? `-${selectedVerses.at(-1)}` : ""}</h2><textarea value={noteDraft} onChange={(event) => setNoteDraft(event.target.value)} placeholder="O que Deus falou com você neste trecho?" autoFocus /><div><button className="secondary-note" onClick={() => { setNoteDraft(""); }}>Limpar</button><button className="save-note" onClick={saveNote}>Salvar anotação</button></div></section></div>}
       {toast && <div className="toast">✓ {toast}</div>}
       {reward && <RewardModal reward={reward} level={progress.level} close={() => setReward(null)} />}
