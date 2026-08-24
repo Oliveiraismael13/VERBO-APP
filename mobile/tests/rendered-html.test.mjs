@@ -46,6 +46,9 @@ test("contains the authenticated Verbo application routes", async () => {
   assert.match(app, /awardScrollXp/);
   assert.match(app, /scrollXp/);
   assert.match(app, /ScrollDiscoveryModal/);
+  assert.match(app, /DeveloperGiftModal/);
+  assert.match(app, /\/api\/gifts/);
+  assert.match(app, /Você ganhou \{gift.amount.toLocaleString/);
   assert.match(app, /Há diversos pergaminhos de estudo espalhados pela Bíblia/);
   assert.doesNotMatch(app, /unlockHint/);
   assert.match(app, /secondaryScrollUnlocked/);
@@ -167,10 +170,13 @@ assert.match(app, /A Edição Chama da Fé não é usada nas missões/);
   assert.match(progress, /user_scroll_rewards/);
   assert.match(progress, /action === "scroll"/);
   const libraryRoute = await text("app/api/library/route.ts");
+  const giftsRoute = await text("app/api/gifts/route.ts");
   assert.match(libraryRoute, /last_reading_json/);
   assert.match(libraryRoute, /found_scrolls_json/);
   assert.match(libraryRoute, /shared_json/);
   assert.match(libraryRoute, /lastReading: parseLastReading/);
+  assert.match(giftsRoute, /developer_gifts/);
+  assert.match(giftsRoute, /claimed_at/);
 });
 
 test("contains the account and session implementation", async () => {

@@ -46,6 +46,7 @@ type LastReading = { bookSlug: string; chapter: number };
 type PlayerProgress = { xp: number; level: number; coins: number; streak: number; completed: string[]; achievements: string[]; dailyNoteCompleted?: boolean; xpBonusPercent?: number; missedStreakDays?: number; displayName?: string; profilePhoto?: string; favorites?: string[]; highlights?: Record<string, string>; notes?: Record<string, string>; plans?: string[]; shared?: string[]; foundScrolls?: string[]; lastReading?: LastReading | null };
 type ChapterReward = { xp: number; coins: number; levelUp: boolean; unlocked: string[]; scrollsUnlocked?: number; scrollXp?: number; firstScrollDiscovery?: boolean; missionCompleted?: boolean; missionTitle?: string; secondaryMissionCompleted?: boolean; replayCompleted?: boolean; actCompleted?: boolean; actTitle?: string };
 type ScrollDiscovery = { count: number; xp: number; first: boolean };
+type DeveloperGift = { id: number; amount: number; message: string };
 type SecondaryMissionStatus = { id: string; unlocked: boolean; active: boolean; completed: boolean; replaying: boolean; replayChapters: string[]; done: number; total: number };
 
 const emptyProgress: PlayerProgress = { xp: 0, level: 1, coins: 0, streak: 0, completed: [], achievements: [], dailyNoteCompleted: false };
@@ -111,6 +112,7 @@ export default function VerboApp() {
   const [pendingScreen, setPendingScreen] = useState<Screen | null>(null);
   const [reward, setReward] = useState<ChapterReward | null>(null);
   const [scrollDiscovery, setScrollDiscovery] = useState<ScrollDiscovery | null>(null);
+  const [developerGift, setDeveloperGift] = useState<DeveloperGift | null>(null);
   const [savingChapter, setSavingChapter] = useState(false);
   const [lastReadingReady, setLastReadingReady] = useState(false);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
@@ -196,10 +198,11 @@ export default function VerboApp() {
   }, [verseKey, selectedVerseKeys, progress.favorites, progress.highlights]);
 
   useEffect(() => {
-    Promise.all([fetch("/api/progress"), fetch("/api/profile"), fetch("/api/library")]).then(async ([progressResponse, profileResponse, libraryResponse]) => {
+    Promise.all([fetch("/api/progress"), fetch("/api/profile"), fetch("/api/library"), fetch("/api/gifts")]).then(async ([progressResponse, profileResponse, libraryResponse, giftsResponse]) => {
       const data = await progressResponse.json();
       const profile = profileResponse.ok ? await profileResponse.json() : {};
       const library = libraryResponse.ok ? await libraryResponse.json() : {};
+      const gifts = giftsResponse.ok ? await giftsResponse.json() as { gift?: DeveloperGift | null } : {};
       if (!data.error) {
         setProgress({ ...data, ...profile, ...library });
         const reading = library.lastReading as LastReading | null | undefined;
@@ -210,6 +213,7 @@ export default function VerboApp() {
           setSelectedVerse(1);
         }
       }
+      if (gifts.gift) setDeveloperGift(gifts.gift);
     }).catch(() => undefined).finally(() => setLastReadingReady(true));
   }, []);
 
@@ -246,6 +250,13 @@ export default function VerboApp() {
 
   const saveRemoteLibrary = async (next: Partial<Pick<PlayerProgress, "favorites" | "highlights" | "notes" | "plans" | "shared" | "foundScrolls">>, base = progress) => {
     await fetch("/api/library", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ favorites: base.favorites || [], highlights: base.highlights || {}, notes: base.notes || {}, plans: base.plans || [], shared: base.shared || [], foundScrolls: base.foundScrolls || [], lastReading: lastReadingRef.current, ...next }) }).catch(() => undefined);
+  };
+
+  const claimDeveloperGift = async () => {
+    if (!developerGift) return;
+    const gift = developerGift;
+    setDeveloperGift(null);
+    await fetch("/api/gifts", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "claim", id: gift.id }) }).catch(() => undefined);
   };
 
   const awardScrollXp = async (scrollKeys: string[]) => {
@@ -988,6 +999,7 @@ export default function VerboApp() {
       {leaveMissionDialog && <div className="leave-mission-backdrop" role="presentation"><section className="leave-mission-dialog" role="dialog" aria-modal="true" aria-label="Sair da missão"><p>MISSÃO EM ANDAMENTO</p><h2>Deseja sair da missão?</h2><span>Seu progresso fica salvo e você poderá continuar mais tarde pela aba Missões.</span><div><button className="secondary" onClick={() => { setLeaveMissionDialog(false); setPendingScreen(null); }}>Continuar missão</button><button onClick={() => void leaveActiveMission()}>Sair da missão</button></div></section></div>}
       {noteEditorOpen && <div className="note-overlay" role="dialog" aria-modal="true" aria-label="Nova anotação"><section><button className="note-close" onClick={() => setNoteEditorOpen(false)} aria-label="Fechar">×</button><p className="eyebrow">ANOTAÇÃO PESSOAL</p><h2>{book?.name} {chapter}:{selectedVerses[0] || selectedVerse}{selectedVerses.length > 1 ? `-${selectedVerses.at(-1)}` : ""}</h2><textarea value={noteDraft} onChange={(event) => setNoteDraft(event.target.value)} placeholder="O que Deus falou com você neste trecho?" autoFocus /><div><button className="secondary-note" onClick={() => { setNoteDraft(""); }}>Limpar</button><button className="save-note" onClick={saveNote}>Salvar anotação</button></div></section></div>}
       {toast && <div className="toast">✓ {toast}</div>}
+      {developerGift && <DeveloperGiftModal gift={developerGift} close={() => void claimDeveloperGift()} />}
       {scrollDiscovery && <ScrollDiscoveryModal discovery={scrollDiscovery} close={() => setScrollDiscovery(null)} />}
       {reward && <RewardModal reward={reward} level={progress.level} close={() => setReward(null)} />}
     </main>
@@ -1132,6 +1144,10 @@ function RewardModal({ reward, level, close }: { reward: ChapterReward; level: n
 
 function ScrollDiscoveryModal({ discovery, close }: { discovery: ScrollDiscovery; close: () => void }) {
   return <div className="reward-backdrop"><div className="reward-modal" role="dialog" aria-modal="true" aria-label="Pergaminho encontrado"><div className="reward-rays" /><span className="reward-chest">▤</span><p>PERGAMINHO DESCOBERTO</p><h2>{discovery.first ? "Uma descoberta começa" : "Nova descoberta guardada"}</h2><div><b>+{discovery.xp}<small>XP</small></b></div><blockquote className="mission-reveal scroll-discovery-reveal"><b>{discovery.count === 1 ? "Um pergaminho foi encontrado!" : `${discovery.count} pergaminhos foram encontrados!`}</b><span>{discovery.first ? "Há diversos pergaminhos de estudo espalhados pela Bíblia. Continue sua jornada e permita que novas descobertas se revelem." : "Este pergaminho agora está disponível na sua Bíblia."}</span></blockquote><button onClick={close}>Guardar descoberta</button></div></div>;
+}
+
+function DeveloperGiftModal({ gift, close }: { gift: DeveloperGift; close: () => void }) {
+  return <div className="reward-backdrop"><div className="reward-modal" role="dialog" aria-modal="true" aria-label="Presente do desenvolvedor"><div className="reward-rays" /><span className="reward-chest">✦</span><p>PRESENTE DO DESENVOLVEDOR</p><h2>Você ganhou {gift.amount.toLocaleString("pt-BR")} siclos de prata!</h2><div><b>+{gift.amount.toLocaleString("pt-BR")}<small>SICLOS DE PRATA</small></b></div><blockquote className="mission-reveal"><b>Obrigado por usar o VERBO.</b><span>{gift.message}</span></blockquote><button onClick={close}>Receber com gratidão</button></div></div>;
 }
 
 function StudyResult({ translation, setTranslation, saved, setSaved, notify }: { translation: Translation; setTranslation: (value: Translation) => void; saved: boolean; setSaved: (value: boolean) => void; notify: (value: string) => void }) {
