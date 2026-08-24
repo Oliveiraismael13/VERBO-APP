@@ -86,6 +86,14 @@ type SecondaryMissionStatus = { id: string; unlocked: boolean; active: boolean; 
 
 const emptyProgress: PlayerProgress = { xp: 0, level: 1, coins: 0, streak: 0, completed: [], achievements: [], dailyNoteCompleted: false, coop: { status: "none" } };
 
+function presentVerse(number: number, text: string) {
+  const groupedReference = text.match(/^(\d+)\s*[-–]\s*(\d+)\s+([\s\S]+)$/);
+  if (groupedReference && Number(groupedReference[1]) === number) {
+    return { reference: `${groupedReference[1]}–${groupedReference[2]}`, text: groupedReference[3] };
+  }
+  return { reference: String(number), text };
+}
+
 function secondaryStatusProgress(mission: SecondaryMission, progress: PlayerProgress, status?: SecondaryMissionStatus | null) {
   if (status?.replaying) {
     const done = status.replayChapters.length;
@@ -673,7 +681,10 @@ export default function VerboApp() {
 
   const shareSelection = async () => {
     const selected = currentVerses.filter((verse) => selectedVerseKeys.includes(`${bookSlug}:${chapter}:${verse.number}`));
-    const content = selected.length ? selected.map((verse) => `${verse.number}. ${verse.text}`).join(" ") : currentVerses.find((verse) => verse.number === selectedVerse)?.text || "";
+    const content = selected.length ? selected.map((verse) => {
+      const presentation = presentVerse(verse.number, verse.text);
+      return `${presentation.reference}. ${presentation.text}`;
+    }).join(" ") : currentVerses.find((verse) => verse.number === selectedVerse)?.text || "";
     const reference = `${book?.name} ${chapter}:${selectedVerses[0] || selectedVerse}${selectedVerses.length > 1 ? `-${selectedVerses.at(-1)}` : ""}`;
     try {
       if (navigator.share) await navigator.share({ title: reference, text: `${reference} — ${content}` });
@@ -965,6 +976,7 @@ export default function VerboApp() {
           <article className="scripture" style={{ "--reader-size": `${fontSize}px` } as React.CSSProperties}>
             {!book && <div className="reader-loading">Carregando as Escrituras…</div>}
             {currentVerses.map(({ number, text }, verseIndex) => {
+              const presentation = presentVerse(number, text);
               const savedHighlight = progress.highlights?.[`${bookSlug}:${chapter}:${number}`];
               const isSelected = verseSelected && selectedVerses.includes(number);
               const isToolbarAnchor = isSelected && number === selectedVerse;
@@ -985,7 +997,7 @@ export default function VerboApp() {
                   </div>}
                 </div>}
                 <button data-verse={number} className={`verse ${isSelected ? "selected" : ""} ${isCameraDetected ? "camera-detected" : ""} ${savedHighlight ? `marked marked-${savedHighlight}` : ""}`} onClick={() => selectVerse(number)}>
-                  <sup>{number}</sup>{text}
+                  <sup>{presentation.reference}</sup>{presentation.text}
                 </button>
               </div>;
             })}

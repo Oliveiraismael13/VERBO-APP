@@ -128,6 +128,8 @@ test("contains the authenticated Verbo application routes", async () => {
   assert.match(app, /private-bibles/);
   assert.match(app, /availablePersonalTranslations/);
   assert.match(app, /BIBLIOTECA PESSOAL/);
+  assert.match(app, /function presentVerse/);
+  assert.match(app, /groupedReference/);
   assert.match(app, /catholic-73/);
 assert.match(app, /Livro deuterocanônico/);
 assert.doesNotMatch(app, /Por isso, não é utilizado nas missões/);
