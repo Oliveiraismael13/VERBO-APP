@@ -40,12 +40,14 @@ test("contains the authenticated Verbo application routes", async () => {
   assert.match(app, /original-language/);
   assert.match(app, /Significado no \{language\}/);
   assert.match(app, /mainMissionScrollForChapter/);
-  assert.match(app, /mainScrollRequirementLabels/);
   assert.match(app, /unlockPrimaryScrollIfReady/);
   assert.match(app, /primaryScrollFoundOnCompletion/);
-  assert.match(app, /pergaminho encontrado/);
+  assert.match(app, /pergaminho foi encontrado/);
   assert.match(app, /awardScrollXp/);
   assert.match(app, /scrollXp/);
+  assert.match(app, /ScrollDiscoveryModal/);
+  assert.match(app, /Há diversos pergaminhos de estudo espalhados pela Bíblia/);
+  assert.doesNotMatch(app, /unlockHint/);
   assert.match(app, /foundScrolls/);
   assert.match(app, /shared/);
   assert.match(app, /pergaminhos encontrados/);

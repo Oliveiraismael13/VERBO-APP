@@ -6,7 +6,7 @@ import { campaignActs, missionForChapter, narrativeForMission } from "../lib/cam
 import { resizeProfilePhoto } from "../lib/profile-photo";
 import { findBiblePassages, parseBibleReference, recognizePortugueseText, type BibleOcrCandidate } from "../lib/bible-ocr";
 import { secondaryMissionById, secondaryMissions, secondaryMissionProgress, type SecondaryMission } from "../lib/secondary-missions";
-import { mainMissionScrollForChapter, mainScrollRequirementLabels } from "../lib/main-mission-scrolls";
+import { mainMissionScrollForChapter } from "../lib/main-mission-scrolls";
 
 type Screen = "journey" | "bible" | "plans" | "camera" | "studies" | "social" | "result";
 type BibleVerse = { number: number; text: string };
@@ -44,7 +44,8 @@ const translations = {
 type Translation = keyof typeof translations;
 type LastReading = { bookSlug: string; chapter: number };
 type PlayerProgress = { xp: number; level: number; coins: number; streak: number; completed: string[]; achievements: string[]; dailyNoteCompleted?: boolean; xpBonusPercent?: number; missedStreakDays?: number; displayName?: string; profilePhoto?: string; favorites?: string[]; highlights?: Record<string, string>; notes?: Record<string, string>; plans?: string[]; shared?: string[]; foundScrolls?: string[]; lastReading?: LastReading | null };
-type ChapterReward = { xp: number; coins: number; levelUp: boolean; unlocked: string[]; scrollsUnlocked?: number; scrollXp?: number; missionCompleted?: boolean; missionTitle?: string; secondaryMissionCompleted?: boolean; replayCompleted?: boolean; actCompleted?: boolean; actTitle?: string };
+type ChapterReward = { xp: number; coins: number; levelUp: boolean; unlocked: string[]; scrollsUnlocked?: number; scrollXp?: number; firstScrollDiscovery?: boolean; missionCompleted?: boolean; missionTitle?: string; secondaryMissionCompleted?: boolean; replayCompleted?: boolean; actCompleted?: boolean; actTitle?: string };
+type ScrollDiscovery = { count: number; xp: number; first: boolean };
 type SecondaryMissionStatus = { id: string; unlocked: boolean; active: boolean; completed: boolean; replaying: boolean; replayChapters: string[]; done: number; total: number };
 
 const emptyProgress: PlayerProgress = { xp: 0, level: 1, coins: 0, streak: 0, completed: [], achievements: [], dailyNoteCompleted: false };
@@ -109,6 +110,7 @@ export default function VerboApp() {
   const [leaveMissionDialog, setLeaveMissionDialog] = useState(false);
   const [pendingScreen, setPendingScreen] = useState<Screen | null>(null);
   const [reward, setReward] = useState<ChapterReward | null>(null);
+  const [scrollDiscovery, setScrollDiscovery] = useState<ScrollDiscovery | null>(null);
   const [savingChapter, setSavingChapter] = useState(false);
   const [lastReadingReady, setLastReadingReady] = useState(false);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
@@ -271,12 +273,13 @@ export default function VerboApp() {
 
   const unlockPrimaryScrollIfReady = async (candidate: PlayerProgress) => {
     if (!missionMode || !primaryMissionScroll || candidate.foundScrolls?.includes(primaryScrollKey) || !primaryRequirementMet(candidate)) return;
+    const firstDiscovery = !(candidate.foundScrolls?.length);
     const foundScrolls = Array.from(new Set([...(candidate.foundScrolls || []), primaryScrollKey]));
     const scrollReward = await awardScrollXp([primaryScrollKey]);
     const updated = { ...candidate, ...(scrollReward.progress || {}), foundScrolls };
     setProgress(updated);
     void saveRemoteLibrary({ foundScrolls }, updated);
-    notify(`Pergaminho da Grande Jornada descoberto${scrollReward.xp ? ` · +${scrollReward.xp} XP` : ""}`);
+    setScrollDiscovery({ count: 1, xp: scrollReward.xp || 20, first: firstDiscovery });
   };
 
   useEffect(() => {
@@ -466,6 +469,7 @@ export default function VerboApp() {
       const secondaryScrolls = secondaryChapterActive && activeSecondaryMission?.insights[chapter] ? activeSecondaryMission.insights[chapter].map((_, index) => `secondary:${activeSecondaryMission.id}:${chapter}:${index}`) : [];
       const primaryScrollFoundOnCompletion = Boolean(missionMode && primaryMissionScroll?.requirement === "complete" && !progress.foundScrolls?.includes(primaryScrollKey) && nextProgress.completed.includes(`${bookSlug}:${chapter}`));
       const foundOnCompletion = [...secondaryScrolls, ...(primaryScrollFoundOnCompletion ? [primaryScrollKey] : [])];
+      const firstScrollDiscovery = foundOnCompletion.length > 0 && !(progress.foundScrolls?.length);
       const initialProgress = { ...progress, ...nextProgress, foundScrolls: Array.from(new Set([...(progress.foundScrolls || []), ...foundOnCompletion])) };
       const scrollReward = await awardScrollXp(foundOnCompletion);
       const updatedProgress = { ...initialProgress, ...(scrollReward.progress || {}), foundScrolls: initialProgress.foundScrolls };
@@ -475,6 +479,7 @@ export default function VerboApp() {
         earned.levelUp ||= scrollReward.levelUp;
         earned.scrollsUnlocked = foundOnCompletion.length;
         earned.scrollXp = scrollReward.xp;
+        earned.firstScrollDiscovery = firstScrollDiscovery;
         setReward(earned);
         if (foundOnCompletion.length) void saveRemoteLibrary({ foundScrolls: updatedProgress.foundScrolls }, updatedProgress);
         unlockPrimaryScrollIfReady(updatedProgress);
@@ -908,7 +913,7 @@ export default function VerboApp() {
             })}
           </article>
 
-          {primaryMissionScroll && (missionMode || primaryScrollUnlocked) && <MissionInsights insights={[primaryMissionScroll]} chapter={chapter} unlocked={primaryScrollUnlocked} source="primary" language={book?.testament === "old" ? "hebraico bíblico" : "grego bíblico"} unlockHint={mainScrollRequirementLabels[primaryMissionScroll.requirement]} />}
+          {primaryMissionScroll && (missionMode || primaryScrollUnlocked) && <MissionInsights insights={[primaryMissionScroll]} chapter={chapter} unlocked={primaryScrollUnlocked} source="primary" language={book?.testament === "old" ? "hebraico bíblico" : "grego bíblico"} />}
           {insightMission && (secondaryMissionUnlocked || activeSecondaryMission?.id === insightMission.id) && (chapterInsightsUnlocked || activeSecondaryMission?.id === insightMission.id) && <MissionInsights insights={insightMission.insights[chapter]} chapter={chapter} unlocked={chapterInsightsUnlocked} source="secondary" language="grego bíblico" />}
 
           {(missionMode || Boolean(activeSecondaryMission && activeSecondaryMission.bookSlug === bookSlug && chapter >= activeSecondaryMission.from && chapter <= activeSecondaryMission.to)) && <button className={`chapter-complete ${(replayingSecondaryMission ? replayChapterComplete : progress.completed.includes(`${bookSlug}:${chapter}`)) ? "done" : ""}`} onClick={completeChapter} disabled={savingChapter || (replayingSecondaryMission ? replayChapterComplete : progress.completed.includes(`${bookSlug}:${chapter}`))}>
@@ -982,6 +987,7 @@ export default function VerboApp() {
       {leaveMissionDialog && <div className="leave-mission-backdrop" role="presentation"><section className="leave-mission-dialog" role="dialog" aria-modal="true" aria-label="Sair da missão"><p>MISSÃO EM ANDAMENTO</p><h2>Deseja sair da missão?</h2><span>Seu progresso fica salvo e você poderá continuar mais tarde pela aba Missões.</span><div><button className="secondary" onClick={() => { setLeaveMissionDialog(false); setPendingScreen(null); }}>Continuar missão</button><button onClick={() => void leaveActiveMission()}>Sair da missão</button></div></section></div>}
       {noteEditorOpen && <div className="note-overlay" role="dialog" aria-modal="true" aria-label="Nova anotação"><section><button className="note-close" onClick={() => setNoteEditorOpen(false)} aria-label="Fechar">×</button><p className="eyebrow">ANOTAÇÃO PESSOAL</p><h2>{book?.name} {chapter}:{selectedVerses[0] || selectedVerse}{selectedVerses.length > 1 ? `-${selectedVerses.at(-1)}` : ""}</h2><textarea value={noteDraft} onChange={(event) => setNoteDraft(event.target.value)} placeholder="O que Deus falou com você neste trecho?" autoFocus /><div><button className="secondary-note" onClick={() => { setNoteDraft(""); }}>Limpar</button><button className="save-note" onClick={saveNote}>Salvar anotação</button></div></section></div>}
       {toast && <div className="toast">✓ {toast}</div>}
+      {scrollDiscovery && <ScrollDiscoveryModal discovery={scrollDiscovery} close={() => setScrollDiscovery(null)} />}
       {reward && <RewardModal reward={reward} level={progress.level} close={() => setReward(null)} />}
     </main>
   );
@@ -1104,10 +1110,10 @@ function MissionStoryPanel({ context, progress }: { context: ReturnType<typeof m
   return <aside className="mission-story-panel"><div><p>MISSÃO {index} DE {context.act.missions.length} · ATO {context.act.number}</p><h2>{context.mission.title}</h2><span>{narrative.introduction}</span></div><div className="mission-story-progress"><div className="mission-stage-progress"><small>CAPÍTULOS PARA CONCLUSÃO <HelpButton title="Capítulos para conclusão" text="Marque os capítulos da missão como lidos para avançar. Ao concluir todos, a próxima missão é liberada." /></small><b>{progressInStage.done}/{progressInStage.total}</b><i><em style={{ width: `${progressInStage.percent}%` }} /></i></div><div><small>ATO</small><b>{progressInAct.done}/{progressInAct.total}</b><i><em style={{ width: `${progressInAct.percent}%` }} /></i></div></div><blockquote><small>CONTEXTO HISTÓRICO</small>{narrative.historicalContext}</blockquote></aside>;
 }
 
-function MissionInsights({ insights, chapter, unlocked, source, language, unlockHint = "Conclua este capítulo" }: { insights: SecondaryMission["insights"][number]; chapter: number; unlocked: boolean; source: "primary" | "secondary"; language: "hebraico bíblico" | "grego bíblico"; unlockHint?: string }) {
+function MissionInsights({ insights, chapter, unlocked, source, language }: { insights: SecondaryMission["insights"][number]; chapter: number; unlocked: boolean; source: "primary" | "secondary"; language: "hebraico bíblico" | "grego bíblico" }) {
   const [open, setOpen] = useState(false);
   const collection = source === "primary" ? "GRANDE JORNADA" : "MISSÃO SECUNDÁRIA";
-  if (!unlocked) return <aside className={`mission-insights mission-insights-locked ${source}-scroll`}><div className="scroll-seal">✦</div><div><small>PERGAMINHO · {collection} · CAPÍTULO {chapter}</small><b>{insights.length} {insights.length === 1 ? "pergaminho aguarda" : "pergaminhos aguardam"} você</b><p>{unlockHint} para romper o selo e guardar esta descoberta na sua Bíblia.</p></div></aside>;
+  if (!unlocked) return <aside className={`mission-insights mission-insights-locked ${source}-scroll`}><div className="scroll-seal">✦</div><div><small>PERGAMINHO · {collection} · CAPÍTULO {chapter}</small><b>{insights.length} {insights.length === 1 ? "pergaminho oculto" : "pergaminhos ocultos"}</b><p>Há uma descoberta guardada neste capítulo. Siga sua jornada na Palavra para que ela se revele.</p></div></aside>;
   return <aside className={`mission-insights mission-scrolls ${source}-scroll ${open ? "open" : ""}`}><button onClick={() => setOpen(!open)} aria-expanded={open}><span className="scroll-mark">▤</span><div><small>PERGAMINHOS · {collection} · CAPÍTULO {chapter}</small><b>{open ? "Recolher pergaminhos" : `${insights.length} ${insights.length === 1 ? "pergaminho descoberto" : "pergaminhos descobertos"}`}</b></div><i>{open ? "−" : "+"}</i></button>{open && <div className="mission-insight-list">{insights.map((insight) => <article key={insight.title} className="original-word"><small>{insight.kind} · {insight.reference}</small><h3>{insight.title}</h3><div className="original-language"><b>{insight.original}</b><span>Transliteração · {insight.transliteration}</span><em><small>Significado no {language}</small>{insight.meaning}</em></div><p>{insight.content}</p></article>)}</div>}</aside>;
 }
 
@@ -1121,7 +1127,11 @@ function RewardModal({ reward, level, close }: { reward: ChapterReward; level: n
   const completedMission = reward.missionTitle ? campaignActs.flatMap((act) => act.missions).find((mission) => mission.title === reward.missionTitle) : undefined;
   const secondaryMission = reward.secondaryMissionCompleted || reward.replayCompleted ? secondaryMissions.find((mission) => mission.title === reward.missionTitle) : undefined;
   const narrative = completedMission ? narrativeForMission(completedMission) : secondaryMission || null;
-  return <div className="reward-backdrop"><div className="reward-modal" role="dialog" aria-modal="true" aria-label="Recompensa da missão"><div className="reward-rays" /><span className="reward-chest">♛</span><p>{reward.replayCompleted ? `RELEITURA CONCLUÍDA · ${reward.missionTitle}` : reward.actCompleted ? `ATO CONCLUÍDO · ${reward.actTitle}` : reward.missionCompleted ? `MISSÃO CONCLUÍDA · ${reward.missionTitle}` : reward.levelUp ? "NOVO NÍVEL ALCANÇADO" : "CAPÍTULO CONCLUÍDO"}</p><h2>{reward.replayCompleted ? "Jornada revisitada" : reward.levelUp ? `Nível ${level}` : "Recompensa obtida"}</h2>{reward.replayCompleted ? <div><b>SEM<small>XP ADICIONAL</small></b><b>SEM<small>SICLOS ADICIONAIS</small></b></div> : <div><b>+{reward.xp}<small>XP</small></b><b>+{reward.coins}<small>SICLOS DE PRATA</small></b></div>}{reward.scrollsUnlocked ? <em>▤ {reward.scrollsUnlocked} {reward.scrollsUnlocked === 1 ? "pergaminho encontrado" : "pergaminhos encontrados"} · +{reward.scrollXp || reward.scrollsUnlocked * 20} XP · disponível na Bíblia</em> : null}{narrative && <blockquote className="mission-reveal"><b>{narrative.discovery}</b><span>{narrative.next}</span></blockquote>}{reward.unlocked.length > 0 && <em>✦ Nova conquista desbloqueada</em>}<button onClick={close}>Continuar jornada</button></div></div>;
+  return <div className="reward-backdrop"><div className="reward-modal" role="dialog" aria-modal="true" aria-label="Recompensa da missão"><div className="reward-rays" /><span className="reward-chest">♛</span><p>{reward.replayCompleted ? `RELEITURA CONCLUÍDA · ${reward.missionTitle}` : reward.actCompleted ? `ATO CONCLUÍDO · ${reward.actTitle}` : reward.missionCompleted ? `MISSÃO CONCLUÍDA · ${reward.missionTitle}` : reward.levelUp ? "NOVO NÍVEL ALCANÇADO" : "CAPÍTULO CONCLUÍDO"}</p><h2>{reward.replayCompleted ? "Jornada revisitada" : reward.levelUp ? `Nível ${level}` : "Recompensa obtida"}</h2>{reward.replayCompleted ? <div><b>SEM<small>XP ADICIONAL</small></b><b>SEM<small>SICLOS ADICIONAIS</small></b></div> : <div><b>+{reward.xp}<small>XP</small></b><b>+{reward.coins}<small>SICLOS DE PRATA</small></b></div>}{reward.scrollsUnlocked ? <blockquote className="mission-reveal scroll-discovery-reveal"><b>{reward.firstScrollDiscovery ? "Seu primeiro pergaminho foi encontrado!" : `${reward.scrollsUnlocked} ${reward.scrollsUnlocked === 1 ? "pergaminho foi encontrado" : "pergaminhos foram encontrados"}!`}</b><span>{reward.firstScrollDiscovery ? "Há diversos pergaminhos de estudo espalhados pela Bíblia. Continue sua jornada e permita que novas descobertas se revelem." : `+${reward.scrollXp || reward.scrollsUnlocked * 20} XP · A descoberta foi guardada na sua Bíblia.`}</span></blockquote> : null}{narrative && <blockquote className="mission-reveal"><b>{narrative.discovery}</b><span>{narrative.next}</span></blockquote>}{reward.unlocked.length > 0 && <em>✦ Nova conquista desbloqueada</em>}<button onClick={close}>Continuar jornada</button></div></div>;
+}
+
+function ScrollDiscoveryModal({ discovery, close }: { discovery: ScrollDiscovery; close: () => void }) {
+  return <div className="reward-backdrop"><div className="reward-modal" role="dialog" aria-modal="true" aria-label="Pergaminho encontrado"><div className="reward-rays" /><span className="reward-chest">▤</span><p>PERGAMINHO DESCOBERTO</p><h2>{discovery.first ? "Uma descoberta começa" : "Nova descoberta guardada"}</h2><div><b>+{discovery.xp}<small>XP</small></b></div><blockquote className="mission-reveal scroll-discovery-reveal"><b>{discovery.count === 1 ? "Um pergaminho foi encontrado!" : `${discovery.count} pergaminhos foram encontrados!`}</b><span>{discovery.first ? "Há diversos pergaminhos de estudo espalhados pela Bíblia. Continue sua jornada e permita que novas descobertas se revelem." : "Este pergaminho agora está disponível na sua Bíblia."}</span></blockquote><button onClick={close}>Guardar descoberta</button></div></div>;
 }
 
 function StudyResult({ translation, setTranslation, saved, setSaved, notify }: { translation: Translation; setTranslation: (value: Translation) => void; saved: boolean; setSaved: (value: boolean) => void; notify: (value: string) => void }) {

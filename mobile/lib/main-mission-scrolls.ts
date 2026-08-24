@@ -1,15 +1,6 @@
 import type { MissionInsight } from "./secondary-missions";
 
 export type MainScrollRequirement = "complete" | "favorite" | "highlight-one" | "highlight-three" | "note" | "share";
-export const mainScrollRequirementLabels: Record<MainScrollRequirement, string> = {
-  complete: "Conclua este capítulo",
-  favorite: "Favorite um versículo deste capítulo",
-  "highlight-one": "Marque um versículo deste capítulo",
-  "highlight-three": "Marque três versículos deste capítulo",
-  note: "Crie uma anotação neste capítulo",
-  share: "Compartilhe um versículo deste capítulo",
-};
-
 const hebrewScrolls: MissionInsight[] = [
   { kind: "Palavra no original", title: "Aliança", reference: "Vocabulário da Grande Jornada", original: "בְּרִית", transliteration: "berít", meaning: "aliança, compromisso estabelecido", content: "No hebraico bíblico, aponta para uma relação vinculante. É uma palavra-chave para acompanhar a história de Deus com seu povo." },
   { kind: "Palavra no original", title: "Amor leal", reference: "Vocabulário da Grande Jornada", original: "חֶסֶד", transliteration: "chésed", meaning: "amor leal, bondade fiel", content: "Descreve a fidelidade amorosa que permanece. Ela ajuda a ler as promessas de Deus além das circunstâncias do momento." },
