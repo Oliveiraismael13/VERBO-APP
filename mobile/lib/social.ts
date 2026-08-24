@@ -28,6 +28,18 @@ export type SocialProfile = {
   favorites?: string[];
 };
 
+export type SocialActivityKind = "mission_completed" | "chapter_completed" | "streak_milestone" | "achievement_unlocked";
+export type SocialActivity = {
+  id: number;
+  kind: SocialActivityKind;
+  title: string;
+  detail: string;
+  reference?: string;
+  createdAt: number;
+  actor: SocialContact;
+  reactions: { amen: number; celebrate: number; viewer?: "amen" | "celebrate" };
+};
+
 type UserRow = { public_handle: string | null };
 type PrivacyRow = {
   profile_visibility: "friends" | "private";
@@ -267,4 +279,83 @@ export async function respondToFriendRequest(userId: string, requestId: number, 
   }
   await env.DB.batch(statements);
   return { ok: true as const, status };
+}
+
+type ActivityRow = {
+  id: number;
+  actor_id: string;
+  kind: SocialActivityKind;
+  payload_json: string;
+  created_at: number;
+  public_handle: string;
+  display_name: string | null;
+  profile_photo: string | null;
+  amen_count: number;
+  celebrate_count: number;
+  viewer_reaction: "amen" | "celebrate" | null;
+};
+
+function validActivityText(value: unknown, maxLength: number) {
+  return typeof value === "string" ? value.trim().slice(0, maxLength) : "";
+}
+
+function parseActivityPayload(value: string) {
+  try {
+    const payload = JSON.parse(value) as { title?: unknown; detail?: unknown; reference?: unknown };
+    return {
+      title: validActivityText(payload.title, 100) || "Avançou na jornada",
+      detail: validActivityText(payload.detail, 180),
+      reference: validActivityText(payload.reference, 60) || undefined,
+    };
+  } catch {
+    return { title: "Avançou na jornada", detail: "" };
+  }
+}
+
+export async function recordSocialActivity(userId: string, kind: SocialActivityKind, payload: { title: string; detail?: string; reference?: string }) {
+  const privacy = await getSocialPrivacy(userId);
+  const safePayload = {
+    title: validActivityText(payload.title, 100),
+    detail: validActivityText(payload.detail, 180),
+    reference: validActivityText(payload.reference, 60),
+  };
+  await env.DB.prepare("INSERT INTO social_activities (actor_id, kind, payload_json, visibility, created_at) VALUES (?, ?, ?, ?, ?)")
+    .bind(userId, kind, JSON.stringify(safePayload), privacy.showActivities ? "friends" : "private", Date.now())
+    .run();
+}
+
+export async function listSocialFeed(viewerId: string): Promise<SocialActivity[]> {
+  await ensureSocialUser(viewerId);
+  const rows = await env.DB.prepare("SELECT social_activities.id, social_activities.actor_id, social_activities.kind, social_activities.payload_json, social_activities.created_at, users.public_handle, users.display_name, users.profile_photo, COALESCE(SUM(CASE WHEN social_reactions.reaction = 'amen' THEN 1 ELSE 0 END), 0) AS amen_count, COALESCE(SUM(CASE WHEN social_reactions.reaction = 'celebrate' THEN 1 ELSE 0 END), 0) AS celebrate_count, MAX(CASE WHEN social_reactions.user_id = ? THEN social_reactions.reaction ELSE NULL END) AS viewer_reaction FROM social_activities JOIN users ON users.id = social_activities.actor_id LEFT JOIN social_reactions ON social_reactions.activity_id = social_activities.id WHERE social_activities.actor_id = ? OR (social_activities.visibility = 'friends' AND EXISTS (SELECT 1 FROM friendships WHERE (friendships.user_a_id = ? AND friendships.user_b_id = social_activities.actor_id) OR (friendships.user_b_id = ? AND friendships.user_a_id = social_activities.actor_id))) GROUP BY social_activities.id ORDER BY social_activities.created_at DESC LIMIT 40")
+    .bind(viewerId, viewerId, viewerId, viewerId)
+    .all<ActivityRow>();
+  return rows.results.map((row) => ({
+    id: row.id,
+    kind: row.kind,
+    ...parseActivityPayload(row.payload_json),
+    createdAt: row.created_at,
+    actor: contactFromRow(row),
+    reactions: { amen: Number(row.amen_count), celebrate: Number(row.celebrate_count), ...(row.viewer_reaction ? { viewer: row.viewer_reaction } : {}) },
+  }));
+}
+
+async function canViewActivity(viewerId: string, activityId: number) {
+  const activity = await env.DB.prepare("SELECT actor_id, visibility FROM social_activities WHERE id = ?").bind(activityId).first<{ actor_id: string; visibility: "friends" | "private" }>();
+  if (!activity) return null;
+  if (activity.actor_id === viewerId) return activity;
+  if (activity.visibility !== "friends" || !await areFriends(viewerId, activity.actor_id)) return null;
+  return activity;
+}
+
+export async function setSocialReaction(viewerId: string, activityId: number, reaction: "amen" | "celebrate" | null) {
+  await ensureSocialUser(viewerId);
+  if (!await canViewActivity(viewerId, activityId)) return { ok: false as const, status: 404, error: "Atividade não encontrada" };
+  if (!reaction) {
+    await env.DB.prepare("DELETE FROM social_reactions WHERE activity_id = ? AND user_id = ?").bind(activityId, viewerId).run();
+    return { ok: true as const, reaction: null };
+  }
+  await env.DB.prepare("INSERT INTO social_reactions (activity_id, user_id, reaction, created_at) VALUES (?, ?, ?, ?) ON CONFLICT(activity_id, user_id) DO UPDATE SET reaction = excluded.reaction, created_at = excluded.created_at")
+    .bind(activityId, viewerId, reaction, Date.now())
+    .run();
+  return { ok: true as const, reaction };
 }

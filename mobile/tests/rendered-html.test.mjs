@@ -26,6 +26,8 @@ test("contains the authenticated Verbo application routes", async () => {
   assert.match(app, /function SocialPage/);
   assert.match(app, /\/api\/social\/friends/);
   assert.match(app, /\/api\/social\/profiles/);
+  assert.match(app, /\/api\/social\/feed/);
+  assert.match(app, /Meu perfil/);
   assert.match(app, /ANTIGO TESTAMENTO · \$\{oldTestamentBookCount\} LIVROS/);
   assert.match(app, /NOVO TESTAMENTO · 27 LIVROS/);
   assert.match(app, /ESCOLHA UM CAPÍTULO/);
@@ -129,6 +131,8 @@ test("keeps social privacy behind authenticated public identifiers", async () =>
   const friends = await text("app/api/social/friends/route.ts");
   const requests = await text("app/api/social/friends/requests/[id]/route.ts");
   const profile = await text("app/api/social/profiles/[handle]/route.ts");
+  const feed = await text("app/api/social/feed/route.ts");
+  const reaction = await text("app/api/social/activities/[id]/reaction/route.ts");
   const migration = await text("drizzle/0006_social_foundation.sql");
 
   assert.match(social, /public_handle/);
@@ -142,10 +146,14 @@ test("keeps social privacy behind authenticated public identifiers", async () =>
   assert.doesNotMatch(privacy, /email/);
   assert.match(social, /areFriends/);
   assert.match(social, /respondToFriendRequest/);
+  assert.match(social, /recordSocialActivity/);
+  assert.match(social, /setSocialReaction/);
   assert.match(social, /profileVisible/);
   assert.match(friends, /createFriendRequest/);
   assert.match(requests, /body\.action !== "accept"/);
   assert.match(profile, /getSocialProfile/);
+  assert.match(feed, /listSocialFeed/);
+  assert.match(reaction, /body\.reaction !== "amen"/);
   assert.doesNotMatch(friends, /email/);
   assert.doesNotMatch(profile, /email/);
   assert.match(migration, /CREATE TABLE `social_privacy_settings`/);

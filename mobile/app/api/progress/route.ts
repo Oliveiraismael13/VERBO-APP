@@ -4,6 +4,7 @@ import { currentUser as getSessionUser } from "../../../lib/auth";
 import { corsOptions, withCors } from "../../../lib/cors";
 import { levelForXp } from "../../../lib/xp";
 import { campaignActs, missionForChapter as findCampaignMission, type CampaignAct } from "../../../lib/campaign";
+import { recordSocialActivity } from "../../../lib/social";
 
 export const dynamic = "force-dynamic";
 
@@ -219,6 +220,15 @@ export async function POST(request: Request) {
         const result = await env.DB.prepare("INSERT OR IGNORE INTO user_achievements (user_id, code, unlocked_at) VALUES (?, ?, ?)").bind(user.id, code, now).run();
         if (result.meta.changes) unlocked.push(code);
       }
+    }
+
+    try {
+      if (actCompleted && act) await recordSocialActivity(user.id, "mission_completed", { title: `Concluiu ${act.title}`, detail: "Completou um ato da Jornada Principal." });
+      else if (missionCompleted && mission) await recordSocialActivity(user.id, "mission_completed", { title: `Concluiu a missão ${mission.title}`, detail: "Avançou na Jornada Principal.", reference: `${mission.slug} ${mission.from}${mission.from === mission.to ? "" : `–${mission.to}`}` });
+      else if (nextStreak > 0 && nextStreak % 7 === 0) await recordSocialActivity(user.id, "streak_milestone", { title: `${nextStreak} dias de leitura`, detail: "Manteve a chama acesa na Palavra." });
+      for (const code of unlocked) await recordSocialActivity(user.id, "achievement_unlocked", { title: "Nova conquista desbloqueada", detail: code.replaceAll("_", " ") });
+    } catch (error) {
+      console.error("Falha ao registrar atividade social", error);
     }
 
     return withCors(Response.json({ ...(await loadProgress(user.id)), reward: { xp: xpGain, coins: coinGain, levelUp: nextLevel > (current?.level ?? 1), unlocked, missionCompleted: Boolean(missionCompleted), missionTitle: missionCompleted ? mission?.title : undefined, actCompleted, actTitle: actCompleted ? act?.title : undefined } }));
