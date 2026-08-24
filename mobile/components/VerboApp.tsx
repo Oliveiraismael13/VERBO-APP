@@ -6,7 +6,7 @@ import { campaignActs, missionForChapter, narrativeForMission } from "../lib/cam
 import { resizeProfilePhoto } from "../lib/profile-photo";
 import { findBiblePassages, parseBibleReference, recognizePortugueseText, type BibleOcrCandidate } from "../lib/bible-ocr";
 
-type Screen = "journey" | "bible" | "plans" | "camera" | "studies" | "profile" | "result";
+type Screen = "journey" | "bible" | "plans" | "camera" | "studies" | "profile" | "social" | "result";
 type BibleVerse = { number: number; text: string };
 type BibleBook = { slug: string; name: string; longName: string; abbreviation: string; testament: "old" | "new"; isDeuterocanonical?: boolean; chapters: BibleVerse[][] };
 type ManifestBook = Omit<BibleBook, "chapters"> & { code: string; chapterCount: number; verseCount: number };
@@ -755,12 +755,14 @@ export default function VerboApp() {
       {screen === "studies" && <StudiesPage manifest={manifest} progress={progress} onStart={openMissionBriefing} />}
       {screen === "plans" && <PlansPage />}
       {screen === "profile" && <><ProfilePage dark={dark} setDark={setDark} progress={progress} manifest={manifest} onOpenFavorite={openFavorite} onProfilePhotoChange={updateProfilePhoto} /><button type="button" onClick={async () => { await fetch("/api/auth/logout", { method: "POST" }); window.location.href = "/"; }} style={{ display: "block", width: "calc(100% - 44px)", margin: "-4px auto 24px", padding: "12px", border: "1px solid #d9c8c8", borderRadius: "10px", background: "transparent", color: "#9b5555", fontSize: "11px", fontWeight: 800 }}>Sair da conta</button></>}
+      {screen === "social" && <SocialPage notify={notify} />}
 
       {screen !== "camera" && (
         <nav className="bottom-nav" aria-label="Navegação principal">
           <button className={screen === "journey" ? "selected" : ""} onClick={() => go("journey")}><span>♜</span>Jornada</button>
           <button className={screen === "bible" ? "selected" : ""} onClick={() => { setMissionMode(false); go("bible"); }}><span>▥</span>Bíblia</button>
           <button className="camera" onClick={() => { go("camera"); void openCamera(); }}><i>⌁</i><span>Câmera</span></button>
+          <button className={screen === "social" ? "selected" : ""} onClick={() => go("social")}><span>♧</span>Social</button>
           <button className={screen === "studies" || screen === "result" ? "selected" : ""} onClick={() => go("studies")}><span>✧</span>Missões</button>
           <button className={screen === "profile" ? "selected" : ""} onClick={() => go("profile")}><span>◎</span>Perfil</button>
         </nav>
@@ -992,6 +994,139 @@ function StudiesPage({ manifest, progress, onStart }: { manifest: BibleManifest 
 
 function PlansPage() {
   return <section className="generic-page page-in"><p className="eyebrow">CRESÇA UM DIA DE CADA VEZ</p><h1>Planos</h1><p className="lead">Leituras breves para criar constância e aprofundar sua fé.</p><div className="progress-card"><span>PLANO ATUAL</span><h2>João em 21 dias</h2><p>Dia 4 de 21 · João 3</p><div><i style={{ width: "19%" }} /></div><button>Continuar leitura →</button></div><h3 className="list-heading">Para começar</h3><div className="plan-list"><article><i>7</i><div><b>Uma semana com os Salmos</b><span>7 dias · 8 min/dia</span></div><button>＋</button></article><article><i>14</i><div><b>Aprendendo a confiar</b><span>14 dias · 10 min/dia</span></div><button>＋</button></article></div></section>;
+}
+
+type SocialContact = { publicHandle: string; displayName: string; profilePhoto: string };
+type FriendRequest = SocialContact & { id: number; createdAt: number };
+type SocialProfile = {
+  publicHandle: string;
+  relationship: "self" | "friend" | "none";
+  profileVisible: boolean;
+  canSendFriendRequest: boolean;
+  displayName?: string;
+  profilePhoto?: string;
+  progress?: { level: number; xp: number; streak: number };
+  stats?: { completedChapters: number; favoriteVerses: number };
+  favorites?: string[];
+};
+type SocialData = { friends: SocialContact[]; requests: { incoming: FriendRequest[]; outgoing: FriendRequest[] } };
+
+const emptySocial: SocialData = { friends: [], requests: { incoming: [], outgoing: [] } };
+
+function SocialAvatar({ contact, small = false }: { contact: Pick<SocialContact, "displayName" | "profilePhoto">; small?: boolean }) {
+  return <span className={`social-avatar ${small ? "small" : ""}`}>{contact.profilePhoto ? <ProfilePhoto src={contact.profilePhoto} /> : contact.displayName.slice(0, 1).toUpperCase()}</span>;
+}
+
+function SocialPage({ notify }: { notify: (message: string) => void }) {
+  const [data, setData] = useState<SocialData>(emptySocial);
+  const [publicHandle, setPublicHandle] = useState("");
+  const [query, setQuery] = useState("");
+  const [selectedProfile, setSelectedProfile] = useState<SocialProfile | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [working, setWorking] = useState(false);
+  const [profileError, setProfileError] = useState("");
+
+  const loadSocial = useCallback(async () => {
+    const [friendsResponse, privacyResponse] = await Promise.all([fetch("/api/social/friends"), fetch("/api/social/privacy")]);
+    if (friendsResponse.ok) setData(await friendsResponse.json() as SocialData);
+    if (privacyResponse.ok) {
+      const privacy = await privacyResponse.json() as { publicHandle?: string };
+      setPublicHandle(privacy.publicHandle || "");
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadSocial().catch(() => undefined).finally(() => setLoading(false));
+  }, [loadSocial]);
+
+  const openProfile = async (handle: string) => {
+    const normalized = handle.trim().toLowerCase();
+    if (!normalized) return;
+    setWorking(true);
+    setProfileError("");
+    try {
+      const response = await fetch(`/api/social/profiles/${encodeURIComponent(normalized)}`);
+      const next = await response.json() as SocialProfile & { error?: string };
+      if (!response.ok) throw new Error(next.error || "Perfil não encontrado");
+      setSelectedProfile(next);
+    } catch (error) {
+      setSelectedProfile(null);
+      setProfileError(error instanceof Error ? error.message : "Perfil não encontrado");
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const sendRequest = async (handle: string) => {
+    setWorking(true);
+    try {
+      const response = await fetch("/api/social/friends", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ publicHandle: handle }) });
+      const result = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(result.error || "Não foi possível enviar o pedido");
+      notify("Pedido de amizade enviado");
+      await loadSocial();
+      if (selectedProfile) await openProfile(selectedProfile.publicHandle);
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Não foi possível enviar o pedido");
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const answerRequest = async (requestId: number, action: "accept" | "decline" | "cancel") => {
+    setWorking(true);
+    try {
+      const response = await fetch(`/api/social/friends/requests/${requestId}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ action }) });
+      const result = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(result.error || "Não foi possível atualizar o pedido");
+      notify(action === "accept" ? "Amizade confirmada" : action === "decline" ? "Pedido recusado" : "Pedido cancelado");
+      await loadSocial();
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Não foi possível atualizar o pedido");
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const copyHandle = async () => {
+    try {
+      await navigator.clipboard?.writeText(publicHandle);
+      notify("Identificador copiado");
+    } catch {
+      notify("Copie seu identificador: " + publicHandle);
+    }
+  };
+
+  if (selectedProfile) {
+    const profileContact = { displayName: selectedProfile.displayName || "Perfil protegido", profilePhoto: selectedProfile.profilePhoto || "" };
+    return <section className="generic-page social-page page-in">
+      <button className="social-back" onClick={() => { setSelectedProfile(null); setProfileError(""); }}>‹ Voltar ao Social</button>
+      <section className="social-profile-card">
+        <SocialAvatar contact={profileContact} />
+        <p className="eyebrow">{selectedProfile.relationship === "friend" ? "AMIGO NO VERBO" : selectedProfile.relationship === "self" ? "SEU PERFIL SOCIAL" : "PERFIL DO VERBO"}</p>
+        <h1>{selectedProfile.profileVisible ? profileContact.displayName : "Perfil protegido"}</h1>
+        <span>@{selectedProfile.publicHandle}</span>
+        {!selectedProfile.profileVisible && <p className="social-private">Este perfil fica visível apenas para amigos. Você ainda pode enviar um pedido se a pessoa permitir.</p>}
+        {selectedProfile.canSendFriendRequest && <button className="social-primary" disabled={working} onClick={() => void sendRequest(selectedProfile.publicHandle)}>Adicionar amigo <b>＋</b></button>}
+      </section>
+      {selectedProfile.profileVisible && <>
+        {selectedProfile.progress && <section className="social-stats"><article><b>{selectedProfile.progress.level}</b><small>nível</small></article><article><b>{selectedProfile.progress.streak}</b><small>dias de leitura</small></article><article><b>{selectedProfile.progress.xp.toLocaleString("pt-BR")}</b><small>XP</small></article></section>}
+        {selectedProfile.stats && <section className="social-detail"><p className="eyebrow">JORNADA</p><div><span>▥ Capítulos concluídos</span><b>{selectedProfile.stats.completedChapters}</b></div><div><span>♡ Versículos favoritos</span><b>{selectedProfile.stats.favoriteVerses}</b></div></section>}
+        {selectedProfile.favorites && <section className="social-detail"><p className="eyebrow">FAVORITOS COMPARTILHADOS</p>{selectedProfile.favorites.length ? <div className="social-favorites">{selectedProfile.favorites.slice(0, 6).map((favorite) => <span key={favorite}>♡ {favorite.replaceAll(":", " ")}</span>)}</div> : <small>Nenhum favorito compartilhado.</small>}</section>}
+      </>}
+    </section>;
+  }
+
+  return <section className="generic-page social-page page-in">
+    <div className="social-heading"><div><p className="eyebrow">CAMINHE ACOMPANHADO</p><h1>Social</h1><p className="lead">Compartilhe a jornada com amigos sem abrir mão da sua privacidade.</p></div><span>{data.friends.length}<small>amigos</small></span></div>
+    <section className="social-handle"><p>SEU IDENTIFICADOR PÚBLICO</p><b>{publicHandle ? `@${publicHandle}` : "Preparando seu identificador…"}</b><button onClick={() => void copyHandle()} disabled={!publicHandle}>Copiar</button><small>Compartilhe somente este código para receber pedidos. Seu e-mail nunca aparece.</small></section>
+    <form className="social-search" onSubmit={(event) => { event.preventDefault(); void openProfile(query); }}><label htmlFor="social-handle">ENCONTRAR ALGUÉM</label><div><input id="social-handle" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Ex.: verbo-abc123def4" autoCapitalize="none" autoCorrect="off" /><button type="submit" disabled={working}>{working ? "…" : "Buscar"}</button></div>{profileError && <small className="social-error">{profileError}</small>}</form>
+    {loading ? <p className="social-loading">Carregando suas conexões…</p> : <>
+      {data.requests.incoming.length > 0 && <section className="social-section"><div className="social-section-title"><div><p className="eyebrow">PEDIDOS RECEBIDOS</p><h2>Quer caminhar com você</h2></div><span>{data.requests.incoming.length}</span></div>{data.requests.incoming.map((request) => <article className="social-request" key={request.id}><SocialAvatar contact={request} small /><div><b>{request.displayName}</b><small>@{request.publicHandle}</small></div><div className="social-request-actions"><button disabled={working} onClick={() => void answerRequest(request.id, "accept")}>Aceitar</button><button disabled={working} onClick={() => void answerRequest(request.id, "decline")}>×</button></div></article>)}</section>}
+      {data.friends.length > 0 ? <section className="social-section"><div className="social-section-title"><div><p className="eyebrow">SUA COMUNIDADE</p><h2>Amigos no Verbo</h2></div><span>{data.friends.length}</span></div><div className="social-friends">{data.friends.map((friend) => <button key={friend.publicHandle} onClick={() => void openProfile(friend.publicHandle)}><SocialAvatar contact={friend} small /><span><b>{friend.displayName}</b><small>@{friend.publicHandle}</small></span><em>›</em></button>)}</div></section> : <section className="social-empty"><span>♧</span><h2>Comece sua comunidade</h2><p>Envie seu identificador para alguém de confiança ou busque o código que recebeu.</p></section>}
+      {data.requests.outgoing.length > 0 && <section className="social-section social-outgoing"><div className="social-section-title"><div><p className="eyebrow">AGUARDANDO RESPOSTA</p><h2>Pedidos enviados</h2></div><span>{data.requests.outgoing.length}</span></div>{data.requests.outgoing.map((request) => <article className="social-request" key={request.id}><SocialAvatar contact={request} small /><div><b>{request.displayName}</b><small>@{request.publicHandle}</small></div><button className="social-cancel" disabled={working} onClick={() => void answerRequest(request.id, "cancel")}>Cancelar</button></article>)}</section>}
+    </>}
+  </section>;
 }
 
 function ProfilePage({ dark, setDark, progress, manifest, onOpenFavorite, onProfilePhotoChange }: { dark: boolean; setDark: (value: boolean) => void; progress: PlayerProgress; manifest: BibleManifest | null; onOpenFavorite: (reference: string) => void; onProfilePhotoChange: (file: File) => void }) {
