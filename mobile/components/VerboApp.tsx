@@ -41,7 +41,7 @@ const translations = {
 
 type Translation = keyof typeof translations;
 type LastReading = { bookSlug: string; chapter: number };
-type PlayerProgress = { xp: number; level: number; coins: number; streak: number; completed: string[]; achievements: string[]; dailyNoteCompleted?: boolean; displayName?: string; profilePhoto?: string; favorites?: string[]; highlights?: Record<string, string>; notes?: Record<string, string>; plans?: string[]; lastReading?: LastReading | null };
+type PlayerProgress = { xp: number; level: number; coins: number; streak: number; completed: string[]; achievements: string[]; dailyNoteCompleted?: boolean; missedStreakDays?: number; displayName?: string; profilePhoto?: string; favorites?: string[]; highlights?: Record<string, string>; notes?: Record<string, string>; plans?: string[]; lastReading?: LastReading | null };
 type ChapterReward = { xp: number; coins: number; levelUp: boolean; unlocked: string[]; missionCompleted?: boolean; missionTitle?: string; actCompleted?: boolean; actTitle?: string };
 
 const emptyProgress: PlayerProgress = { xp: 0, level: 1, coins: 0, streak: 0, completed: [], achievements: [], dailyNoteCompleted: false };
@@ -428,6 +428,19 @@ export default function VerboApp() {
     return data.reward?.xp || 0;
   };
 
+  const restoreStreak = async () => {
+    try {
+      const response = await fetch("/api/progress", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "restore-streak" }) });
+      const data = await response.json() as PlayerProgress & { error?: string; restoration?: { nextDay: number } };
+      if (!response.ok) throw new Error(data.error || "Não foi possível restaurar a sequência.");
+      const { restoration, ...nextProgress } = data;
+      setProgress((current) => ({ ...current, ...nextProgress }));
+      notify(`Sequência restaurada. Amanhã você seguirá no dia ${restoration?.nextDay ?? progress.streak + 1}.`);
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Não foi possível restaurar a sequência.");
+    }
+  };
+
   const saveNote = async () => {
     const keys = selectedVerseKeys.length ? selectedVerseKeys : [verseKey];
     const notes = { ...(progress.notes || JSON.parse(localStorage.getItem("verbo-mobile-notes") || "{}")) } as Record<string, string>;
@@ -621,7 +634,7 @@ export default function VerboApp() {
         </header>
       )}
 
-      {screen === "journey" && <JourneyPage manifest={manifest} progress={progress} onContinue={openMissionBriefing} onOpenBible={() => { setMissionMode(false); go("bible"); }} />}
+      {screen === "journey" && <JourneyPage manifest={manifest} progress={progress} onContinue={openMissionBriefing} onOpenBible={() => { setMissionMode(false); go("bible"); }} onRestoreStreak={() => void restoreStreak()} />}
 
       {screen === "bible" && (
         <section className="reader page-in" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd} onClick={(event) => { if (!(event.target as HTMLElement).closest("[data-verse], .verse-tools")) { setSelectedVerses([]); setVerseSelected(false); setHighlightPickerOpen(false); } }}>
@@ -796,7 +809,7 @@ function isActComplete(act: (typeof campaignActs)[number], completed: string[]) 
   });
 }
 
-function JourneyPage({ manifest, progress, onContinue, onOpenBible }: { manifest: BibleManifest | null; progress: PlayerProgress; onContinue: () => void; onOpenBible: () => void }) {
+function JourneyPage({ manifest, progress, onContinue, onOpenBible, onRestoreStreak }: { manifest: BibleManifest | null; progress: PlayerProgress; onContinue: () => void; onOpenBible: () => void; onRestoreStreak: () => void }) {
   const completedCount = progress.completed.length;
   const noteCompleted = Boolean(progress.dailyNoteCompleted);
   const xpProgress = getXpProgress(progress.xp);
@@ -832,7 +845,7 @@ function JourneyPage({ manifest, progress, onContinue, onOpenBible }: { manifest
     <div className="daily-title"><div><p>MISSÕES DIÁRIAS</p><h2>Fortaleça sua constância</h2></div><span>◴ 24h</span></div>
     <div className="daily-quests">
       <article className={completedCount ? "complete" : ""}><i>▥</i><div><b>Leia um capítulo</b><span>{completedCount ? "1/1 concluído" : "0/1 capítulo"}<u><em style={{ width: completedCount ? "100%" : "0%" }} /></u></span></div><strong>+20 XP</strong></article>
-      <article><i>🔥</i><div><b>Mantenha a Chama acesa</b><span>{progress.streak}/7 dias<u><em style={{ width: `${Math.min(progress.streak / 7 * 100, 100)}%` }} /></u></span></div><strong>◆ 50</strong></article>
+      <article className={progress.missedStreakDays ? "streak-paused" : ""}><i>🔥</i><div><b>Mantenha a Chama acesa</b><span>{progress.streak} {progress.streak === 1 ? "dia consecutivo" : "dias consecutivos"} no Verbo{progress.missedStreakDays ? <small>{progress.missedStreakDays} {progress.missedStreakDays === 1 ? "dia perdido" : "dias perdidos"} · 100 moedas por dia</small> : null}</span></div>{progress.missedStreakDays ? <button className="streak-restore" onClick={onRestoreStreak}>Restaurar<br /><b>◆ {progress.missedStreakDays * 100}</b></button> : <strong>🔥 sequência</strong>}</article>
       <article className={noteCompleted ? "complete" : ""}><i>✎</i><div><b>Medite na Palavra</b><span>{noteCompleted ? "1/1 concluído" : "Crie uma anotação"}<u><em style={{ width: noteCompleted ? "100%" : "0%" }} /></u></span></div><strong>+15 XP</strong></article>
     </div>
   </section>;
