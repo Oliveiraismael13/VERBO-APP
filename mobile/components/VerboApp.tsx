@@ -13,6 +13,37 @@ type BibleVerse = { number: number; text: string };
 type BibleBook = { slug: string; name: string; longName: string; abbreviation: string; testament: "old" | "new"; isDeuterocanonical?: boolean; chapters: BibleVerse[][] };
 type ManifestBook = Omit<BibleBook, "chapters"> & { code: string; chapterCount: number; verseCount: number };
 type BibleManifest = { translation: string; code: string; canon: string; bookCount: number; verseCount: number; books: ManifestBook[] };
+type TranslationDefinition = { label: string; path: string; note: string; license: string; canon: "protestant-66" | "catholic-73"; missions: boolean };
+
+const localPersonalTranslation = (code: string, label: string): TranslationDefinition => ({
+  label,
+  path: `/personal-bibles/${code.toLowerCase()}`,
+  note: `${label} · disponível somente na sua biblioteca local.`,
+  license: "USO PESSOAL LOCAL",
+  canon: "protestant-66",
+  missions: false,
+});
+
+const personalTranslations = import.meta.env.DEV ? {
+  ACF: localPersonalTranslation("ACF", "Almeida Corrigida e Fiel"),
+  ALM1911: localPersonalTranslation("ALM1911", "Almeida 1911"),
+  ARA: localPersonalTranslation("ARA", "Almeida Revista e Atualizada"),
+  ARC: localPersonalTranslation("ARC", "Almeida Revista e Corrigida"),
+  AS21: localPersonalTranslation("AS21", "Almeida Século 21"),
+  JFAA: localPersonalTranslation("JFAA", "Almeida Atualizada"),
+  KJA: localPersonalTranslation("KJA", "King James Atualizada"),
+  KJF: localPersonalTranslation("KJF", "King James Fiel"),
+  MENS: localPersonalTranslation("MENS", "A Mensagem"),
+  NAA: localPersonalTranslation("NAA", "Nova Almeida Atualizada"),
+  NBV: localPersonalTranslation("NBV", "Nova Bíblia Viva"),
+  NTLH: localPersonalTranslation("NTLH", "Nova Tradução na Linguagem de Hoje"),
+  NVI: localPersonalTranslation("NVI", "Nova Versão Internacional"),
+  NVT: localPersonalTranslation("NVT", "Nova Versão Transformadora"),
+  OL: localPersonalTranslation("OL", "O Livro"),
+  TB: localPersonalTranslation("TB", "Tradução Brasileira"),
+  VFL: localPersonalTranslation("VFL", "Versão Fácil de Ler"),
+} : {};
+const personalTranslationCodes = new Set(["ACF", "ALM1911", "ARA", "ARC", "AS21", "JFAA", "KJA", "KJF", "MENS", "NAA", "NBV", "NTLH", "NVI", "NVT", "OL", "TB", "VFL"]);
 
 const translations = {
   BLIVRE: {
@@ -39,6 +70,7 @@ const translations = {
     canon: "catholic-73",
     missions: false,
   },
+  ...personalTranslations,
 } as const;
 
 type Translation = keyof typeof translations;
@@ -115,6 +147,7 @@ export default function VerboApp() {
   const [reward, setReward] = useState<ChapterReward | null>(null);
   const [scrollDiscovery, setScrollDiscovery] = useState<ScrollDiscovery | null>(null);
   const [developerGift, setDeveloperGift] = useState<DeveloperGift | null>(null);
+  const [availablePersonalTranslations, setAvailablePersonalTranslations] = useState<string[]>([]);
   const [savingChapter, setSavingChapter] = useState(false);
   const [lastReadingReady, setLastReadingReady] = useState(false);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
@@ -145,6 +178,13 @@ export default function VerboApp() {
     const savedTheme = localStorage.getItem("verbo-theme");
     // eslint-disable-next-line react-hooks/set-state-in-effect -- tema salvo só existe no navegador
     if (savedTheme === "dark") setDark(true);
+  }, []);
+
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    fetch("/personal-bibles/index.json").then((response) => response.ok ? response.json() : { versions: [] }).then((data: { versions?: unknown }) => {
+      if (Array.isArray(data.versions)) setAvailablePersonalTranslations(data.versions.filter((code): code is string => typeof code === "string"));
+    }).catch(() => undefined);
   }, []);
 
   useEffect(() => {
@@ -894,7 +934,7 @@ export default function VerboApp() {
             </div>
             <div className="reader-actions">
               <select className="translation" value={translation} onChange={(event) => changeTranslation(event.target.value as Translation)} aria-label="Tradução">
-                <option value="BLIVRE">BLIVRE</option><option value="ALMEIDA1819">Almeida 1819</option><option value="CHAMADAFE" disabled={missionMode || Boolean(activeSecondaryMission)}>Chama da Fé · 73</option><option disabled>NVI · licença</option><option disabled>NAA · licença</option><option disabled>ARA · licença</option>
+                {(Object.keys(translations) as Translation[]).filter((code) => !personalTranslationCodes.has(code) || availablePersonalTranslations.includes(code)).map((code) => <option key={code} value={code} disabled={(missionMode || Boolean(activeSecondaryMission)) && !translations[code].missions}>{translations[code].label}</option>)}
               </select>
               <button className="text-control" onClick={() => setReaderMenu(!readerMenu)} aria-label="Preferências de leitura">Aa</button>
             </div>
@@ -922,12 +962,12 @@ export default function VerboApp() {
 
           <article className="scripture" style={{ "--reader-size": `${fontSize}px` } as React.CSSProperties}>
             {!book && <div className="reader-loading">Carregando as Escrituras…</div>}
-            {currentVerses.map(({ number, text }) => {
+            {currentVerses.map(({ number, text }, verseIndex) => {
               const savedHighlight = progress.highlights?.[`${bookSlug}:${chapter}:${number}`];
               const isSelected = verseSelected && selectedVerses.includes(number);
               const isToolbarAnchor = isSelected && number === selectedVerse;
               const isCameraDetected = recognizedPassage?.bookSlug === bookSlug && recognizedPassage.chapter === chapter && number >= recognizedPassage.startVerse && number <= recognizedPassage.endVerse;
-              return <div key={number} className="verse-row">
+              return <div key={`${number}-${verseIndex}`} className="verse-row">
                 {isToolbarAnchor && <div className="verse-tools" aria-label={`Ferramentas para ${book?.name} ${chapter}:${number}`}>
                   <p><b>{selectedVerses.length > 1 ? `${selectedVerses.length} versículos` : `${book?.name} ${chapter}:${number}`}</b><span>{selectedVerses.length > 1 ? "selecionados" : "selecionado"}</span></p>
                   <div>

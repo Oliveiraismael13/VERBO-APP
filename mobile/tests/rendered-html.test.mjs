@@ -125,6 +125,9 @@ test("contains the authenticated Verbo application routes", async () => {
   assert.match(app, /Array\.from\(\{ length: selectedBook\.chapterCount \}/);
   assert.match(app, /choose\(selectedBook\.slug, number\)/);
   assert.match(app, /CHAMADAFE/);
+  assert.match(app, /personal-bibles/);
+  assert.match(app, /availablePersonalTranslations/);
+  assert.match(app, /USO PESSOAL LOCAL/);
   assert.match(app, /catholic-73/);
 assert.match(app, /Livro deuterocanônico/);
 assert.doesNotMatch(app, /Por isso, não é utilizado nas missões/);
@@ -364,6 +367,19 @@ test("is installable as a mobile application", async () => {
   assert.match(catholicManifest, /"bookCount":73/);
   assert.match(catholicManifest, /"isDeuterocanonical":true/);
   assert.match(tobit, /"name":"Tobias"/);
+});
+
+test("keeps personal Bible imports local to development", async () => {
+  const vite = await text("vite.config.ts");
+  const importer = await text("scripts/import-personal-bibles.mjs");
+  const gitignore = await readFile(new URL("../../.gitignore", import.meta.url), "utf8");
+
+  assert.match(vite, /verbo-personal-bibles/);
+  assert.match(vite, /apply: "serve"/);
+  assert.match(vite, /relativePath === "index\.json"/);
+  assert.match(importer, /BIBLE_SOURCE_DIR/);
+  assert.match(importer, /VALIDATION_REQUIRED\.txt/);
+  assert.match(gitignore, /mobile\/\.private/);
 });
 
 test("deploys Google credentials as Worker secrets", async () => {

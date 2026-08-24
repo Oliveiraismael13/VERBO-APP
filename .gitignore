@@ -5,3 +5,4 @@ node_modules/
 dist/
 .pnpm-store/
 *.log
+/mobile/.private/
