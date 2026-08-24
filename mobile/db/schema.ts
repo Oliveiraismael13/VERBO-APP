@@ -154,7 +154,7 @@ export const socialNotifications = sqliteTable("social_notifications", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   userId: text("user_id").notNull().references(() => users.id),
   actorId: text("actor_id").notNull().references(() => users.id),
-  kind: text("kind", { enum: ["friend_request", "friend_accepted", "reaction"] }).notNull(),
+  kind: text("kind", { enum: ["friend_request", "friend_accepted", "reaction", "social_activity"] }).notNull(),
   activityId: integer("activity_id").references(() => socialActivities.id),
   readAt: integer("read_at", { mode: "timestamp" }),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),

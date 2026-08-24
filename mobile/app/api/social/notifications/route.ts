@@ -1,6 +1,6 @@
 import { currentUser } from "../../../../lib/auth";
 import { corsOptions, withCors } from "../../../../lib/cors";
-import { listSocialNotifications, markSocialNotificationsRead } from "../../../../lib/social";
+import { listSocialNotifications, markSocialNotificationRead, markSocialNotificationsRead } from "../../../../lib/social";
 
 export const dynamic = "force-dynamic";
 
@@ -20,9 +20,12 @@ export async function PATCH(request: Request) {
   const user = await currentUser();
   if (!user) return withCors(Response.json({ error: "Não autenticado" }, { status: 401 }));
   try {
-    const body = await request.json() as { action?: unknown };
+    const body = await request.json() as { action?: unknown; notificationId?: unknown };
     if (body.action !== "mark-read") return withCors(Response.json({ error: "Ação inválida" }, { status: 400 }));
-    await markSocialNotificationsRead(user.id);
+    if (body.notificationId !== undefined) {
+      if (!Number.isSafeInteger(body.notificationId) || body.notificationId < 1) return withCors(Response.json({ error: "Notificação inválida" }, { status: 400 }));
+      await markSocialNotificationRead(user.id, body.notificationId);
+    } else await markSocialNotificationsRead(user.id);
     return withCors(Response.json({ ok: true }));
   } catch {
     return withCors(Response.json({ error: "Não foi possível atualizar suas notificações" }, { status: 500 }));

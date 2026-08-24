@@ -82,6 +82,12 @@ test("contains the authenticated Verbo application routes", async () => {
   assert.match(app, /activityGlyph/);
   assert.match(app, /social-feed-card/);
   assert.match(app, /social-activity-glyph/);
+  assert.match(app, /socialView/);
+  assert.match(app, /social-view-tabs/);
+  assert.match(app, /notificationsOpen/);
+  assert.match(app, /openNotification/);
+  assert.match(app, /social-activity-reward/);
+  assert.match(app, /returnToSocial/);
   assert.match(app, /feedOrder/);
   assert.match(app, /Celebradas/);
   assert.match(app, /\/api\/social\/friends/);
@@ -180,6 +186,8 @@ assert.match(app, /A Edição Chama da Fé não é usada nas missões/);
   }
   const progressRoute = await text("app/api/progress/route.ts");
   assert.match(progressRoute, /const baseXpGain = actCompleted \? 100 : missionCompleted \|\| secondaryMissionCompleted \? 80 : 40/);
+  assert.match(progressRoute, /Concluiu o Ato \$\{act\.number\}/);
+  assert.match(progressRoute, /notifyFriends: true/);
   assert.match(progressRoute, /function xpWithStreakBonus/);
   assert.match(progressRoute, /const coinGain = actCompleted \? 10 : missionCompleted \|\| secondaryMissionCompleted \? 8 : 4/);
   assert.match(secondaryMissionsRoute, /const replaying = Boolean\(record\?\.active && record\?\.completed_at\)/);
@@ -254,6 +262,7 @@ test("keeps social privacy behind authenticated public identifiers", async () =>
   const friendship = await text("app/api/social/friends/[handle]/route.ts");
   const migration = await text("drizzle/0006_social_foundation.sql");
   const socialSafetyMigration = await text("drizzle/0007_social_notifications_blocks.sql");
+  const socialActivityNotificationsMigration = await text("drizzle/0015_social_activity_notifications.sql");
   const sharedNotesMigration = await text("drizzle/0013_social_shared_notes.sql");
   const noteDatesMigration = await text("drizzle/0014_note_dates.sql");
   const sharedNotes = await text("app/api/social/notes/route.ts");
@@ -276,6 +285,9 @@ test("keeps social privacy behind authenticated public identifiers", async () =>
   assert.match(social, /recordSocialActivity/);
   assert.match(social, /setSocialReaction/);
   assert.match(social, /listSocialNotifications/);
+  assert.match(social, /social_activity/);
+  assert.match(social, /markSocialNotificationRead/);
+  assert.match(social, /notifyFriends/);
   assert.match(social, /blockSocialUser/);
   assert.match(social, /areUsersBlocked/);
   assert.match(social, /profileVisible/);
@@ -288,6 +300,8 @@ test("keeps social privacy behind authenticated public identifiers", async () =>
   assert.match(feed, /listSocialFeed/);
   assert.match(reaction, /body\.reaction !== "amen"/);
   assert.match(notifications, /markSocialNotificationsRead/);
+  assert.match(notifications, /markSocialNotificationRead/);
+  assert.match(notifications, /notificationId/);
   assert.match(blocks, /blockSocialUser/);
   assert.match(friendship, /removeFriend/);
   assert.doesNotMatch(friends, /email/);
@@ -296,6 +310,8 @@ test("keeps social privacy behind authenticated public identifiers", async () =>
   assert.match(migration, /`show_activities` integer DEFAULT 1/);
   assert.match(socialSafetyMigration, /CREATE TABLE `social_notifications`/);
   assert.match(socialSafetyMigration, /CREATE TABLE `user_blocks`/);
+  assert.match(socialActivityNotificationsMigration, /social_activity/);
+  assert.match(socialActivityNotificationsMigration, /social_notifications_next/);
   assert.match(sharedNotesMigration, /CREATE TABLE `social_shared_notes`/);
   assert.match(sharedNotesMigration, /`show_notes` integer DEFAULT 0/);
   assert.match(noteDatesMigration, /note_dates_json/);

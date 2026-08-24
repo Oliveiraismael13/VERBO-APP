@@ -289,11 +289,12 @@ export async function POST(request: Request) {
     }
 
     try {
-      if (actCompleted && act) await recordSocialActivity(user.id, "mission_completed", { title: `Concluiu ${act.title}`, detail: "Completou um ato da Jornada Principal." });
-      else if (secondaryMissionCompleted && secondaryMission) await recordSocialActivity(user.id, "mission_completed", { title: `Concluiu a missão secundária ${secondaryMission.title}`, detail: "Completou uma jornada especial na Palavra.", reference: `Mateus ${secondaryMission.from}–${secondaryMission.to}` });
-      else if (missionCompleted && mission) await recordSocialActivity(user.id, "mission_completed", { title: `Concluiu a missão ${mission.title}`, detail: "Avançou na Jornada Principal.", reference: `${mission.slug} ${mission.from}${mission.from === mission.to ? "" : `–${mission.to}`}` });
-      else if (nextStreak > 0 && nextStreak % 7 === 0) await recordSocialActivity(user.id, "streak_milestone", { title: `${nextStreak} dias de leitura`, detail: "Manteve a chama acesa na Palavra." });
-      for (const code of unlocked) await recordSocialActivity(user.id, "achievement_unlocked", { title: "Nova conquista desbloqueada", detail: code.replaceAll("_", " ") });
+      if (actCompleted && act) await recordSocialActivity(user.id, "mission_completed", { title: `Concluiu o Ato ${act.number}: ${act.title}`, detail: `Missão ${mission?.title || "da Jornada Principal"} concluída · +${xpGain} XP · nível ${nextLevel}.`, xp: xpGain, level: nextLevel, act: `Ato ${act.number} · ${act.title}`, mission: mission?.title, notifyFriends: true });
+      else if (nextLevel > (current?.level ?? 1)) await recordSocialActivity(user.id, "achievement_unlocked", { title: `Alcançou o nível ${nextLevel}`, detail: `A jornada alcançou ${nextXp.toLocaleString("pt-BR")} XP.`, xp: xpGain, level: nextLevel, notifyFriends: true });
+      else if (secondaryMissionCompleted && secondaryMission) await recordSocialActivity(user.id, "mission_completed", { title: `Concluiu a missão secundária ${secondaryMission.title}`, detail: `Completou uma jornada especial na Palavra · +${xpGain} XP.`, reference: `Mateus ${secondaryMission.from}–${secondaryMission.to}`, xp: xpGain, level: nextLevel, mission: secondaryMission.title, notifyFriends: true });
+      else if (missionCompleted && mission) await recordSocialActivity(user.id, "mission_completed", { title: `Concluiu a missão ${mission.title}`, detail: `Avançou na Jornada Principal · +${xpGain} XP.`, reference: `${mission.slug} ${mission.from}${mission.from === mission.to ? "" : `–${mission.to}`}`, xp: xpGain, level: nextLevel, mission: mission.title });
+      else if (nextStreak > 0 && nextStreak % 7 === 0) await recordSocialActivity(user.id, "streak_milestone", { title: `${nextStreak} dias de leitura`, detail: "Manteve a chama acesa na Palavra.", level: nextLevel });
+      else if (unlocked.length) await recordSocialActivity(user.id, "achievement_unlocked", { title: unlocked.length === 1 ? "Nova conquista desbloqueada" : `${unlocked.length} novas conquistas desbloqueadas`, detail: unlocked.map((code) => code.replaceAll("_", " ")).join(" · "), level: nextLevel, notifyFriends: true });
     } catch (error) {
       console.error("Falha ao registrar atividade social", error);
     }

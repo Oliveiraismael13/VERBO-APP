@@ -44,6 +44,10 @@ export type SocialActivity = {
   detail: string;
   reference?: string;
   category?: "note_shared";
+  xp?: number;
+  level?: number;
+  act?: string;
+  mission?: string;
   createdAt: number;
   actor: SocialContact;
   reactions: { amen: number; celebrate: number; viewer?: "amen" | "celebrate" };
@@ -51,10 +55,11 @@ export type SocialActivity = {
 
 export type SocialNotification = {
   id: number;
-  kind: "friend_request" | "friend_accepted" | "reaction";
+  kind: "friend_request" | "friend_accepted" | "reaction" | "social_activity";
   createdAt: number;
   read: boolean;
   actor: SocialContact;
+  activityId?: number;
   activityTitle?: string;
 };
 
@@ -109,7 +114,7 @@ export async function ensureSocialSchema() {
     env.DB.prepare("CREATE TABLE IF NOT EXISTS social_activities (id INTEGER PRIMARY KEY AUTOINCREMENT, actor_id TEXT NOT NULL, kind TEXT NOT NULL CHECK(kind IN ('mission_completed', 'chapter_completed', 'streak_milestone', 'achievement_unlocked')), payload_json TEXT NOT NULL DEFAULT '{}', visibility TEXT NOT NULL DEFAULT 'friends' CHECK(visibility IN ('friends', 'private')), created_at INTEGER NOT NULL, FOREIGN KEY (actor_id) REFERENCES users(id))"),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_social_activities_actor_created ON social_activities(actor_id, created_at)"),
     env.DB.prepare("CREATE TABLE IF NOT EXISTS social_reactions (activity_id INTEGER NOT NULL, user_id TEXT NOT NULL, reaction TEXT NOT NULL CHECK(reaction IN ('amen', 'celebrate')), created_at INTEGER NOT NULL, PRIMARY KEY (activity_id, user_id), FOREIGN KEY (activity_id) REFERENCES social_activities(id), FOREIGN KEY (user_id) REFERENCES users(id))"),
-    env.DB.prepare("CREATE TABLE IF NOT EXISTS social_notifications (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT NOT NULL, actor_id TEXT NOT NULL, kind TEXT NOT NULL CHECK(kind IN ('friend_request', 'friend_accepted', 'reaction')), activity_id INTEGER, read_at INTEGER, created_at INTEGER NOT NULL, FOREIGN KEY (user_id) REFERENCES users(id), FOREIGN KEY (actor_id) REFERENCES users(id), FOREIGN KEY (activity_id) REFERENCES social_activities(id))"),
+    env.DB.prepare("CREATE TABLE IF NOT EXISTS social_notifications (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT NOT NULL, actor_id TEXT NOT NULL, kind TEXT NOT NULL CHECK(kind IN ('friend_request', 'friend_accepted', 'reaction', 'social_activity')), activity_id INTEGER, read_at INTEGER, created_at INTEGER NOT NULL, FOREIGN KEY (user_id) REFERENCES users(id), FOREIGN KEY (actor_id) REFERENCES users(id), FOREIGN KEY (activity_id) REFERENCES social_activities(id))"),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_social_notifications_user_read_created ON social_notifications(user_id, read_at, created_at)"),
     env.DB.prepare("CREATE TABLE IF NOT EXISTS user_blocks (blocker_id TEXT NOT NULL, blocked_id TEXT NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY (blocker_id, blocked_id), FOREIGN KEY (blocker_id) REFERENCES users(id), FOREIGN KEY (blocked_id) REFERENCES users(id), CHECK(blocker_id <> blocked_id))"),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_user_blocks_blocked ON user_blocks(blocked_id)"),
@@ -487,11 +492,15 @@ function validActivityText(value: unknown, maxLength: number) {
 
 function parseActivityPayload(value: string) {
   try {
-    const payload = JSON.parse(value) as { title?: unknown; detail?: unknown; reference?: unknown; category?: unknown };
+    const payload = JSON.parse(value) as { title?: unknown; detail?: unknown; reference?: unknown; category?: unknown; xp?: unknown; level?: unknown; act?: unknown; mission?: unknown };
     return {
       title: validActivityText(payload.title, 100) || "Avançou na jornada",
       detail: validActivityText(payload.detail, 180),
       reference: validActivityText(payload.reference, 60) || undefined,
+      ...(typeof payload.xp === "number" && Number.isFinite(payload.xp) && payload.xp >= 0 ? { xp: Math.round(payload.xp) } : {}),
+      ...(typeof payload.level === "number" && Number.isInteger(payload.level) && payload.level > 0 ? { level: payload.level } : {}),
+      ...(validActivityText(payload.act, 80) ? { act: validActivityText(payload.act, 80) } : {}),
+      ...(validActivityText(payload.mission, 100) ? { mission: validActivityText(payload.mission, 100) } : {}),
       ...(payload.category === "note_shared" ? { category: "note_shared" as const } : {}),
     };
   } catch {
@@ -499,16 +508,28 @@ function parseActivityPayload(value: string) {
   }
 }
 
-export async function recordSocialActivity(userId: string, kind: SocialActivityKind, payload: { title: string; detail?: string; reference?: string }) {
+export async function recordSocialActivity(userId: string, kind: SocialActivityKind, payload: { title: string; detail?: string; reference?: string; xp?: number; level?: number; act?: string; mission?: string; notifyFriends?: boolean }) {
   const privacy = await getSocialPrivacy(userId);
   const safePayload = {
     title: validActivityText(payload.title, 100),
     detail: validActivityText(payload.detail, 180),
     reference: validActivityText(payload.reference, 60),
+    ...(typeof payload.xp === "number" && Number.isFinite(payload.xp) && payload.xp >= 0 ? { xp: Math.round(payload.xp) } : {}),
+    ...(typeof payload.level === "number" && Number.isInteger(payload.level) && payload.level > 0 ? { level: payload.level } : {}),
+    ...(validActivityText(payload.act, 80) ? { act: validActivityText(payload.act, 80) } : {}),
+    ...(validActivityText(payload.mission, 100) ? { mission: validActivityText(payload.mission, 100) } : {}),
   };
-  await env.DB.prepare("INSERT INTO social_activities (actor_id, kind, payload_json, visibility, created_at) VALUES (?, ?, ?, ?, ?)")
-    .bind(userId, kind, JSON.stringify(safePayload), privacy.showActivities ? "friends" : "private", Date.now())
+  const now = Date.now();
+  const result = await env.DB.prepare("INSERT INTO social_activities (actor_id, kind, payload_json, visibility, created_at) VALUES (?, ?, ?, ?, ?)")
+    .bind(userId, kind, JSON.stringify(safePayload), privacy.showActivities ? "friends" : "private", now)
     .run();
+  const activityId = Number(result.meta.last_row_id);
+  if (privacy.showActivities && payload.notifyFriends && activityId > 0) {
+    await env.DB.prepare("INSERT INTO social_notifications (user_id, actor_id, kind, activity_id, created_at) SELECT CASE WHEN user_a_id = ? THEN user_b_id ELSE user_a_id END, ?, 'social_activity', ?, ? FROM friendships WHERE user_a_id = ? OR user_b_id = ?")
+      .bind(userId, userId, activityId, now, userId, userId)
+      .run();
+  }
+  return activityId;
 }
 
 export async function listSocialFeed(viewerId: string): Promise<SocialActivity[]> {
@@ -556,10 +577,15 @@ export async function listSocialNotifications(userId: string): Promise<SocialNot
   const rows = await env.DB.prepare("SELECT social_notifications.id, social_notifications.kind, social_notifications.activity_id, social_notifications.read_at, social_notifications.created_at, users.public_handle, users.display_name, users.profile_photo, social_activities.payload_json FROM social_notifications JOIN users ON users.id = social_notifications.actor_id LEFT JOIN social_activities ON social_activities.id = social_notifications.activity_id WHERE social_notifications.user_id = ? AND NOT EXISTS (SELECT 1 FROM user_blocks WHERE (user_blocks.blocker_id = ? AND user_blocks.blocked_id = social_notifications.actor_id) OR (user_blocks.blocker_id = social_notifications.actor_id AND user_blocks.blocked_id = ?)) ORDER BY social_notifications.read_at IS NOT NULL, social_notifications.created_at DESC LIMIT 30")
     .bind(userId, userId, userId)
     .all<{ id: number; kind: SocialNotification["kind"]; activity_id: number | null; read_at: number | null; created_at: number; payload_json: string | null } & Pick<SocialUserRow, "public_handle" | "display_name" | "profile_photo">>();
-  return rows.results.map((row) => ({ id: row.id, kind: row.kind, createdAt: row.created_at, read: Boolean(row.read_at), actor: contactFromRow(row), ...(row.kind === "reaction" && row.payload_json ? { activityTitle: parseActivityPayload(row.payload_json).title } : {}) }));
+  return rows.results.map((row) => ({ id: row.id, kind: row.kind, createdAt: row.created_at, read: Boolean(row.read_at), actor: contactFromRow(row), ...(row.activity_id ? { activityId: row.activity_id } : {}), ...((row.kind === "reaction" || row.kind === "social_activity") && row.payload_json ? { activityTitle: parseActivityPayload(row.payload_json).title } : {}) }));
 }
 
 export async function markSocialNotificationsRead(userId: string) {
   await ensureSocialUser(userId);
   await env.DB.prepare("UPDATE social_notifications SET read_at = ? WHERE user_id = ? AND read_at IS NULL").bind(Date.now(), userId).run();
+}
+
+export async function markSocialNotificationRead(userId: string, notificationId: number) {
+  await ensureSocialUser(userId);
+  await env.DB.prepare("UPDATE social_notifications SET read_at = ? WHERE id = ? AND user_id = ? AND read_at IS NULL").bind(Date.now(), notificationId, userId).run();
 }
