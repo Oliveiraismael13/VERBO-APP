@@ -75,7 +75,7 @@ const defaults = {
   profileVisibility: "friends" as const,
   showProgress: true,
   showFavorites: false,
-  showActivities: false,
+  showActivities: true,
   showStats: true,
   allowFriendRequests: true,
 };
@@ -88,7 +88,7 @@ export async function ensureSocialSchema() {
 
   await env.DB.batch([
     env.DB.prepare("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_public_handle ON users(public_handle) WHERE public_handle IS NOT NULL"),
-    env.DB.prepare("CREATE TABLE IF NOT EXISTS social_privacy_settings (user_id TEXT PRIMARY KEY NOT NULL, profile_visibility TEXT NOT NULL DEFAULT 'friends' CHECK(profile_visibility IN ('friends', 'private')), show_progress INTEGER NOT NULL DEFAULT 1 CHECK(show_progress IN (0, 1)), show_favorites INTEGER NOT NULL DEFAULT 0 CHECK(show_favorites IN (0, 1)), show_activities INTEGER NOT NULL DEFAULT 0 CHECK(show_activities IN (0, 1)), show_stats INTEGER NOT NULL DEFAULT 1 CHECK(show_stats IN (0, 1)), allow_friend_requests INTEGER NOT NULL DEFAULT 1 CHECK(allow_friend_requests IN (0, 1)), updated_at INTEGER NOT NULL, FOREIGN KEY (user_id) REFERENCES users(id))"),
+    env.DB.prepare("CREATE TABLE IF NOT EXISTS social_privacy_settings (user_id TEXT PRIMARY KEY NOT NULL, profile_visibility TEXT NOT NULL DEFAULT 'friends' CHECK(profile_visibility IN ('friends', 'private')), show_progress INTEGER NOT NULL DEFAULT 1 CHECK(show_progress IN (0, 1)), show_favorites INTEGER NOT NULL DEFAULT 0 CHECK(show_favorites IN (0, 1)), show_activities INTEGER NOT NULL DEFAULT 1 CHECK(show_activities IN (0, 1)), show_stats INTEGER NOT NULL DEFAULT 1 CHECK(show_stats IN (0, 1)), allow_friend_requests INTEGER NOT NULL DEFAULT 1 CHECK(allow_friend_requests IN (0, 1)), updated_at INTEGER NOT NULL, FOREIGN KEY (user_id) REFERENCES users(id))"),
     env.DB.prepare("CREATE TABLE IF NOT EXISTS friend_requests (id INTEGER PRIMARY KEY AUTOINCREMENT, sender_id TEXT NOT NULL, recipient_id TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'accepted', 'declined', 'cancelled')), created_at INTEGER NOT NULL, responded_at INTEGER, FOREIGN KEY (sender_id) REFERENCES users(id), FOREIGN KEY (recipient_id) REFERENCES users(id), CHECK(sender_id <> recipient_id))"),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_friend_requests_recipient_status ON friend_requests(recipient_id, status)"),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_friend_requests_sender_status ON friend_requests(sender_id, status)"),
@@ -125,7 +125,7 @@ export async function ensureSocialUser(userId: string): Promise<string> {
   }
   if (!publicHandle) throw new Error("Não foi possível criar o identificador público");
 
-  await env.DB.prepare("INSERT OR IGNORE INTO social_privacy_settings (user_id, updated_at) VALUES (?, ?)").bind(userId, Date.now()).run();
+  await env.DB.prepare("INSERT OR IGNORE INTO social_privacy_settings (user_id, show_activities, updated_at) VALUES (?, 1, ?)").bind(userId, Date.now()).run();
   return publicHandle;
 }
 

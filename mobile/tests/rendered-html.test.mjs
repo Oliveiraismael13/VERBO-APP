@@ -166,6 +166,8 @@ test("keeps social privacy behind authenticated public identifiers", async () =>
   assert.match(privacy, /currentUser\(\)/);
   assert.match(privacy, /allowFriendRequests/);
   assert.match(privacy, /showFavorites/);
+  assert.match(social, /showActivities: true/);
+  assert.match(social, /show_activities, updated_at\) VALUES \(\?, 1, \?\)/);
   assert.doesNotMatch(privacy, /email/);
   assert.match(social, /areFriends/);
   assert.match(social, /respondToFriendRequest/);
@@ -186,6 +188,7 @@ test("keeps social privacy behind authenticated public identifiers", async () =>
   assert.doesNotMatch(friends, /email/);
   assert.doesNotMatch(profile, /email/);
   assert.match(migration, /CREATE TABLE `social_privacy_settings`/);
+  assert.match(migration, /`show_activities` integer DEFAULT 1/);
   assert.match(socialSafetyMigration, /CREATE TABLE `social_notifications`/);
   assert.match(socialSafetyMigration, /CREATE TABLE `user_blocks`/);
 });

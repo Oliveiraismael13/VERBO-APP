@@ -7,7 +7,7 @@ CREATE TABLE `social_privacy_settings` (
 	`profile_visibility` text DEFAULT 'friends' NOT NULL CHECK(`profile_visibility` IN ('friends', 'private')),
 	`show_progress` integer DEFAULT 1 NOT NULL CHECK(`show_progress` IN (0, 1)),
 	`show_favorites` integer DEFAULT 0 NOT NULL CHECK(`show_favorites` IN (0, 1)),
-	`show_activities` integer DEFAULT 0 NOT NULL CHECK(`show_activities` IN (0, 1)),
+	`show_activities` integer DEFAULT 1 NOT NULL CHECK(`show_activities` IN (0, 1)),
 	`show_stats` integer DEFAULT 1 NOT NULL CHECK(`show_stats` IN (0, 1)),
 	`allow_friend_requests` integer DEFAULT 1 NOT NULL CHECK(`allow_friend_requests` IN (0, 1)),
 	`updated_at` integer NOT NULL,
