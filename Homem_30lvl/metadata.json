@@ -1,0 +1,36 @@
+{
+  "group_id": "b8bab002-821b-4688-8cd4-ec19fdac593c",
+  "states": [
+    {
+      "character": {
+        "id": "4825def9-4df5-4a3b-a1fb-869916221088",
+        "name": "Tire o escudo apenas",
+        "prompt": "Homem com uma espada, escudo, sandalhas, coura\u00e7a, capacete e cinto",
+        "size": {
+          "width": 40,
+          "height": 40
+        },
+        "template_id": "mannequin",
+        "directions": 8,
+        "view": "low top-down",
+        "created_at": "2026-08-24T12:03:23.367722+00:00"
+      },
+      "folder": "Tire_o_escudo_apenas",
+      "frames": {
+        "rotations": {
+          "south": "Tire_o_escudo_apenas/rotations/south.png",
+          "south-east": "Tire_o_escudo_apenas/rotations/south-east.png",
+          "east": "Tire_o_escudo_apenas/rotations/east.png",
+          "north-east": "Tire_o_escudo_apenas/rotations/north-east.png",
+          "north": "Tire_o_escudo_apenas/rotations/north.png",
+          "north-west": "Tire_o_escudo_apenas/rotations/north-west.png",
+          "west": "Tire_o_escudo_apenas/rotations/west.png",
+          "south-west": "Tire_o_escudo_apenas/rotations/south-west.png"
+        },
+        "animations": {}
+      }
+    }
+  ],
+  "export_version": "3.1",
+  "export_date": "2026-08-24T12:05:41.303648"
+}
