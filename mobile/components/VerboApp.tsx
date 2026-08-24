@@ -6,6 +6,7 @@ import { campaignActs, missionForChapter, narrativeForMission } from "../lib/cam
 import { resizeProfilePhoto } from "../lib/profile-photo";
 import { findBiblePassages, parseBibleReference, recognizePortugueseText, type BibleOcrCandidate } from "../lib/bible-ocr";
 import { secondaryMissionById, secondaryMissions, secondaryMissionProgress, type SecondaryMission } from "../lib/secondary-missions";
+import { mainMissionScrollForChapter } from "../lib/main-mission-scrolls";
 
 type Screen = "journey" | "bible" | "plans" | "camera" | "studies" | "social" | "result";
 type BibleVerse = { number: number; text: string };
@@ -175,6 +176,8 @@ export default function VerboApp() {
   const replayChapterComplete = Boolean(replayingSecondaryMission && activeSecondaryStatus?.replayChapters.includes(`${bookSlug}:${chapter}`));
   const insightMission = secondaryMissions.find((mission) => mission.bookSlug === bookSlug && Boolean(mission.insights[chapter]));
   const chapterInsightsUnlocked = progress.completed.includes(`${bookSlug}:${chapter}`);
+  const primaryMissionScroll = book && missionForChapter(bookSlug, chapter) ? mainMissionScrollForChapter(bookSlug, chapter, book.testament) : null;
+  const secondaryMissionUnlocked = Boolean(insightMission && secondaryMissionStates.find((state) => state.id === insightMission.id)?.unlocked);
 
   const verseKey = `${bookSlug}:${chapter}:${selectedVerse}`;
   const selectedVerseKeys = useMemo(() => selectedVerses.map((number) => `${bookSlug}:${chapter}:${number}`), [bookSlug, chapter, selectedVerses]);
@@ -843,7 +846,8 @@ export default function VerboApp() {
             })}
           </article>
 
-          {insightMission && (chapterInsightsUnlocked || activeSecondaryMission?.id === insightMission.id) && <MissionInsights insights={insightMission.insights[chapter]} chapter={chapter} unlocked={chapterInsightsUnlocked} />}
+          {primaryMissionScroll && (missionMode || (chapterInsightsUnlocked && !insightMission)) && <MissionInsights insights={[primaryMissionScroll]} chapter={chapter} unlocked={chapterInsightsUnlocked} source="primary" language={book?.testament === "old" ? "hebraico bíblico" : "grego bíblico"} />}
+          {insightMission && (secondaryMissionUnlocked || activeSecondaryMission?.id === insightMission.id) && (chapterInsightsUnlocked || activeSecondaryMission?.id === insightMission.id) && <MissionInsights insights={insightMission.insights[chapter]} chapter={chapter} unlocked={chapterInsightsUnlocked} source="secondary" language="grego bíblico" />}
 
           {(missionMode || Boolean(activeSecondaryMission && activeSecondaryMission.bookSlug === bookSlug && chapter >= activeSecondaryMission.from && chapter <= activeSecondaryMission.to)) && <button className={`chapter-complete ${(replayingSecondaryMission ? replayChapterComplete : progress.completed.includes(`${bookSlug}:${chapter}`)) ? "done" : ""}`} onClick={completeChapter} disabled={savingChapter || (replayingSecondaryMission ? replayChapterComplete : progress.completed.includes(`${bookSlug}:${chapter}`))}>
             <span>{replayingSecondaryMission ? replayChapterComplete ? "✓" : "⚔" : progress.completed.includes(`${bookSlug}:${chapter}`) ? "✓" : "⚔"}</span>
@@ -1038,10 +1042,11 @@ function MissionStoryPanel({ context, progress }: { context: ReturnType<typeof m
   return <aside className="mission-story-panel"><div><p>MISSÃO {index} DE {context.act.missions.length} · ATO {context.act.number}</p><h2>{context.mission.title}</h2><span>{narrative.introduction}</span></div><div className="mission-story-progress"><div className="mission-stage-progress"><small>CAPÍTULOS PARA CONCLUSÃO <HelpButton title="Capítulos para conclusão" text="Marque os capítulos da missão como lidos para avançar. Ao concluir todos, a próxima missão é liberada." /></small><b>{progressInStage.done}/{progressInStage.total}</b><i><em style={{ width: `${progressInStage.percent}%` }} /></i></div><div><small>ATO</small><b>{progressInAct.done}/{progressInAct.total}</b><i><em style={{ width: `${progressInAct.percent}%` }} /></i></div></div><blockquote><small>CONTEXTO HISTÓRICO</small>{narrative.historicalContext}</blockquote></aside>;
 }
 
-function MissionInsights({ insights, chapter, unlocked }: { insights: SecondaryMission["insights"][number]; chapter: number; unlocked: boolean }) {
+function MissionInsights({ insights, chapter, unlocked, source, language }: { insights: SecondaryMission["insights"][number]; chapter: number; unlocked: boolean; source: "primary" | "secondary"; language: "hebraico bíblico" | "grego bíblico" }) {
   const [open, setOpen] = useState(false);
-  if (!unlocked) return <aside className="mission-insights mission-insights-locked"><div className="scroll-seal">✦</div><div><small>PERGAMINHOS DE ESTUDO · MATEUS {chapter}</small><b>{insights.length} {insights.length === 1 ? "pergaminho aguarda" : "pergaminhos aguardam"} você</b><p>Conclua este capítulo para romper o selo e guardar as descobertas na sua Bíblia.</p></div></aside>;
-  return <aside className={`mission-insights mission-scrolls ${open ? "open" : ""}`}><button onClick={() => setOpen(!open)} aria-expanded={open}><span className="scroll-mark">▤</span><div><small>PERGAMINHOS DE ESTUDO · MATEUS {chapter}</small><b>{open ? "Recolher pergaminhos" : `${insights.length} ${insights.length === 1 ? "pergaminho descoberto" : "pergaminhos descobertos"}`}</b></div><i>{open ? "−" : "+"}</i></button>{open && <div className="mission-insight-list">{insights.map((insight) => <article key={insight.title} className="original-word"><small>{insight.kind} · {insight.reference}</small><h3>{insight.title}</h3><div className="original-language"><b>{insight.original}</b><span>Transliteração · {insight.transliteration}</span><em><small>Significado no grego bíblico</small>{insight.meaning}</em></div><p>{insight.content}</p></article>)}</div>}</aside>;
+  const collection = source === "primary" ? "GRANDE JORNADA" : "MISSÃO SECUNDÁRIA";
+  if (!unlocked) return <aside className={`mission-insights mission-insights-locked ${source}-scroll`}><div className="scroll-seal">✦</div><div><small>PERGAMINHO · {collection} · CAPÍTULO {chapter}</small><b>{insights.length} {insights.length === 1 ? "pergaminho aguarda" : "pergaminhos aguardam"} você</b><p>Conclua este capítulo para romper o selo e guardar esta descoberta na sua Bíblia.</p></div></aside>;
+  return <aside className={`mission-insights mission-scrolls ${source}-scroll ${open ? "open" : ""}`}><button onClick={() => setOpen(!open)} aria-expanded={open}><span className="scroll-mark">▤</span><div><small>PERGAMINHOS · {collection} · CAPÍTULO {chapter}</small><b>{open ? "Recolher pergaminhos" : `${insights.length} ${insights.length === 1 ? "pergaminho descoberto" : "pergaminhos descobertos"}`}</b></div><i>{open ? "−" : "+"}</i></button>{open && <div className="mission-insight-list">{insights.map((insight) => <article key={insight.title} className="original-word"><small>{insight.kind} · {insight.reference}</small><h3>{insight.title}</h3><div className="original-language"><b>{insight.original}</b><span>Transliteração · {insight.transliteration}</span><em><small>Significado no {language}</small>{insight.meaning}</em></div><p>{insight.content}</p></article>)}</div>}</aside>;
 }
 
 function SecondaryMissionStoryPanel({ mission, progress, status }: { mission: SecondaryMission; progress: PlayerProgress; status: SecondaryMissionStatus | null }) {
