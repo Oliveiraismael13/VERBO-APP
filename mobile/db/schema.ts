@@ -160,6 +160,25 @@ export const socialNotifications = sqliteTable("social_notifications", {
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
 }, (t) => [index("idx_social_notifications_user_read_created").on(t.userId, t.readAt, t.createdAt)]);
 
+export const coopMissionSessions = sqliteTable("coop_mission_sessions", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  inviterId: text("inviter_id").notNull().references(() => users.id),
+  partnerId: text("partner_id").notNull().references(() => users.id),
+  dailyGoal: integer("daily_goal").notNull(),
+  status: text("status", { enum: ["pending", "active", "declined", "ended"] }).notNull().default("pending"),
+  currentRound: integer("current_round").notNull().default(1),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  acceptedAt: integer("accepted_at", { mode: "timestamp" }),
+  endedAt: integer("ended_at", { mode: "timestamp" }),
+}, (t) => [index("idx_coop_mission_sessions_inviter_status").on(t.inviterId, t.status), index("idx_coop_mission_sessions_partner_status").on(t.partnerId, t.status)]);
+
+export const coopMissionMembers = sqliteTable("coop_mission_members", {
+  sessionId: integer("session_id").notNull().references(() => coopMissionSessions.id),
+  userId: text("user_id").notNull().references(() => users.id),
+  roundProgress: integer("round_progress").notNull().default(0),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+}, (t) => [primaryKey({ columns: [t.sessionId, t.userId] })]);
+
 export const userBlocks = sqliteTable("user_blocks", {
   blockerId: text("blocker_id").notNull().references(() => users.id),
   blockedId: text("blocked_id").notNull().references(() => users.id),

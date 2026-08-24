@@ -6,6 +6,7 @@ import { levelForXp } from "../../../lib/xp";
 import { campaignActs, missionForChapter as findCampaignMission, type CampaignAct } from "../../../lib/campaign";
 import { recordSocialActivity } from "../../../lib/social";
 import { secondaryMissionById } from "../../../lib/secondary-missions";
+import { CoopMissionLockedError, ensureCoopChapterCanBeCompleted, getCoopMissionState, recordCoopChapter } from "../../../lib/coop-mission";
 
 export const dynamic = "force-dynamic";
 
@@ -120,10 +121,11 @@ async function ensureUser(user: { id: string; email: string }) {
 }
 
 async function loadProgress(userId: string) {
-  const [progress, chapters, achievements] = await Promise.all([
+  const [progress, chapters, achievements, coop] = await Promise.all([
     env.DB.prepare("SELECT xp, level, coins, streak, last_read_date, last_note_date, streak_before_break, missed_streak_days FROM user_progress WHERE user_id = ?").bind(userId).first<ProgressRow>(),
     env.DB.prepare("SELECT book_slug, chapter FROM completed_chapters WHERE user_id = ? ORDER BY completed_at DESC").bind(userId).all<{ book_slug: string; chapter: number }>(),
     env.DB.prepare("SELECT code FROM user_achievements WHERE user_id = ? ORDER BY unlocked_at DESC").bind(userId).all<{ code: string }>(),
+    getCoopMissionState(userId),
   ]);
   return {
     xp: progress?.xp ?? 0,
@@ -135,6 +137,7 @@ async function loadProgress(userId: string) {
     dailyNoteCompleted: progress?.last_note_date === todayInBrazil(),
     completed: chapters.results.map((item) => `${item.book_slug}:${item.chapter}`),
     achievements: achievements.results.map((item) => item.code),
+    coop,
   };
 }
 
@@ -255,12 +258,13 @@ export async function POST(request: Request) {
     const missionCompleted = Boolean(mission && completedBefore === mission.to - mission.from);
     const activeSecondaryRow = await env.DB.prepare("SELECT mission_id FROM user_secondary_missions WHERE user_id = ? AND active = 1 AND completed_at IS NULL").bind(user.id).first<{ mission_id: string }>();
     const secondaryMission = activeSecondaryRow ? secondaryMissionById(activeSecondaryRow.mission_id) : null;
+    const coopBefore = secondaryMission ? null : await ensureCoopChapterCanBeCompleted(user.id);
     const secondaryCompletedBefore = secondaryMission ? (await env.DB.prepare("SELECT COUNT(*) AS total FROM completed_chapters WHERE user_id = ? AND book_slug = ? AND chapter BETWEEN ? AND ?").bind(user.id, secondaryMission.bookSlug, secondaryMission.from, secondaryMission.to).first<{ total: number }>())?.total ?? 0 : 0;
     const secondaryMissionCompleted = Boolean(secondaryMission && body.bookSlug === secondaryMission.bookSlug && body.chapter >= secondaryMission.from && body.chapter <= secondaryMission.to && secondaryCompletedBefore === secondaryMission.to - secondaryMission.from);
     const act = actForChapter(body.bookSlug, body.chapter);
     const actCompleted = Boolean(act && await completesAct(user.id, act, body.bookSlug, body.chapter));
     const baseXpGain = actCompleted ? 100 : missionCompleted || secondaryMissionCompleted ? 80 : 40;
-    const xpGain = xpWithStreakBonus(baseXpGain, nextStreak);
+    const xpGain = coopBefore ? Math.ceil(xpWithStreakBonus(baseXpGain, nextStreak) * 1.05) : xpWithStreakBonus(baseXpGain, nextStreak);
     const coinGain = actCompleted ? 10 : missionCompleted || secondaryMissionCompleted ? 8 : 4;
     const nextXp = (current?.xp ?? 0) + xpGain;
     const nextLevel = levelForXp(nextXp);
@@ -272,6 +276,8 @@ export async function POST(request: Request) {
         .bind(nextXp, nextLevel, coinGain, nextStreak, streakBeforeBreak, missedStreakDays, today, now, user.id),
       ...(secondaryMissionCompleted && secondaryMission ? [env.DB.prepare("UPDATE user_secondary_missions SET active = 0, completed_at = ? WHERE user_id = ? AND mission_id = ?").bind(now, user.id, secondaryMission.id)] : []),
     ]);
+
+    const coopRound = coopBefore ? await recordCoopChapter(user.id) : null;
 
     const count = await env.DB.prepare("SELECT COUNT(*) AS total FROM completed_chapters WHERE user_id = ?").bind(user.id).first<{ total: number }>();
     const unlocked: string[] = [];
@@ -299,8 +305,9 @@ export async function POST(request: Request) {
       console.error("Falha ao registrar atividade social", error);
     }
 
-    return withCors(Response.json({ ...(await loadProgress(user.id)), reward: { xp: xpGain, coins: coinGain, levelUp: nextLevel > (current?.level ?? 1), unlocked, missionCompleted: Boolean(missionCompleted || secondaryMissionCompleted), missionTitle: missionCompleted ? mission?.title : secondaryMissionCompleted ? secondaryMission?.title : undefined, secondaryMissionCompleted, actCompleted, actTitle: actCompleted ? act?.title : undefined } }));
+    return withCors(Response.json({ ...(await loadProgress(user.id)), reward: { xp: xpGain, coins: coinGain, levelUp: nextLevel > (current?.level ?? 1), unlocked, missionCompleted: Boolean(missionCompleted || secondaryMissionCompleted), missionTitle: missionCompleted ? mission?.title : secondaryMissionCompleted ? secondaryMission?.title : undefined, secondaryMissionCompleted, actCompleted, actTitle: actCompleted ? act?.title : undefined, coopBonus: Boolean(coopBefore), coopRoundCompleted: Boolean(coopRound?.roundCompleted) } }));
   } catch (error) {
+    if (error instanceof CoopMissionLockedError) return withCors(Response.json({ error: error.message, coopLocked: true }, { status: 423 }));
     console.error("Falha ao concluir capítulo", error);
     return withCors(Response.json({ error: "Não foi possível salvar o progresso" }, { status: 500 }));
   }

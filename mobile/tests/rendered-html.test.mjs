@@ -88,6 +88,10 @@ test("contains the authenticated Verbo application routes", async () => {
   assert.match(app, /openNotification/);
   assert.match(app, /social-activity-reward/);
   assert.match(app, /returnToSocial/);
+  assert.match(app, /CoopMissionPanel/);
+  assert.match(app, /Jornada em dupla/);
+  assert.match(app, /\+5% XP/);
+  assert.match(app, /\/api\/coop-mission/);
   assert.match(app, /feedOrder/);
   assert.match(app, /Celebradas/);
   assert.match(app, /\/api\/social\/friends/);
@@ -188,6 +192,8 @@ assert.match(app, /A Edição Chama da Fé não é usada nas missões/);
   assert.match(progressRoute, /const baseXpGain = actCompleted \? 100 : missionCompleted \|\| secondaryMissionCompleted \? 80 : 40/);
   assert.match(progressRoute, /Concluiu o Ato \$\{act\.number\}/);
   assert.match(progressRoute, /notifyFriends: true/);
+  assert.match(progressRoute, /CoopMissionLockedError/);
+  assert.match(progressRoute, /Math\.ceil\(xpWithStreakBonus\(baseXpGain, nextStreak\) \* 1\.05\)/);
   assert.match(progressRoute, /function xpWithStreakBonus/);
   assert.match(progressRoute, /const coinGain = actCompleted \? 10 : missionCompleted \|\| secondaryMissionCompleted \? 8 : 4/);
   assert.match(secondaryMissionsRoute, /const replaying = Boolean\(record\?\.active && record\?\.completed_at\)/);
@@ -265,6 +271,9 @@ test("keeps social privacy behind authenticated public identifiers", async () =>
   const socialActivityNotificationsMigration = await text("drizzle/0015_social_activity_notifications.sql");
   const sharedNotesMigration = await text("drizzle/0013_social_shared_notes.sql");
   const noteDatesMigration = await text("drizzle/0014_note_dates.sql");
+  const coopMigration = await text("drizzle/0016_coop_mission.sql");
+  const coopRoute = await text("app/api/coop-mission/route.ts");
+  const coop = await text("lib/coop-mission.ts");
   const sharedNotes = await text("app/api/social/notes/route.ts");
   const library = await text("app/api/library/route.ts");
 
@@ -320,6 +329,14 @@ test("keeps social privacy behind authenticated public identifiers", async () =>
   assert.match(library, /note_dates_json/);
   assert.match(secondary, /user_secondary_missions/);
   assert.match(secondary, /coins - \?/);
+  assert.match(coopMigration, /coop_mission_sessions/);
+  assert.match(coopMigration, /coop_mission_members/);
+  assert.match(coop, /daily_goal BETWEEN 3 AND 10/);
+  assert.match(coop, /areFriends/);
+  assert.match(coop, /waitingForPartner/);
+  assert.match(coop, /recordCoopChapter/);
+  assert.match(coopRoute, /inviteToCoopMission/);
+  assert.match(coopRoute, /respondToCoopMission/);
 });
 
 test("is installable as a mobile application", async () => {

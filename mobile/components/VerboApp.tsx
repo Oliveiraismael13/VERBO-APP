@@ -43,13 +43,15 @@ const translations = {
 
 type Translation = keyof typeof translations;
 type LastReading = { bookSlug: string; chapter: number };
-type PlayerProgress = { xp: number; level: number; coins: number; streak: number; completed: string[]; achievements: string[]; dailyNoteCompleted?: boolean; xpBonusPercent?: number; missedStreakDays?: number; displayName?: string; profilePhoto?: string; favorites?: string[]; highlights?: Record<string, string>; notes?: Record<string, string>; noteDates?: Record<string, number>; plans?: string[]; shared?: string[]; foundScrolls?: string[]; lastReading?: LastReading | null };
-type ChapterReward = { xp: number; coins: number; levelUp: boolean; unlocked: string[]; scrollsUnlocked?: number; scrollXp?: number; firstScrollDiscovery?: boolean; missionCompleted?: boolean; missionTitle?: string; secondaryMissionCompleted?: boolean; replayCompleted?: boolean; actCompleted?: boolean; actTitle?: string };
+type CoopContact = { publicHandle: string; displayName: string; profilePhoto: string };
+type CoopMissionState = { status: "none" | "incoming" | "outgoing" | "active"; sessionId?: number; dailyGoal?: number; round?: number; myProgress?: number; partnerProgress?: number; waitingForPartner?: boolean; partner?: CoopContact };
+type PlayerProgress = { xp: number; level: number; coins: number; streak: number; completed: string[]; achievements: string[]; dailyNoteCompleted?: boolean; xpBonusPercent?: number; missedStreakDays?: number; displayName?: string; profilePhoto?: string; favorites?: string[]; highlights?: Record<string, string>; notes?: Record<string, string>; noteDates?: Record<string, number>; plans?: string[]; shared?: string[]; foundScrolls?: string[]; lastReading?: LastReading | null; coop?: CoopMissionState };
+type ChapterReward = { xp: number; coins: number; levelUp: boolean; unlocked: string[]; scrollsUnlocked?: number; scrollXp?: number; firstScrollDiscovery?: boolean; missionCompleted?: boolean; missionTitle?: string; secondaryMissionCompleted?: boolean; replayCompleted?: boolean; actCompleted?: boolean; actTitle?: string; coopBonus?: boolean; coopRoundCompleted?: boolean };
 type ScrollDiscovery = { count: number; xp: number; first: boolean };
 type DeveloperGift = { id: number; amount: number; message: string };
 type SecondaryMissionStatus = { id: string; unlocked: boolean; active: boolean; completed: boolean; replaying: boolean; replayChapters: string[]; done: number; total: number };
 
-const emptyProgress: PlayerProgress = { xp: 0, level: 1, coins: 0, streak: 0, completed: [], achievements: [], dailyNoteCompleted: false };
+const emptyProgress: PlayerProgress = { xp: 0, level: 1, coins: 0, streak: 0, completed: [], achievements: [], dailyNoteCompleted: false, coop: { status: "none" } };
 
 function secondaryStatusProgress(mission: SecondaryMission, progress: PlayerProgress, status?: SecondaryMissionStatus | null) {
   if (status?.replaying) {
@@ -493,7 +495,7 @@ export default function VerboApp() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ bookSlug, chapter }),
       });
-      const data = await response.json();
+      const data = await response.json() as PlayerProgress & { reward?: ChapterReward; error?: string; coopLocked?: boolean };
       if (!response.ok) throw new Error(data.error);
       const { reward: earned, ...nextProgress } = data;
       const secondaryScrolls = secondaryChapterActive && activeSecondaryMission ? activeSecondaryMission.insights[chapter].map((_, index) => `secondary:${activeSecondaryMission.id}:${chapter}:${index}`) : [];
@@ -516,8 +518,8 @@ export default function VerboApp() {
         if (earned.secondaryMissionCompleted) void loadSecondaryMissions();
         advanceToNextChapter(updatedProgress);
       }
-    } catch {
-      notify("Não foi possível salvar o progresso");
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Não foi possível salvar o progresso");
     } finally {
       setSavingChapter(false);
     }
@@ -859,6 +861,7 @@ export default function VerboApp() {
   const currentVerses = book?.chapters[chapter - 1] ?? [];
   const catholicEdition = translations[translation].canon === "catholic-73";
   const oldTestamentBookCount = catholicEdition ? 46 : 39;
+  const updateCoopMission = useCallback((coop: CoopMissionState) => setProgress((current) => ({ ...current, coop })), []);
   return (
     <main className={`app-shell rpg-shell ${dark ? "dark" : ""} ${missionMode || activeSecondaryMission ? "mission-active" : ""} ${screen === "journey" ? "journey-surface" : screen === "social" ? "social-surface" : ""}`}>
       {screen !== "camera" && (
@@ -877,7 +880,7 @@ export default function VerboApp() {
         </header>
       )}
 
-      {screen === "journey" && <JourneyPage manifest={manifest} progress={progress} activeSecondaryMission={activeSecondaryMission} activeSecondaryStatus={activeSecondaryStatus} replayingSecondaryMission={replayingSecondaryMission} onContinue={openMissionBriefing} onContinueSecondary={beginSecondaryMission} onOpenBible={() => { setMissionMode(false); go("bible"); }} onRestoreStreak={() => void restoreStreak()} />}
+      {screen === "journey" && <JourneyPage manifest={manifest} progress={progress} activeSecondaryMission={activeSecondaryMission} activeSecondaryStatus={activeSecondaryStatus} replayingSecondaryMission={replayingSecondaryMission} onContinue={openMissionBriefing} onContinueSecondary={beginSecondaryMission} onOpenBible={() => { setMissionMode(false); go("bible"); }} onRestoreStreak={() => void restoreStreak()} onCoopChange={updateCoopMission} />}
 
       {screen === "bible" && (
         <section className="reader page-in" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd} onClick={(event) => { if (!(event.target as HTMLElement).closest("[data-verse], .verse-tools")) { setSelectedVerses([]); setVerseSelected(false); setHighlightPickerOpen(false); } }}>
@@ -1027,6 +1030,60 @@ export default function VerboApp() {
   );
 }
 
+function CoopMissionPanel({ coop, onChange }: { coop: CoopMissionState; onChange: (coop: CoopMissionState) => void }) {
+  const [friends, setFriends] = useState<CoopContact[]>([]);
+  const [friend, setFriend] = useState("");
+  const [goal, setGoal] = useState(3);
+  const [working, setWorking] = useState(false);
+  const [message, setMessage] = useState("");
+
+  const load = useCallback(async () => {
+    const response = await fetch("/api/coop-mission");
+    if (!response.ok) return;
+    const data = await response.json() as { state?: CoopMissionState; friends?: CoopContact[] };
+    if (data.state) onChange(data.state);
+    setFriends(data.friends || []);
+  }, [onChange]);
+
+  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    if (coop.status === "none") return;
+    const timer = window.setInterval(() => void load(), 12_000);
+    return () => window.clearInterval(timer);
+  }, [coop.status, load]);
+
+  const act = async (action: "invite" | "accept" | "decline" | "leave") => {
+    setWorking(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/coop-mission", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action, publicHandle: friend, dailyGoal: goal, sessionId: coop.sessionId }) });
+      const data = await response.json() as { state?: CoopMissionState; error?: string };
+      if (!response.ok) throw new Error(data.error || "Não foi possível atualizar a missão cooperativa.");
+      if (data.state) onChange(data.state);
+      if (action === "invite") setMessage("Convite enviado. A missão começa quando seu amigo aceitar.");
+      if (action === "accept") setMessage("Missão cooperativa iniciada. Leiam juntos para liberar cada rodada.");
+      if (action === "leave") setMessage("Você saiu da missão cooperativa.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Não foi possível atualizar a missão cooperativa.");
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const partnerName = coop.partner?.displayName || "seu amigo";
+  return <section className={`coop-mission-panel ${coop.status === "active" ? "active" : ""}`} aria-label="Missão principal cooperativa">
+    <div className="coop-mission-heading"><span>✦</span><div><p>MISSÃO PRINCIPAL · COOP</p><h2>Jornada em dupla</h2></div>{coop.status === "active" && <b>+5% XP</b>}</div>
+    {coop.status === "none" && <>
+      <p className="coop-mission-copy">Convide um amigo para avançarem juntos. Cada rodada libera uma nova meta somente quando os dois concluírem.</p>
+      {friends.length ? <div className="coop-mission-form"><label>Com quem você quer caminhar?<select value={friend} onChange={(event) => setFriend(event.target.value)}><option value="">Escolha um amigo</option>{friends.map((item) => <option key={item.publicHandle} value={item.publicHandle}>{item.displayName}</option>)}</select></label><label>Capítulos por rodada<select value={goal} onChange={(event) => setGoal(Number(event.target.value))}>{Array.from({ length: 8 }, (_, index) => index + 3).map((value) => <option key={value} value={value}>{value} capítulos</option>)}</select></label><button disabled={!friend || working} onClick={() => void act("invite")}>{working ? "Enviando…" : "Convidar para coop"}</button></div> : <p className="coop-mission-empty">Adicione um amigo no Social para iniciar uma jornada cooperativa.</p>}
+    </>}
+    {coop.status === "outgoing" && <div className="coop-mission-status"><b>Convite enviado para {partnerName}</b><span>Meta de {coop.dailyGoal} capítulos por rodada · aguardando a aceitação.</span><button disabled={working} onClick={() => void act("leave")}>Cancelar convite</button></div>}
+    {coop.status === "incoming" && <div className="coop-mission-status"><b>{partnerName} quer caminhar com você</b><span>Meta compartilhada: {coop.dailyGoal} capítulos por rodada. Cada capítulo concluído no coop concede +5% XP.</span><div><button className="coop-accept" disabled={working} onClick={() => void act("accept")}>Aceitar convite</button><button disabled={working} onClick={() => void act("decline")}>Recusar</button></div></div>}
+    {coop.status === "active" && <div className="coop-mission-status"><div className="coop-round-title"><b>Rodada {coop.round}</b><span>{coop.waitingForPartner ? `Aguardando ${partnerName}` : "Os próximos capítulos estão liberados"}</span></div><div className="coop-progress-grid"><div><small>VOCÊ</small><b>{coop.myProgress}/{coop.dailyGoal}</b><i><em style={{ width: `${Math.min(100, (coop.myProgress || 0) / (coop.dailyGoal || 1) * 100)}%` }} /></i></div><div><small>{partnerName.toUpperCase()}</small><b>{coop.partnerProgress}/{coop.dailyGoal}</b><i><em style={{ width: `${Math.min(100, (coop.partnerProgress || 0) / (coop.dailyGoal || 1) * 100)}%` }} /></i></div></div><p>{coop.waitingForPartner ? `Você concluiu sua parte. Quando ${partnerName} completar a dele, a próxima rodada será liberada.` : `Concluam ${coop.dailyGoal} capítulos cada um para abrir a próxima rodada.`}</p><button disabled={working} onClick={() => void act("leave")}>Sair do coop</button></div>}
+    {message && <small className="coop-mission-message">{message}</small>}
+  </section>;
+}
+
 function nextMainMission(manifest: BibleManifest | null, progress: PlayerProgress) {
   if (!manifest) return null;
   const completed = new Set(progress.completed);
@@ -1040,6 +1097,7 @@ function nextMainMission(manifest: BibleManifest | null, progress: PlayerProgres
 
 function isMainChapterUnlocked(manifest: BibleManifest | null, progress: PlayerProgress, slug: string, chapter: number) {
   if (!manifest) return false;
+  if (progress.coop?.status === "active" && progress.coop.waitingForPartner && !progress.completed.includes(`${slug}:${chapter}`)) return false;
   const completed = new Set(progress.completed);
   for (const item of manifest.books) {
     for (let currentChapter = 1; currentChapter <= item.chapterCount; currentChapter += 1) {
@@ -1060,7 +1118,7 @@ function isActComplete(act: (typeof campaignActs)[number], completed: string[]) 
   });
 }
 
-function JourneyPage({ manifest, progress, activeSecondaryMission, activeSecondaryStatus, replayingSecondaryMission, onContinue, onContinueSecondary, onOpenBible, onRestoreStreak }: { manifest: BibleManifest | null; progress: PlayerProgress; activeSecondaryMission: SecondaryMission | null; activeSecondaryStatus: SecondaryMissionStatus | null; replayingSecondaryMission: boolean; onContinue: () => void; onContinueSecondary: (mission: SecondaryMission) => void; onOpenBible: () => void; onRestoreStreak: () => void }) {
+function JourneyPage({ manifest, progress, activeSecondaryMission, activeSecondaryStatus, replayingSecondaryMission, onContinue, onContinueSecondary, onOpenBible, onRestoreStreak, onCoopChange }: { manifest: BibleManifest | null; progress: PlayerProgress; activeSecondaryMission: SecondaryMission | null; activeSecondaryStatus: SecondaryMissionStatus | null; replayingSecondaryMission: boolean; onContinue: () => void; onContinueSecondary: (mission: SecondaryMission) => void; onOpenBible: () => void; onRestoreStreak: () => void; onCoopChange: (coop: CoopMissionState) => void }) {
   const completedCount = progress.completed.length;
   const noteCompleted = Boolean(progress.dailyNoteCompleted);
   const xpProgress = getXpProgress(progress.xp);
@@ -1085,6 +1143,8 @@ function JourneyPage({ manifest, progress, activeSecondaryMission, activeSeconda
       <blockquote>{activeSecondaryMission ? activeSecondaryMission.subtitle : mission ? `Continue pela Palavra em ${mission.name} ${mission.chapter}.` : "Você concluiu a missão principal."}</blockquote>
       <div><span>{activeSecondaryMission && secondaryProgress ? `${secondaryProgress.done}/${secondaryProgress.total} capítulos · ${activeSecondaryMission.bookSlug === "mat" ? "Mateus" : activeSecondaryMission.bookSlug} ${activeSecondaryMission.from}–${activeSecondaryMission.to}` : mission ? `${mission.name} ${mission.chapter} · próximo capítulo` : "Missão concluída"}</span><button onClick={() => activeSecondaryMission ? onContinueSecondary(activeSecondaryMission) : onContinue()} disabled={!activeSecondaryMission && !mission}>{activeSecondaryMission ? "Continuar missão" : mission ? "Continuar missão" : "Jornada concluída"} →</button></div>
     </article>
+
+    <CoopMissionPanel coop={progress.coop || { status: "none" }} onChange={onCoopChange} />
 
     <div className="quest-heading"><div><p>TRILHA PRINCIPAL</p><h2>A Grande História</h2></div><span>{completedCount}/1.189</span></div>
     <div className="quest-map">
@@ -1160,7 +1220,7 @@ function RewardModal({ reward, level, close }: { reward: ChapterReward; level: n
   const completedMission = reward.missionTitle ? campaignActs.flatMap((act) => act.missions).find((mission) => mission.title === reward.missionTitle) : undefined;
   const secondaryMission = reward.secondaryMissionCompleted || reward.replayCompleted ? secondaryMissions.find((mission) => mission.title === reward.missionTitle) : undefined;
   const narrative = completedMission ? narrativeForMission(completedMission) : secondaryMission || null;
-  return <div className="reward-backdrop"><div className="reward-modal" role="dialog" aria-modal="true" aria-label="Recompensa da missão"><div className="reward-rays" /><span className="reward-chest">♛</span><p>{reward.replayCompleted ? `RELEITURA CONCLUÍDA · ${reward.missionTitle}` : reward.actCompleted ? `ATO CONCLUÍDO · ${reward.actTitle}` : reward.missionCompleted ? `MISSÃO CONCLUÍDA · ${reward.missionTitle}` : reward.levelUp ? "NOVO NÍVEL ALCANÇADO" : "CAPÍTULO CONCLUÍDO"}</p><h2>{reward.replayCompleted ? "Jornada revisitada" : reward.levelUp ? `Nível ${level}` : "Recompensa obtida"}</h2>{reward.replayCompleted ? <div><b>SEM<small>XP ADICIONAL</small></b><b>SEM<small>SICLOS ADICIONAIS</small></b></div> : <div><b>+{reward.xp}<small>XP</small></b><b>+{reward.coins}<small>SICLOS DE PRATA</small></b></div>}{reward.scrollsUnlocked ? <blockquote className="mission-reveal scroll-discovery-reveal"><b>{reward.firstScrollDiscovery ? "Seu primeiro pergaminho foi encontrado!" : `${reward.scrollsUnlocked} ${reward.scrollsUnlocked === 1 ? "pergaminho foi encontrado" : "pergaminhos foram encontrados"}!`}</b><span>{reward.firstScrollDiscovery ? "Há diversos pergaminhos de estudo espalhados pela Bíblia. Continue sua jornada e permita que novas descobertas se revelem." : `+${reward.scrollXp || reward.scrollsUnlocked * 20} XP · A descoberta foi guardada na sua Bíblia.`}</span></blockquote> : null}{narrative && <blockquote className="mission-reveal"><b>{narrative.discovery}</b><span>{narrative.next}</span></blockquote>}{reward.unlocked.length > 0 && <em>✦ Nova conquista desbloqueada</em>}<button onClick={close}>Continuar jornada</button></div></div>;
+  return <div className="reward-backdrop"><div className="reward-modal" role="dialog" aria-modal="true" aria-label="Recompensa da missão"><div className="reward-rays" /><span className="reward-chest">♛</span><p>{reward.replayCompleted ? `RELEITURA CONCLUÍDA · ${reward.missionTitle}` : reward.actCompleted ? `ATO CONCLUÍDO · ${reward.actTitle}` : reward.missionCompleted ? `MISSÃO CONCLUÍDA · ${reward.missionTitle}` : reward.levelUp ? "NOVO NÍVEL ALCANÇADO" : "CAPÍTULO CONCLUÍDO"}</p><h2>{reward.replayCompleted ? "Jornada revisitada" : reward.levelUp ? `Nível ${level}` : "Recompensa obtida"}</h2>{reward.replayCompleted ? <div><b>SEM<small>XP ADICIONAL</small></b><b>SEM<small>SICLOS ADICIONAIS</small></b></div> : <div><b>+{reward.xp}<small>XP</small></b><b>+{reward.coins}<small>SICLOS DE PRATA</small></b></div>}{reward.coopBonus && <em className="coop-reward">✦ Bônus cooperativo de +5% XP aplicado</em>}{reward.coopRoundCompleted && <blockquote className="mission-reveal coop-round-reveal"><b>Rodada cooperativa concluída!</b><span>Os próximos capítulos já estão liberados para vocês dois.</span></blockquote>}{reward.scrollsUnlocked ? <blockquote className="mission-reveal scroll-discovery-reveal"><b>{reward.firstScrollDiscovery ? "Seu primeiro pergaminho foi encontrado!" : `${reward.scrollsUnlocked} ${reward.scrollsUnlocked === 1 ? "pergaminho foi encontrado" : "pergaminhos foram encontrados"}!`}</b><span>{reward.firstScrollDiscovery ? "Há diversos pergaminhos de estudo espalhados pela Bíblia. Continue sua jornada e permita que novas descobertas se revelem." : `+${reward.scrollXp || reward.scrollsUnlocked * 20} XP · A descoberta foi guardada na sua Bíblia.`}</span></blockquote> : null}{narrative && <blockquote className="mission-reveal"><b>{narrative.discovery}</b><span>{narrative.next}</span></blockquote>}{reward.unlocked.length > 0 && <em>✦ Nova conquista desbloqueada</em>}<button onClick={close}>Continuar jornada</button></div></div>;
 }
 
 function ScrollDiscoveryModal({ discovery, close }: { discovery: ScrollDiscovery; close: () => void }) {
