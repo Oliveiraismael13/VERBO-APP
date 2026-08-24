@@ -79,6 +79,9 @@ test("contains the authenticated Verbo application routes", async () => {
   assert.match(app, /social-finder-dialog/);
   assert.doesNotMatch(app, /ENCONTRAR ALGUÉM/);
   assert.match(app, /social-stories-rail/);
+  assert.match(app, /activityGlyph/);
+  assert.match(app, /social-feed-card/);
+  assert.match(app, /social-activity-glyph/);
   assert.match(app, /feedOrder/);
   assert.match(app, /Celebradas/);
   assert.match(app, /\/api\/social\/friends/);
@@ -155,6 +158,8 @@ assert.match(app, /A Edição Chama da Fé não é usada nas missões/);
   assert.match(rpgStyles, /\.social-topbar\{display:flex/);
   assert.match(rpgStyles, /\.social-stories-rail\{display:flex/);
   assert.match(rpgStyles, /\.social-feed-tabs\{display:flex/);
+  assert.match(rpgStyles, /\.social-feed-card\{position:relative/);
+  assert.match(rpgStyles, /\.social-activity-glyph\{display:grid/);
   assert.match(rpgStyles, /\.social-profile-card \.social-profile-identity\{/);
   assert.match(rpgStyles, /\.social-campaign>div\{/);
   assert.match(rpgStyles, /\.secondary-mission-list\{/);
