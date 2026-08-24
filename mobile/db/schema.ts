@@ -179,6 +179,20 @@ export const coopMissionMembers = sqliteTable("coop_mission_members", {
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
 }, (t) => [primaryKey({ columns: [t.sessionId, t.userId] })]);
 
+export const privateBibleTranslations = sqliteTable("private_bible_translations", {
+  code: text("code").primaryKey(),
+  label: text("label").notNull(),
+  manifestJson: text("manifest_json").notNull(),
+  importedAt: integer("imported_at", { mode: "timestamp" }).notNull(),
+});
+
+export const privateBibleBookChunks = sqliteTable("private_bible_book_chunks", {
+  translationCode: text("translation_code").notNull().references(() => privateBibleTranslations.code),
+  bookSlug: text("book_slug").notNull(),
+  chunkIndex: integer("chunk_index").notNull(),
+  contentChunk: text("content_chunk").notNull(),
+}, (t) => [primaryKey({ columns: [t.translationCode, t.bookSlug, t.chunkIndex] })]);
+
 export const userBlocks = sqliteTable("user_blocks", {
   blockerId: text("blocker_id").notNull().references(() => users.id),
   blockedId: text("blocked_id").notNull().references(() => users.id),

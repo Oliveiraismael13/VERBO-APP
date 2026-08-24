@@ -55,15 +55,16 @@ export async function recognizePortugueseText(image: Blob): Promise<{ text: stri
   }
 }
 
-async function bibleBooks(path: string, manifestBooks: OcrBook[]) {
-  const cached = cache.get(path);
+async function bibleBooks(path: string, manifestBooks: OcrBook[], privateSource = false) {
+  const cacheKey = `${path}:${privateSource ? "private" : "public"}`;
+  const cached = cache.get(cacheKey);
   if (cached) return cached;
   const books = await Promise.all(manifestBooks.map(async (book) => {
-    const response = await fetch(`${path}/${book.slug}.json`);
+    const response = await fetch(`${path}/${book.slug}${privateSource ? "" : ".json"}`);
     if (!response.ok) throw new Error("Não foi possível consultar a Bíblia local.");
     return response.json() as Promise<OcrBookText>;
   }));
-  cache.set(path, books);
+  cache.set(cacheKey, books);
   return books;
 }
 
@@ -94,9 +95,9 @@ function score(text: string, verse: string) {
   return matches / query.length * 88 + (containsPhrase ? 12 : 0);
 }
 
-export async function findBiblePassages(ocrText: string, path: string, manifestBooks: OcrBook[]): Promise<BibleOcrCandidate[]> {
+export async function findBiblePassages(ocrText: string, path: string, manifestBooks: OcrBook[], privateSource = false): Promise<BibleOcrCandidate[]> {
   const direct = explicitReference(ocrText, manifestBooks);
-  const books = await bibleBooks(path, manifestBooks);
+  const books = await bibleBooks(path, manifestBooks, privateSource);
   if (direct) {
     const current = books.find((book) => book.slug === direct.book.slug);
     const verses = current?.chapters[direct.chapter - 1] || [];

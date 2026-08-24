@@ -13,18 +13,19 @@ type BibleVerse = { number: number; text: string };
 type BibleBook = { slug: string; name: string; longName: string; abbreviation: string; testament: "old" | "new"; isDeuterocanonical?: boolean; chapters: BibleVerse[][] };
 type ManifestBook = Omit<BibleBook, "chapters"> & { code: string; chapterCount: number; verseCount: number };
 type BibleManifest = { translation: string; code: string; canon: string; bookCount: number; verseCount: number; books: ManifestBook[] };
-type TranslationDefinition = { label: string; path: string; note: string; license: string; canon: "protestant-66" | "catholic-73"; missions: boolean };
+type TranslationDefinition = { label: string; path: string; note: string; license: string; canon: "protestant-66" | "catholic-73"; missions: boolean; private?: boolean };
 
 const localPersonalTranslation = (code: string, label: string): TranslationDefinition => ({
   label,
-  path: `/personal-bibles/${code.toLowerCase()}`,
-  note: `${label} · disponível somente na sua biblioteca local.`,
-  license: "USO PESSOAL LOCAL",
+  path: `/api/private-bibles/${code.toLowerCase()}`,
+  note: `${label} · disponível somente para a sua conta.`,
+  license: "BIBLIOTECA PESSOAL",
   canon: "protestant-66",
   missions: false,
+  private: true,
 });
 
-const personalTranslations = import.meta.env.DEV ? {
+const personalTranslations = {
   ACF: localPersonalTranslation("ACF", "Almeida Corrigida e Fiel"),
   ALM1911: localPersonalTranslation("ALM1911", "Almeida 1911"),
   ARA: localPersonalTranslation("ARA", "Almeida Revista e Atualizada"),
@@ -42,7 +43,7 @@ const personalTranslations = import.meta.env.DEV ? {
   OL: localPersonalTranslation("OL", "O Livro"),
   TB: localPersonalTranslation("TB", "Tradução Brasileira"),
   VFL: localPersonalTranslation("VFL", "Versão Fácil de Ler"),
-} : {};
+};
 const personalTranslationCodes = new Set(["ACF", "ALM1911", "ARA", "ARC", "AS21", "JFAA", "KJA", "KJF", "MENS", "NAA", "NBV", "NTLH", "NVI", "NVT", "OL", "TB", "VFL"]);
 
 const translations = {
@@ -181,8 +182,7 @@ export default function VerboApp() {
   }, []);
 
   useEffect(() => {
-    if (!import.meta.env.DEV) return;
-    fetch("/personal-bibles/index.json").then((response) => response.ok ? response.json() : { versions: [] }).then((data: { versions?: unknown }) => {
+    fetch("/api/private-bibles").then((response) => response.ok ? response.json() : { versions: [] }).then((data: { versions?: unknown }) => {
       if (Array.isArray(data.versions)) setAvailablePersonalTranslations(data.versions.filter((code): code is string => typeof code === "string"));
     }).catch(() => undefined);
   }, []);
@@ -263,7 +263,8 @@ export default function VerboApp() {
 
   useEffect(() => {
     const controller = new AbortController();
-    fetch(`${translations[translation].path}/manifest.json`, { signal: controller.signal })
+    const suffix = translations[translation].private ? "manifest" : "manifest.json";
+    fetch(`${translations[translation].path}/${suffix}`, { signal: controller.signal })
       .then((response) => response.json())
       .then(setManifest)
       .catch((error) => { if (error.name !== "AbortError") setToast("Não foi possível carregar a tradução"); });
@@ -272,7 +273,8 @@ export default function VerboApp() {
 
   useEffect(() => {
     const controller = new AbortController();
-    fetch(`${translations[translation].path}/${bookSlug}.json`, { signal: controller.signal })
+    const suffix = translations[translation].private ? bookSlug : `${bookSlug}.json`;
+    fetch(`${translations[translation].path}/${suffix}`, { signal: controller.signal })
       .then((response) => response.json())
       .then(setBook)
       .catch((error) => { if (error.name !== "AbortError") setToast("Não foi possível carregar o livro"); });
@@ -463,7 +465,7 @@ export default function VerboApp() {
         setCameraState("retry");
         return;
       }
-      const candidates = await findBiblePassages(ocr.text, translations[translation].path, manifest.books);
+      const candidates = await findBiblePassages(ocr.text, translations[translation].path, manifest.books, Boolean(translations[translation].private));
       if (!candidates.length) {
         setCameraState("retry");
         return;

@@ -125,9 +125,9 @@ test("contains the authenticated Verbo application routes", async () => {
   assert.match(app, /Array\.from\(\{ length: selectedBook\.chapterCount \}/);
   assert.match(app, /choose\(selectedBook\.slug, number\)/);
   assert.match(app, /CHAMADAFE/);
-  assert.match(app, /personal-bibles/);
+  assert.match(app, /private-bibles/);
   assert.match(app, /availablePersonalTranslations/);
-  assert.match(app, /USO PESSOAL LOCAL/);
+  assert.match(app, /BIBLIOTECA PESSOAL/);
   assert.match(app, /catholic-73/);
 assert.match(app, /Livro deuterocanônico/);
 assert.doesNotMatch(app, /Por isso, não é utilizado nas missões/);
@@ -369,16 +369,26 @@ test("is installable as a mobile application", async () => {
   assert.match(tobit, /"name":"Tobias"/);
 });
 
-test("keeps personal Bible imports local to development", async () => {
-  const vite = await text("vite.config.ts");
+test("keeps private Bible texts behind the authorized server API", async () => {
   const importer = await text("scripts/import-personal-bibles.mjs");
+  const d1Importer = await text("scripts/build-private-bible-d1-import.mjs");
+  const privateBible = await text("lib/private-bibles.ts");
+  const libraryRoute = await text("app/api/private-bibles/route.ts");
+  const resourceRoute = await text("app/api/private-bibles/[code]/[resource]/route.ts");
+  const migration = await text("drizzle/0017_private_bible_library.sql");
   const gitignore = await readFile(new URL("../../.gitignore", import.meta.url), "utf8");
 
-  assert.match(vite, /verbo-personal-bibles/);
-  assert.match(vite, /apply: "serve"/);
-  assert.match(vite, /relativePath === "index\.json"/);
   assert.match(importer, /BIBLE_SOURCE_DIR/);
   assert.match(importer, /VALIDATION_REQUIRED\.txt/);
+  assert.match(d1Importer, /PRIVATE_BIBLE_EXPORT_DIR/);
+  assert.match(d1Importer, /maxChunkLength = 60_000/);
+  assert.match(privateBible, /PRIVATE_BIBLE_OWNER_EMAIL/);
+  assert.match(privateBible, /private_bible_book_chunks/);
+  assert.match(libraryRoute, /canAccessPrivateBibles/);
+  assert.match(resourceRoute, /canAccessPrivateBibles/);
+  assert.match(resourceRoute, /private, no-store/);
+  assert.match(migration, /private_bible_translations/);
+  assert.match(migration, /private_bible_book_chunks/);
   assert.match(gitignore, /mobile\/\.private/);
 });
 
