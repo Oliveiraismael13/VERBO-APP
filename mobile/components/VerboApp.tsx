@@ -41,10 +41,10 @@ const translations = {
 
 type Translation = keyof typeof translations;
 type LastReading = { bookSlug: string; chapter: number };
-type PlayerProgress = { xp: number; level: number; coins: number; streak: number; completed: string[]; achievements: string[]; displayName?: string; profilePhoto?: string; favorites?: string[]; highlights?: Record<string, string>; notes?: Record<string, string>; plans?: string[]; lastReading?: LastReading | null };
+type PlayerProgress = { xp: number; level: number; coins: number; streak: number; completed: string[]; achievements: string[]; dailyNoteCompleted?: boolean; displayName?: string; profilePhoto?: string; favorites?: string[]; highlights?: Record<string, string>; notes?: Record<string, string>; plans?: string[]; lastReading?: LastReading | null };
 type ChapterReward = { xp: number; coins: number; levelUp: boolean; unlocked: string[]; missionCompleted?: boolean; missionTitle?: string; actCompleted?: boolean; actTitle?: string };
 
-const emptyProgress: PlayerProgress = { xp: 0, level: 1, coins: 0, streak: 0, completed: [], achievements: [] };
+const emptyProgress: PlayerProgress = { xp: 0, level: 1, coins: 0, streak: 0, completed: [], achievements: [], dailyNoteCompleted: false };
 
 const topics = [
   { icon: "♡", title: "Amor de Deus", count: "42 passagens", color: "rose" },
@@ -420,18 +420,28 @@ export default function VerboApp() {
     setNoteEditorOpen(true);
   };
 
-  const saveNote = () => {
+  const awardDailyNoteXp = async () => {
+    const response = await fetch("/api/progress", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "note" }) }).catch(() => null);
+    if (!response?.ok) return 0;
+    const data = await response.json() as PlayerProgress & { reward?: { xp?: number } | null };
+    setProgress((current) => ({ ...current, ...data }));
+    return data.reward?.xp || 0;
+  };
+
+  const saveNote = async () => {
     const keys = selectedVerseKeys.length ? selectedVerseKeys : [verseKey];
     const notes = { ...(progress.notes || JSON.parse(localStorage.getItem("verbo-mobile-notes") || "{}")) } as Record<string, string>;
+    const savedNote = noteDraft.trim();
     keys.forEach((key) => {
-      if (noteDraft.trim()) notes[key] = noteDraft.trim();
+      if (savedNote) notes[key] = savedNote;
       else delete notes[key];
     });
     localStorage.setItem("verbo-mobile-notes", JSON.stringify(notes));
     setProgress((current) => ({ ...current, notes }));
     void saveRemoteLibrary({ notes });
     setNoteEditorOpen(false);
-    notify(noteDraft.trim() ? "Anotação salva" : "Anotação removida");
+    const earnedXp = savedNote ? await awardDailyNoteXp() : 0;
+    notify(savedNote ? earnedXp ? `Anotação salva · +${earnedXp} XP` : "Anotação salva" : "Anotação removida");
   };
 
   const shareSelection = async () => {
@@ -788,6 +798,7 @@ function isActComplete(act: (typeof campaignActs)[number], completed: string[]) 
 
 function JourneyPage({ manifest, progress, onContinue, onOpenBible }: { manifest: BibleManifest | null; progress: PlayerProgress; onContinue: () => void; onOpenBible: () => void }) {
   const completedCount = progress.completed.length;
+  const noteCompleted = Boolean(progress.dailyNoteCompleted);
   const xpProgress = getXpProgress(progress.xp);
   const mission = nextMainMission(manifest, progress);
   const milestones = campaignActs.map((act, index) => {
@@ -821,8 +832,8 @@ function JourneyPage({ manifest, progress, onContinue, onOpenBible }: { manifest
     <div className="daily-title"><div><p>MISSÕES DIÁRIAS</p><h2>Fortaleça sua constância</h2></div><span>◴ 24h</span></div>
     <div className="daily-quests">
       <article className={completedCount ? "complete" : ""}><i>▥</i><div><b>Leia um capítulo</b><span>{completedCount ? "1/1 concluído" : "0/1 capítulo"}<u><em style={{ width: completedCount ? "100%" : "0%" }} /></u></span></div><strong>+20 XP</strong></article>
-      <article><i>🔥</i><div><b>Mantenha a chama</b><span>{progress.streak}/7 dias<u><em style={{ width: `${Math.min(progress.streak / 7 * 100, 100)}%` }} /></u></span></div><strong>◆ 50</strong></article>
-      <article><i>✎</i><div><b>Medite na Palavra</b><span>Crie uma anotação<u><em style={{ width: "0%" }} /></u></span></div><strong>+15 XP</strong></article>
+      <article><i>🔥</i><div><b>Mantenha a Chama acesa</b><span>{progress.streak}/7 dias<u><em style={{ width: `${Math.min(progress.streak / 7 * 100, 100)}%` }} /></u></span></div><strong>◆ 50</strong></article>
+      <article className={noteCompleted ? "complete" : ""}><i>✎</i><div><b>Medite na Palavra</b><span>{noteCompleted ? "1/1 concluído" : "Crie uma anotação"}<u><em style={{ width: noteCompleted ? "100%" : "0%" }} /></u></span></div><strong>+15 XP</strong></article>
     </div>
   </section>;
 }

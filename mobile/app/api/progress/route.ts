@@ -16,9 +16,11 @@ type ProgressRow = {
   streak: number;
   last_read_date: string | null;
   last_login_date: string | null;
+  last_note_date: string | null;
 };
 
-const defaultProgress = { xp: 0, level: 1, coins: 0, streak: 0, completed: [] as string[], achievements: [] as string[] };
+const NOTE_XP = 15;
+const defaultProgress = { xp: 0, level: 1, coins: 0, streak: 0, completed: [] as string[], achievements: [] as string[], dailyNoteCompleted: false };
 function todayInBrazil() {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
 }
@@ -67,6 +69,9 @@ async function ensureSchema() {
   if (!columns.results.some((column) => column.name === "last_login_date")) {
     await env.DB.prepare("ALTER TABLE user_progress ADD COLUMN last_login_date TEXT").run();
   }
+  if (!columns.results.some((column) => column.name === "last_note_date")) {
+    await env.DB.prepare("ALTER TABLE user_progress ADD COLUMN last_note_date TEXT").run();
+  }
 }
 
 async function ensureUser(user: { id: string; email: string }) {
@@ -79,7 +84,7 @@ async function ensureUser(user: { id: string; email: string }) {
 
 async function loadProgress(userId: string) {
   const [progress, chapters, achievements] = await Promise.all([
-    env.DB.prepare("SELECT xp, level, coins, streak, last_read_date FROM user_progress WHERE user_id = ?").bind(userId).first<ProgressRow>(),
+    env.DB.prepare("SELECT xp, level, coins, streak, last_read_date, last_note_date FROM user_progress WHERE user_id = ?").bind(userId).first<ProgressRow>(),
     env.DB.prepare("SELECT book_slug, chapter FROM completed_chapters WHERE user_id = ? ORDER BY completed_at DESC").bind(userId).all<{ book_slug: string; chapter: number }>(),
     env.DB.prepare("SELECT code FROM user_achievements WHERE user_id = ? ORDER BY unlocked_at DESC").bind(userId).all<{ code: string }>(),
   ]);
@@ -88,6 +93,7 @@ async function loadProgress(userId: string) {
     level: levelForXp(progress?.xp ?? 0),
     coins: progress?.coins ?? 0,
     streak: progress?.streak ?? 0,
+    dailyNoteCompleted: progress?.last_note_date === todayInBrazil(),
     completed: chapters.results.map((item) => `${item.book_slug}:${item.chapter}`),
     achievements: achievements.results.map((item) => item.code),
   };
@@ -116,14 +122,24 @@ export async function GET() {
 export async function POST(request: Request) {
   const user = await currentUser();
   if (!user) return withCors(Response.json({ error: "Não autenticado" }, { status: 401 }));
-  const body = await request.json() as { bookSlug?: string; chapter?: number };
-  if (!body.bookSlug || !/^[a-z0-9]+$/.test(body.bookSlug) || !Number.isInteger(body.chapter) || body.chapter! < 1 || body.chapter! > 150) {
-    return withCors(Response.json({ error: "Capítulo inválido" }, { status: 400 }));
-  }
+  const body = await request.json() as { action?: "note"; bookSlug?: string; chapter?: number };
 
   try {
     await ensureSchema();
     await ensureUser(user);
+    if (body.action === "note") {
+      const current = await env.DB.prepare("SELECT xp, level, last_note_date FROM user_progress WHERE user_id = ?").bind(user.id).first<ProgressRow>();
+      const today = todayInBrazil();
+      if (current?.last_note_date === today) return withCors(Response.json({ ...(await loadProgress(user.id)), reward: null }));
+      const nextXp = (current?.xp ?? 0) + NOTE_XP;
+      const nextLevel = levelForXp(nextXp);
+      await env.DB.prepare("UPDATE user_progress SET xp = ?, level = ?, last_note_date = ?, updated_at = ? WHERE user_id = ?")
+        .bind(nextXp, nextLevel, today, Date.now(), user.id).run();
+      return withCors(Response.json({ ...(await loadProgress(user.id)), reward: { xp: NOTE_XP, coins: 0, levelUp: nextLevel > (current?.level ?? 1) } }));
+    }
+    if (!body.bookSlug || !/^[a-z0-9]+$/.test(body.bookSlug) || !Number.isInteger(body.chapter) || body.chapter! < 1 || body.chapter! > 150) {
+      return withCors(Response.json({ error: "Capítulo inválido" }, { status: 400 }));
+    }
     const existing = await env.DB.prepare("SELECT 1 AS found FROM completed_chapters WHERE user_id = ? AND book_slug = ? AND chapter = ?")
       .bind(user.id, body.bookSlug, body.chapter).first<{ found: number }>();
     if (existing) return withCors(Response.json({ ...(await loadProgress(user.id)), reward: null }));
