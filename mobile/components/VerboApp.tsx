@@ -107,7 +107,6 @@ export default function VerboApp() {
   const [secondaryBriefingId, setSecondaryBriefingId] = useState<string | null>(null);
   const [leaveMissionDialog, setLeaveMissionDialog] = useState(false);
   const [pendingScreen, setPendingScreen] = useState<Screen | null>(null);
-  const [missionAmbientOn, setMissionAmbientOn] = useState(false);
   const [reward, setReward] = useState<ChapterReward | null>(null);
   const [savingChapter, setSavingChapter] = useState(false);
   const [lastReadingReady, setLastReadingReady] = useState(false);
@@ -115,64 +114,12 @@ export default function VerboApp() {
   const lastReadingRef = useRef<LastReading | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const ambientSoundRef = useRef<{ context: AudioContext; sources: AudioScheduledSourceNode[] } | null>(null);
 
   const stopCamera = useCallback(() => {
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
     if (videoRef.current) videoRef.current.srcObject = null;
   }, []);
-
-  const stopMissionAmbient = useCallback(() => {
-    const ambient = ambientSoundRef.current;
-    if (!ambient) return;
-    ambient.sources.forEach((source) => source.stop());
-    void ambient.context.close();
-    ambientSoundRef.current = null;
-  }, []);
-
-  const toggleMissionAmbient = useCallback(() => {
-    if (ambientSoundRef.current) {
-      stopMissionAmbient();
-      setMissionAmbientOn(false);
-      return;
-    }
-    if (!window.AudioContext) {
-      notify("Seu navegador não oferece som ambiente.");
-      return;
-    }
-    const context = new window.AudioContext();
-    const master = context.createGain();
-    master.gain.value = 0.032;
-    master.connect(context.destination);
-    const windBuffer = context.createBuffer(1, context.sampleRate * 4, context.sampleRate);
-    const windData = windBuffer.getChannelData(0);
-    let flow = 0;
-    for (let index = 0; index < windData.length; index += 1) {
-      flow = flow * 0.992 + (Math.random() * 2 - 1) * 0.018;
-      windData[index] = flow;
-    }
-    const wind = context.createBufferSource();
-    wind.buffer = windBuffer;
-    wind.loop = true;
-    const windFilter = context.createBiquadFilter();
-    windFilter.type = "lowpass";
-    windFilter.frequency.value = 520;
-    const windGain = context.createGain();
-    windGain.gain.value = 0.7;
-    wind.connect(windFilter).connect(windGain).connect(master);
-    const drone = context.createOscillator();
-    drone.type = "sine";
-    drone.frequency.value = 174.61;
-    const droneGain = context.createGain();
-    droneGain.gain.value = 0.09;
-    drone.connect(droneGain).connect(master);
-    wind.start();
-    drone.start();
-    ambientSoundRef.current = { context, sources: [wind, drone] };
-    void context.resume();
-    setMissionAmbientOn(true);
-  }, [stopMissionAmbient]);
 
   const connectCameraPreview = useCallback((video: HTMLVideoElement | null) => {
     videoRef.current = video;
@@ -226,14 +173,6 @@ export default function VerboApp() {
   const activeSecondaryMission = activeSecondaryStatus ? secondaryMissionById(activeSecondaryStatus.id) : null;
   const replayingSecondaryMission = Boolean(activeSecondaryStatus?.replaying);
   const replayChapterComplete = Boolean(replayingSecondaryMission && activeSecondaryStatus?.replayChapters.includes(`${bookSlug}:${chapter}`));
-
-  useEffect(() => () => stopMissionAmbient(), [stopMissionAmbient]);
-  useEffect(() => {
-    if (!missionMode && !activeSecondaryMission && missionAmbientOn) {
-      stopMissionAmbient();
-      setMissionAmbientOn(false);
-    }
-  }, [missionMode, activeSecondaryMission, missionAmbientOn, stopMissionAmbient]);
 
   const verseKey = `${bookSlug}:${chapter}:${selectedVerse}`;
   const selectedVerseKeys = useMemo(() => selectedVerses.map((number) => `${bookSlug}:${chapter}:${number}`), [bookSlug, chapter, selectedVerses]);
@@ -838,7 +777,7 @@ export default function VerboApp() {
         <section className="reader page-in" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd} onClick={(event) => { if (!(event.target as HTMLElement).closest("[data-verse], .verse-tools")) { setSelectedVerses([]); setVerseSelected(false); setHighlightPickerOpen(false); } }}>
           {(missionMode || activeSecondaryMission) && <div className="mission-mode-banner"><div className="mission-disciple" aria-label="Seu Discípulo caminhando"><PixelDisciple /><small>DISCÍPULO</small></div><div className="mission-reference"><b>{activeSecondaryMission ? replayingSecondaryMission ? "RELEITURA ATIVA" : "MISSÃO SECUNDÁRIA ATIVA" : "JORNADA PRINCIPAL ATIVA"}</b><strong>{activeSecondaryMission ? activeSecondaryMission.title : `${book?.name ?? "Carregando"} ${chapter}`}</strong><small>{activeSecondaryMission ? replayingSecondaryMission ? `Releia Mateus ${activeSecondaryMission.from}–${activeSecondaryMission.to}, sem recompensas adicionais.` : `${activeSecondaryMission.subtitle} · Mateus ${activeSecondaryMission.from}–${activeSecondaryMission.to}` : "Conclua este capítulo para liberar o próximo."}</small></div><button onClick={() => activeSecondaryMission ? go("studies") : (setMissionMode(false), notify("Você voltou à Bíblia livre"))}>{activeSecondaryMission ? "Ver missão" : "Sair da missão"}</button></div>}
           {missionMode && <MissionStoryPanel context={missionForChapter(bookSlug, chapter)} progress={progress} />}
-          {activeSecondaryMission && <SecondaryMissionStoryPanel mission={activeSecondaryMission} progress={progress} status={activeSecondaryStatus} ambientOn={missionAmbientOn} toggleAmbient={toggleMissionAmbient} />}
+          {activeSecondaryMission && <SecondaryMissionStoryPanel mission={activeSecondaryMission} progress={progress} status={activeSecondaryStatus} />}
           <div className="reference-row">
             <div>
               <p className="eyebrow">{book?.testament === "old" ? `ANTIGO TESTAMENTO · ${oldTestamentBookCount} LIVROS` : "NOVO TESTAMENTO · 27 LIVROS"}</p>
@@ -968,7 +907,7 @@ export default function VerboApp() {
       {bookPicker && manifest && <BookPicker manifest={manifest} currentSlug={bookSlug} currentChapter={chapter} close={() => setBookPicker(false)} choose={chooseBook} />}
       {searchOpen && <SearchOverlay manifest={manifest} close={() => setSearchOpen(false)} choose={chooseBook} open={() => { setSearchOpen(false); go("result"); }} />}
       {missionBriefingOpen && <MissionBriefing manifest={manifest} progress={progress} start={beginMission} close={() => setMissionBriefingOpen(false)} />}
-      {secondaryBriefingId && secondaryMissionById(secondaryBriefingId) && <SecondaryMissionBriefing mission={secondaryMissionById(secondaryBriefingId)!} progress={progress} status={secondaryMissionStates.find((mission) => mission.id === secondaryBriefingId)} ambientOn={missionAmbientOn} toggleAmbient={toggleMissionAmbient} start={beginSecondaryMission} close={() => setSecondaryBriefingId(null)} />}
+      {secondaryBriefingId && secondaryMissionById(secondaryBriefingId) && <SecondaryMissionBriefing mission={secondaryMissionById(secondaryBriefingId)!} progress={progress} status={secondaryMissionStates.find((mission) => mission.id === secondaryBriefingId)} start={beginSecondaryMission} close={() => setSecondaryBriefingId(null)} />}
       {leaveMissionDialog && <div className="leave-mission-backdrop" role="presentation"><section className="leave-mission-dialog" role="dialog" aria-modal="true" aria-label="Sair da missão"><p>MISSÃO EM ANDAMENTO</p><h2>Deseja sair da missão?</h2><span>Seu progresso fica salvo e você poderá continuar mais tarde pela aba Missões.</span><div><button className="secondary" onClick={() => { setLeaveMissionDialog(false); setPendingScreen(null); }}>Continuar missão</button><button onClick={() => void leaveActiveMission()}>Sair da missão</button></div></section></div>}
       {noteEditorOpen && <div className="note-overlay" role="dialog" aria-modal="true" aria-label="Nova anotação"><section><button className="note-close" onClick={() => setNoteEditorOpen(false)} aria-label="Fechar">×</button><p className="eyebrow">ANOTAÇÃO PESSOAL</p><h2>{book?.name} {chapter}:{selectedVerses[0] || selectedVerse}{selectedVerses.length > 1 ? `-${selectedVerses.at(-1)}` : ""}</h2><textarea value={noteDraft} onChange={(event) => setNoteDraft(event.target.value)} placeholder="O que Deus falou com você neste trecho?" autoFocus /><div><button className="secondary-note" onClick={() => { setNoteDraft(""); }}>Limpar</button><button className="save-note" onClick={saveNote}>Salvar anotação</button></div></section></div>}
       {toast && <div className="toast">✓ {toast}</div>}
