@@ -6,7 +6,7 @@ import { campaignActs, missionForChapter, narrativeForMission } from "../lib/cam
 import { resizeProfilePhoto } from "../lib/profile-photo";
 import { findBiblePassages, parseBibleReference, recognizePortugueseText, type BibleOcrCandidate } from "../lib/bible-ocr";
 
-type Screen = "journey" | "bible" | "plans" | "camera" | "studies" | "profile" | "social" | "result";
+type Screen = "journey" | "bible" | "plans" | "camera" | "studies" | "social" | "result";
 type BibleVerse = { number: number; text: string };
 type BibleBook = { slug: string; name: string; longName: string; abbreviation: string; testament: "old" | "new"; isDeuterocanonical?: boolean; chapters: BibleVerse[][] };
 type ManifestBook = Omit<BibleBook, "chapters"> & { code: string; chapterCount: number; verseCount: number };
@@ -629,7 +629,7 @@ export default function VerboApp() {
           <div className="top-actions">
             <button className="hud-search" onClick={() => setSearchOpen(true)} aria-label="Buscar na Bíblia">⌕</button>
             <div className="hud-resource"><span>◆</span>{progress.coins}</div>
-            <button className="avatar level-avatar" onClick={() => go("profile")} aria-label={`Perfil, nível ${progress.level}`}><b>{progress.level}</b></button>
+            <button className="avatar level-avatar" onClick={() => go("social")} aria-label={`Abrir Social, nível ${progress.level}`}><b>{progress.level}</b></button>
           </div>
         </header>
       )}
@@ -754,8 +754,7 @@ export default function VerboApp() {
       {screen === "result" && <StudyResult translation={translation} setTranslation={changeTranslation} saved={saved} setSaved={setSaved} notify={notify} />}
       {screen === "studies" && <StudiesPage manifest={manifest} progress={progress} onStart={openMissionBriefing} />}
       {screen === "plans" && <PlansPage />}
-      {screen === "profile" && <><ProfilePage dark={dark} setDark={setDark} progress={progress} manifest={manifest} onOpenFavorite={openFavorite} onProfilePhotoChange={updateProfilePhoto} /><button type="button" onClick={async () => { await fetch("/api/auth/logout", { method: "POST" }); window.location.href = "/"; }} style={{ display: "block", width: "calc(100% - 44px)", margin: "-4px auto 24px", padding: "12px", border: "1px solid #d9c8c8", borderRadius: "10px", background: "transparent", color: "#9b5555", fontSize: "11px", fontWeight: 800 }}>Sair da conta</button></>}
-      {screen === "social" && <SocialPage notify={notify} />}
+      {screen === "social" && <SocialPage notify={notify} dark={dark} setDark={setDark} progress={progress} manifest={manifest} onOpenFavorite={openFavorite} onProfilePhotoChange={updateProfilePhoto} />}
 
       {screen !== "camera" && (
         <nav className="bottom-nav" aria-label="Navegação principal">
@@ -764,7 +763,6 @@ export default function VerboApp() {
           <button className="camera" onClick={() => { go("camera"); void openCamera(); }}><i>⌁</i><span>Câmera</span></button>
           <button className={screen === "social" ? "selected" : ""} onClick={() => go("social")}><span>♧</span>Social</button>
           <button className={screen === "studies" || screen === "result" ? "selected" : ""} onClick={() => go("studies")}><span>✧</span>Missões</button>
-          <button className={screen === "profile" ? "selected" : ""} onClick={() => go("profile")}><span>◎</span>Perfil</button>
         </nav>
       )}
 
@@ -1020,7 +1018,7 @@ function SocialAvatar({ contact, small = false }: { contact: Pick<SocialContact,
   return <span className={`social-avatar ${small ? "small" : ""}`}>{contact.profilePhoto ? <ProfilePhoto src={contact.profilePhoto} /> : contact.displayName.slice(0, 1).toUpperCase()}</span>;
 }
 
-function SocialPage({ notify }: { notify: (message: string) => void }) {
+function SocialPage({ notify, dark, setDark, progress, manifest, onOpenFavorite, onProfilePhotoChange }: { notify: (message: string) => void; dark: boolean; setDark: (value: boolean) => void; progress: PlayerProgress; manifest: BibleManifest | null; onOpenFavorite: (reference: string) => void; onProfilePhotoChange: (file: File) => void }) {
   const [data, setData] = useState<SocialData>(emptySocial);
   const [activities, setActivities] = useState<FeedActivity[]>([]);
   const [notifications, setNotifications] = useState<SocialNotification[]>([]);
@@ -1029,6 +1027,7 @@ function SocialPage({ notify }: { notify: (message: string) => void }) {
   const [publicHandle, setPublicHandle] = useState("");
   const [query, setQuery] = useState("");
   const [selectedProfile, setSelectedProfile] = useState<SocialProfile | null>(null);
+  const [accountView, setAccountView] = useState(false);
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
   const [profileError, setProfileError] = useState("");
@@ -1053,6 +1052,10 @@ function SocialPage({ notify }: { notify: (message: string) => void }) {
   const openProfile = async (handle: string) => {
     const normalized = handle.trim().toLowerCase();
     if (!normalized) return;
+    if (normalized === publicHandle) {
+      setAccountView(true);
+      return;
+    }
     setWorking(true);
     setProfileError("");
     try {
@@ -1206,6 +1209,19 @@ function SocialPage({ notify }: { notify: (message: string) => void }) {
       ? "aceitou seu pedido de amizade"
       : `reagiu${notification.activityTitle ? ` à atividade “${notification.activityTitle}”` : " à sua atividade"}`;
 
+  if (accountView) {
+    return <>
+      <ProfilePage dark={dark} setDark={setDark} progress={progress} manifest={manifest} onOpenFavorite={onOpenFavorite} onProfilePhotoChange={onProfilePhotoChange} />
+      <section className="generic-page social-page social-account-page page-in">
+        <button className="social-back" onClick={() => setAccountView(false)}>‹ Voltar à comunidade</button>
+        <section className="social-handle"><p>SEU IDENTIFICADOR PÚBLICO</p><b>{publicHandle ? `@${publicHandle}` : "Preparando seu identificador…"}</b><button onClick={() => void copyHandle()} disabled={!publicHandle}>Copiar</button><small>Compartilhe somente este código para receber pedidos. Seu e-mail nunca aparece.</small></section>
+        {privacy && <section className="social-detail social-privacy"><p className="eyebrow">PRIVACIDADE DAS ATIVIDADES</p><label><span><b>Compartilhar conquistas</b><small>Missões e marcos de leitura aparecem para seus amigos.</small></span><input type="checkbox" checked={privacy.showActivities} disabled={working} onChange={(event) => void updateActivityPrivacy(event.target.checked)} /></label></section>}
+        {blockedUsers.length > 0 && <section className="social-detail social-blocked"><p className="eyebrow">PERFIS BLOQUEADOS</p>{blockedUsers.map((contact) => <div key={contact.publicHandle}><span><b>{contact.displayName}</b><small>@{contact.publicHandle}</small></span><button disabled={working} onClick={() => void unblockProfile(contact.publicHandle)}>Desbloquear</button></div>)}</section>}
+        <button type="button" className="social-logout" onClick={async () => { await fetch("/api/auth/logout", { method: "POST" }); window.location.href = "/"; }}>Sair da conta</button>
+      </section>
+    </>;
+  }
+
   if (selectedProfile) {
     const profileContact = { displayName: selectedProfile.displayName || "Perfil protegido", profilePhoto: selectedProfile.profilePhoto || "" };
     return <section className="generic-page social-page page-in">
@@ -1232,7 +1248,7 @@ function SocialPage({ notify }: { notify: (message: string) => void }) {
 
   return <section className="generic-page social-page page-in">
     <div className="social-heading"><div><p className="eyebrow">CAMINHE ACOMPANHADO</p><h1>Social</h1><p className="lead">Compartilhe a jornada com amigos sem abrir mão da sua privacidade.</p></div><span>{data.friends.length}<small>amigos</small></span></div>
-    <section className="social-handle"><p>SEU IDENTIFICADOR PÚBLICO</p><b>{publicHandle ? `@${publicHandle}` : "Preparando seu identificador…"}</b><div className="social-handle-actions"><button className="social-own-profile" onClick={() => void openProfile(publicHandle)} disabled={!publicHandle || working}>Meu perfil</button><button onClick={() => void copyHandle()} disabled={!publicHandle}>Copiar</button></div><small>Compartilhe somente este código para receber pedidos. Seu e-mail nunca aparece.</small></section>
+    <section className="social-handle"><p>SEU PERFIL NO VERBO</p><b>{progress.displayName || "Seu Discípulo"}</b><div className="social-handle-actions"><button className="social-own-profile" onClick={() => setAccountView(true)} disabled={working}>Meu perfil</button><button onClick={() => void copyHandle()} disabled={!publicHandle}>Copiar ID</button></div><small>Seu perfil, acervo, anotações e preferências agora ficam aqui no Social.</small></section>
     <form className="social-search" onSubmit={(event) => { event.preventDefault(); void openProfile(query); }}><label htmlFor="social-handle">ENCONTRAR ALGUÉM</label><div><input id="social-handle" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Ex.: verbo-abc123def4" autoCapitalize="none" autoCorrect="off" /><button type="submit" disabled={working}>{working ? "…" : "Buscar"}</button></div>{profileError && <small className="social-error">{profileError}</small>}</form>
     {loading ? <p className="social-loading">Carregando suas conexões…</p> : <>
       {notifications.length > 0 && <section className="social-section social-notifications"><div className="social-section-title"><div><p className="eyebrow">NOTIFICAÇÕES</p><h2>Novidades para você</h2></div>{notifications.some((notification) => !notification.read) ? <button className="social-mark-read" disabled={working} onClick={() => void markNotificationsRead()}>Marcar lidas</button> : <span>✓</span>}</div><div className="social-notification-list">{notifications.map((notification) => <button key={notification.id} className={notification.read ? "read" : ""} onClick={() => void openProfile(notification.actor.publicHandle)}><SocialAvatar contact={notification.actor} small /><span><b>{notification.actor.displayName}</b><small>{notificationText(notification)}</small></span>{!notification.read && <i />}</button>)}</div></section>}
