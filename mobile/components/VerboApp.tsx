@@ -88,7 +88,7 @@ const emptyProgress: PlayerProgress = { xp: 0, level: 1, coins: 0, streak: 0, co
 
 function presentVerse(number: number, text: string) {
   const groupedReference = text.match(/^(\d+)\s*[-–]\s*(\d+)\s+([\s\S]+)$/);
-  if (groupedReference && Number(groupedReference[1]) === number) {
+  if (groupedReference) {
     return { reference: `${groupedReference[1]}–${groupedReference[2]}`, text: groupedReference[3] };
   }
   return { reference: String(number), text };
