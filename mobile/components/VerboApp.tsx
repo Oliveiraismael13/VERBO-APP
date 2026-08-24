@@ -943,11 +943,13 @@ function StudiesPage({ manifest, progress, onStart }: { manifest: BibleManifest 
     const name = manifest?.books.find((book) => book.slug === mission.slug)?.name ?? mission.slug;
     return `${name} ${mission.from}${mission.from === mission.to ? "" : `–${mission.to}`}`;
   };
+  const currentMissionIndex = act.missions.findIndex((mission) => !isCampaignMissionComplete(mission, progress.completed));
+  const currentMission = act.missions[currentMissionIndex === -1 ? act.missions.length - 1 : currentMissionIndex];
 
   return <section className="generic-page missions-page page-in">
     <div className="missions-intro"><p className="eyebrow">SUA TRILHA DE APRENDIZADO</p><h1>Missão principal</h1><p className="lead">Avance pela história completa das Escrituras, lendo cada capítulo e registrando seu progresso.</p></div>
     <section className="campaign-overview">
-      <div className="campaign-heading"><div><p className="eyebrow">ATO {act.number} · {actChapters}</p><h2>{act.title}</h2></div><span className="campaign-status">{isActComplete(act, progress.completed) ? "CONCLUÍDO" : "EM ANDAMENTO"}</span></div>
+      <div className="campaign-heading"><div><p className="eyebrow">MISSÃO ATUAL · {missionChapters(currentMission)}</p><h2>{currentMission.title}</h2></div><span className="campaign-status">{isActComplete(act, progress.completed) ? "CONCLUÍDO" : "EM ANDAMENTO"}</span></div>
       <p className="campaign-lead">{act.number === 1 ? "A beleza da criação encontra a ruptura, a violência e a dispersão. Descubra por que a promessa precisa começar novamente." : "Continue avançando pela Grande História, capítulo a capítulo, até completar este ato da campanha."}</p>
       <div className="campaign-missions">{act.missions.map((mission, index) => {
         const complete = isCampaignMissionComplete(mission, progress.completed);
