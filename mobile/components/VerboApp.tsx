@@ -1018,6 +1018,7 @@ type SocialProfile = {
   displayName?: string;
   profilePhoto?: string;
   progress?: { level: number; xp: number; streak: number };
+  campaign?: { actNumber: number; actTitle: string; missionTitle: string; done: number; total: number };
   stats?: { completedChapters: number; favoriteVerses: number };
   favorites?: string[];
 };
@@ -1238,13 +1239,11 @@ function SocialPage({ notify, dark, setDark, progress, manifest, onOpenFavorite,
 
   if (selectedProfile) {
     const profileContact = { displayName: selectedProfile.displayName || "Perfil protegido", profilePhoto: selectedProfile.profilePhoto || "" };
+    const recentProfileActivities = activities.filter((activity) => activity.actor.publicHandle === selectedProfile.publicHandle).slice(0, 2);
     return <section className="generic-page social-page page-in">
       <button className="social-back" onClick={() => { setSelectedProfile(null); setProfileError(""); }}>‹ Voltar ao Social</button>
       <section className="social-profile-card">
-        <SocialAvatar contact={profileContact} />
-        <p className="eyebrow">{selectedProfile.relationship === "friend" ? "AMIGO NO VERBO" : selectedProfile.relationship === "self" ? "SEU PERFIL SOCIAL" : "PERFIL DO VERBO"}</p>
-        <h1>{selectedProfile.profileVisible ? profileContact.displayName : "Perfil protegido"}</h1>
-        <span>@{selectedProfile.publicHandle}</span>
+        {selectedProfile.profileVisible ? <div className="social-profile-identity"><SocialAvatar contact={profileContact} /><div><p className="eyebrow social-disciple-label">DISCÍPULO <span aria-hidden="true"><PixelDisciple turning /></span></p><h1>{profileContact.displayName}</h1>{selectedProfile.progress && <p className="social-profile-rank">Nível {selectedProfile.progress.level} <span>·</span> {discipleTitle(selectedProfile.progress.level)}</p>}<small>@{selectedProfile.publicHandle}</small></div></div> : <><SocialAvatar contact={profileContact} /><p className="eyebrow">PERFIL DO VERBO</p><h1>Perfil protegido</h1><span>@{selectedProfile.publicHandle}</span></>}
         {!selectedProfile.profileVisible && <p className="social-private">Este perfil fica visível apenas para amigos. Você ainda pode enviar um pedido se a pessoa permitir.</p>}
         {selectedProfile.canSendFriendRequest && <button className="social-primary" disabled={working} onClick={() => void sendRequest(selectedProfile.publicHandle)}>Adicionar amigo <b>＋</b></button>}
         {selectedProfile.relationship === "friend" && <div className="social-danger-actions"><button disabled={working} onClick={() => void removeFriend(selectedProfile.publicHandle)}>Remover amigo</button><button disabled={working} onClick={() => void blockProfile(selectedProfile.publicHandle)}>Bloquear</button></div>}
@@ -1252,8 +1251,10 @@ function SocialPage({ notify, dark, setDark, progress, manifest, onOpenFavorite,
       </section>
       {selectedProfile.profileVisible && <>
         {selectedProfile.progress && <section className="social-stats"><article><b>{selectedProfile.progress.level}</b><small>nível</small></article><article><b>{selectedProfile.progress.streak}</b><small>dias de leitura</small></article><article><b>{selectedProfile.progress.xp.toLocaleString("pt-BR")}</b><small>XP</small></article></section>}
+        {selectedProfile.campaign && <section className="social-detail social-campaign"><p className="eyebrow">MISSÃO PRINCIPAL ATUAL</p><div><span>ATO {selectedProfile.campaign.actNumber} · {selectedProfile.campaign.actTitle}</span><b>{selectedProfile.campaign.missionTitle}</b><small>{selectedProfile.campaign.done} de {selectedProfile.campaign.total} capítulos concluídos</small><i><u style={{ width: `${(selectedProfile.campaign.done / selectedProfile.campaign.total) * 100}%` }} /></i></div></section>}
         {selectedProfile.stats && <section className="social-detail"><p className="eyebrow">JORNADA</p><div><span>▥ Capítulos concluídos</span><b>{selectedProfile.stats.completedChapters}</b></div><div><span>♡ Versículos favoritos</span><b>{selectedProfile.stats.favoriteVerses}</b></div></section>}
         {selectedProfile.favorites && <section className="social-detail"><p className="eyebrow">FAVORITOS COMPARTILHADOS</p>{selectedProfile.favorites.length ? <div className="social-favorites">{selectedProfile.favorites.slice(0, 6).map((favorite) => <span key={favorite}>♡ {favorite.replaceAll(":", " ")}</span>)}</div> : <small>Nenhum favorito compartilhado.</small>}</section>}
+        {recentProfileActivities.length > 0 && <section className="social-detail social-profile-activities"><p className="eyebrow">ÚLTIMAS CONQUISTAS</p>{recentProfileActivities.map((activity) => <div key={activity.id}><b>{activity.title}</b>{activity.detail && <small>{activity.detail}</small>}</div>)}</section>}
         {selectedProfile.relationship === "self" && privacy && <section className="social-detail social-privacy"><p className="eyebrow">PRIVACIDADE DAS ATIVIDADES</p><label><span><b>Compartilhar conquistas</b><small>Missões e marcos de leitura aparecem para seus amigos.</small></span><input type="checkbox" checked={privacy.showActivities} disabled={working} onChange={(event) => void updateActivityPrivacy(event.target.checked)} /></label></section>}
         {selectedProfile.relationship === "self" && blockedUsers.length > 0 && <section className="social-detail social-blocked"><p className="eyebrow">PERFIS BLOQUEADOS</p>{blockedUsers.map((contact) => <div key={contact.publicHandle}><span><b>{contact.displayName}</b><small>@{contact.publicHandle}</small></span><button disabled={working} onClick={() => void unblockProfile(contact.publicHandle)}>Desbloquear</button></div>)}</section>}
       </>}

@@ -1,4 +1,5 @@
 import { env } from "cloudflare:workers";
+import { campaignActs } from "./campaign";
 
 export type SocialPrivacy = {
   publicHandle: string;
@@ -24,6 +25,7 @@ export type SocialProfile = {
   displayName?: string;
   profilePhoto?: string;
   progress?: { level: number; xp: number; streak: number };
+  campaign?: { actNumber: number; actTitle: string; missionTitle: string; done: number; total: number };
   stats?: { completedChapters: number; favoriteVerses: number };
   favorites?: string[];
 };
@@ -213,15 +215,27 @@ function favoriteVerses(value: string | null | undefined) {
   }
 }
 
+function campaignProgress(completed: { book_slug: string; chapter: number }[]) {
+  const completedSet = new Set(completed.map((item) => `${item.book_slug}:${item.chapter}`));
+  const missionComplete = (mission: (typeof campaignActs)[number]["missions"][number]) => Array.from({ length: mission.to - mission.from + 1 }, (_, index) => completedSet.has(`${mission.slug}:${mission.from + index}`)).every(Boolean);
+  const actComplete = (act: (typeof campaignActs)[number]) => act.ranges.every((range) => Array.from({ length: range.to - range.from + 1 }, (_, index) => completedSet.has(`${range.slug}:${range.from + index}`)).every(Boolean));
+  const act = campaignActs.find((item) => !actComplete(item)) || campaignActs.at(-1)!;
+  const mission = act.missions.find((item) => !missionComplete(item)) || act.missions.at(-1)!;
+  const total = mission.to - mission.from + 1;
+  const done = Array.from({ length: total }, (_, index) => completedSet.has(`${mission.slug}:${mission.from + index}`)).filter(Boolean).length;
+  return { actNumber: act.number, actTitle: act.title, missionTitle: mission.title, done, total };
+}
+
 async function profileData(userId: string, includeProgress: boolean, includeStats: boolean, includeFavorites: boolean) {
-  const [progress, completed, library] = await Promise.all([
+  const [progress, campaignChapters, completed, library] = await Promise.all([
     includeProgress ? env.DB.prepare("SELECT level, xp, streak FROM user_progress WHERE user_id = ?").bind(userId).first<{ level: number; xp: number; streak: number }>() : null,
+    includeProgress ? env.DB.prepare("SELECT book_slug, chapter FROM completed_chapters WHERE user_id = ?").bind(userId).all<{ book_slug: string; chapter: number }>().catch(() => null) : null,
     includeStats ? env.DB.prepare("SELECT COUNT(*) AS count FROM completed_chapters WHERE user_id = ?").bind(userId).first<{ count: number }>().catch(() => null) : null,
     (includeStats || includeFavorites) ? env.DB.prepare("SELECT favorites_json FROM user_library WHERE user_id = ?").bind(userId).first<{ favorites_json: string }>().catch(() => null) : null,
   ]);
   const favorites = favoriteVerses(library?.favorites_json);
   return {
-    ...(includeProgress && progress ? { progress } : {}),
+    ...(includeProgress && progress ? { progress, campaign: campaignProgress(campaignChapters?.results || []) } : {}),
     ...(includeStats ? { stats: { completedChapters: completed?.count ?? 0, favoriteVerses: favorites.length } } : {}),
     ...(includeFavorites ? { favorites } : {}),
   };
