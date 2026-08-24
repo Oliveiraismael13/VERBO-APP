@@ -5,6 +5,7 @@ import { corsOptions, withCors } from "../../../lib/cors";
 import { levelForXp } from "../../../lib/xp";
 import { campaignActs, missionForChapter as findCampaignMission, type CampaignAct } from "../../../lib/campaign";
 import { recordSocialActivity } from "../../../lib/social";
+import { secondaryMissionById } from "../../../lib/secondary-missions";
 
 export const dynamic = "force-dynamic";
 
@@ -79,6 +80,8 @@ async function ensureSchema() {
     env.DB.prepare("CREATE TABLE IF NOT EXISTS user_progress (user_id TEXT PRIMARY KEY NOT NULL, xp INTEGER DEFAULT 0 NOT NULL, level INTEGER DEFAULT 1 NOT NULL, coins INTEGER DEFAULT 0 NOT NULL, streak INTEGER DEFAULT 0 NOT NULL, last_read_date TEXT, last_login_date TEXT, last_note_date TEXT, streak_before_break INTEGER DEFAULT 0 NOT NULL, missed_streak_days INTEGER DEFAULT 0 NOT NULL, updated_at INTEGER NOT NULL, FOREIGN KEY (user_id) REFERENCES users(id))"),
     env.DB.prepare("CREATE TABLE IF NOT EXISTS completed_chapters (user_id TEXT NOT NULL, book_slug TEXT NOT NULL, chapter INTEGER NOT NULL, completed_at INTEGER NOT NULL, PRIMARY KEY (user_id, book_slug, chapter), FOREIGN KEY (user_id) REFERENCES users(id))"),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_completed_chapters_user_date ON completed_chapters(user_id, completed_at)"),
+    env.DB.prepare("CREATE TABLE IF NOT EXISTS user_secondary_missions (user_id TEXT NOT NULL, mission_id TEXT NOT NULL, unlocked_at INTEGER NOT NULL, active INTEGER NOT NULL DEFAULT 0 CHECK(active IN (0, 1)), completed_at INTEGER, PRIMARY KEY(user_id, mission_id), FOREIGN KEY (user_id) REFERENCES users(id))"),
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_user_secondary_missions_active ON user_secondary_missions(user_id, active)"),
     env.DB.prepare("CREATE TABLE IF NOT EXISTS user_achievements (user_id TEXT NOT NULL, code TEXT NOT NULL, unlocked_at INTEGER NOT NULL, PRIMARY KEY (user_id, code), FOREIGN KEY (user_id) REFERENCES users(id))"),
   ]);
   const columns = await env.DB.prepare("PRAGMA table_info(user_progress)").all<{ name: string }>();
@@ -192,11 +195,15 @@ export async function POST(request: Request) {
     const mission = campaignMission?.mission;
     const completedBefore = mission ? (await env.DB.prepare("SELECT COUNT(*) AS total FROM completed_chapters WHERE user_id = ? AND book_slug = ? AND chapter BETWEEN ? AND ?").bind(user.id, mission.slug, mission.from, mission.to).first<{ total: number }>())?.total ?? 0 : 0;
     const missionCompleted = Boolean(mission && completedBefore === mission.to - mission.from);
+    const activeSecondaryRow = await env.DB.prepare("SELECT mission_id FROM user_secondary_missions WHERE user_id = ? AND active = 1 AND completed_at IS NULL").bind(user.id).first<{ mission_id: string }>();
+    const secondaryMission = activeSecondaryRow ? secondaryMissionById(activeSecondaryRow.mission_id) : null;
+    const secondaryCompletedBefore = secondaryMission ? (await env.DB.prepare("SELECT COUNT(*) AS total FROM completed_chapters WHERE user_id = ? AND book_slug = ? AND chapter BETWEEN ? AND ?").bind(user.id, secondaryMission.bookSlug, secondaryMission.from, secondaryMission.to).first<{ total: number }>())?.total ?? 0 : 0;
+    const secondaryMissionCompleted = Boolean(secondaryMission && body.bookSlug === secondaryMission.bookSlug && body.chapter >= secondaryMission.from && body.chapter <= secondaryMission.to && secondaryCompletedBefore === secondaryMission.to - secondaryMission.from);
     const act = actForChapter(body.bookSlug, body.chapter);
     const actCompleted = Boolean(act && await completesAct(user.id, act, body.bookSlug, body.chapter));
-    const baseXpGain = actCompleted ? 100 : missionCompleted ? 80 : 40;
+    const baseXpGain = actCompleted ? 100 : missionCompleted || secondaryMissionCompleted ? 80 : 40;
     const xpGain = xpWithStreakBonus(baseXpGain, nextStreak);
-    const coinGain = actCompleted ? 10 : missionCompleted ? 8 : 4;
+    const coinGain = actCompleted ? 10 : missionCompleted || secondaryMissionCompleted ? 8 : 4;
     const nextXp = (current?.xp ?? 0) + xpGain;
     const nextLevel = levelForXp(nextXp);
     const now = Date.now();
@@ -205,6 +212,7 @@ export async function POST(request: Request) {
       env.DB.prepare("INSERT INTO completed_chapters (user_id, book_slug, chapter, completed_at) VALUES (?, ?, ?, ?)").bind(user.id, body.bookSlug, body.chapter, now),
       env.DB.prepare("UPDATE user_progress SET xp = ?, level = ?, coins = coins + ?, streak = ?, streak_before_break = ?, missed_streak_days = ?, last_read_date = ?, updated_at = ? WHERE user_id = ?")
         .bind(nextXp, nextLevel, coinGain, nextStreak, streakBeforeBreak, missedStreakDays, today, now, user.id),
+      ...(secondaryMissionCompleted && secondaryMission ? [env.DB.prepare("UPDATE user_secondary_missions SET active = 0, completed_at = ? WHERE user_id = ? AND mission_id = ?").bind(now, user.id, secondaryMission.id)] : []),
     ]);
 
     const count = await env.DB.prepare("SELECT COUNT(*) AS total FROM completed_chapters WHERE user_id = ?").bind(user.id).first<{ total: number }>();
@@ -224,6 +232,7 @@ export async function POST(request: Request) {
 
     try {
       if (actCompleted && act) await recordSocialActivity(user.id, "mission_completed", { title: `Concluiu ${act.title}`, detail: "Completou um ato da Jornada Principal." });
+      else if (secondaryMissionCompleted && secondaryMission) await recordSocialActivity(user.id, "mission_completed", { title: `Concluiu a missão secundária ${secondaryMission.title}`, detail: "Completou uma jornada especial na Palavra.", reference: `Mateus ${secondaryMission.from}–${secondaryMission.to}` });
       else if (missionCompleted && mission) await recordSocialActivity(user.id, "mission_completed", { title: `Concluiu a missão ${mission.title}`, detail: "Avançou na Jornada Principal.", reference: `${mission.slug} ${mission.from}${mission.from === mission.to ? "" : `–${mission.to}`}` });
       else if (nextStreak > 0 && nextStreak % 7 === 0) await recordSocialActivity(user.id, "streak_milestone", { title: `${nextStreak} dias de leitura`, detail: "Manteve a chama acesa na Palavra." });
       for (const code of unlocked) await recordSocialActivity(user.id, "achievement_unlocked", { title: "Nova conquista desbloqueada", detail: code.replaceAll("_", " ") });
@@ -231,7 +240,7 @@ export async function POST(request: Request) {
       console.error("Falha ao registrar atividade social", error);
     }
 
-    return withCors(Response.json({ ...(await loadProgress(user.id)), reward: { xp: xpGain, coins: coinGain, levelUp: nextLevel > (current?.level ?? 1), unlocked, missionCompleted: Boolean(missionCompleted), missionTitle: missionCompleted ? mission?.title : undefined, actCompleted, actTitle: actCompleted ? act?.title : undefined } }));
+    return withCors(Response.json({ ...(await loadProgress(user.id)), reward: { xp: xpGain, coins: coinGain, levelUp: nextLevel > (current?.level ?? 1), unlocked, missionCompleted: Boolean(missionCompleted || secondaryMissionCompleted), missionTitle: missionCompleted ? mission?.title : secondaryMissionCompleted ? secondaryMission?.title : undefined, secondaryMissionCompleted, actCompleted, actTitle: actCompleted ? act?.title : undefined } }));
   } catch (error) {
     console.error("Falha ao concluir capítulo", error);
     return withCors(Response.json({ error: "Não foi possível salvar o progresso" }, { status: 500 }));

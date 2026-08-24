@@ -22,6 +22,9 @@ test("contains the authenticated Verbo application routes", async () => {
   const rpgStyles = await text("app/rpg.css");
   const campaign = await text("lib/campaign.ts");
   assert.match(app, />Missões</);
+  assert.match(app, /secondaryMissionById/);
+  assert.match(app, /MISSÃO SECUNDÁRIA ATIVA/);
+  assert.match(app, /secondary-missions/);
   assert.match(app, />Social</);
   assert.match(app, /function SocialPage/);
   assert.match(app, /\/api\/social\/friends/);
@@ -63,8 +66,8 @@ assert.match(app, /A Edição Chama da Fé não é usada nas missões/);
   assert.match(app, /className="chapter-nav chapter-nav-bottom" aria-label="Navegação no fim do capítulo"/);
   assert.match(app, /localStorage\.setItem\("verbo-last-reading", JSON\.stringify\(reading\)\)/);
   assert.match(app, /lastReading: lastReadingRef\.current/);
-  assert.match(app, /missionMode && <button className=\{`chapter-complete/);
-  assert.match(app, /setReward\(earned\);\s+advanceToNextChapter\(nextProgress\);/);
+  assert.match(app, /chapter-complete/);
+  assert.match(app, /setReward\(earned\);[\s\S]{0,140}advanceToNextChapter\(nextProgress\);/);
   assert.doesNotMatch(app, /pendingAdvance/);
   assert.match(app, /className="verse-row"/);
   assert.match(app, /verse-tools" aria-label=\{`Ferramentas para/);
@@ -91,6 +94,7 @@ assert.match(app, /A Edição Chama da Fé não é usada nas missões/);
   assert.match(rpgStyles, /\.social-profile-page\{min-height:calc\(100dvh - 148px\)/);
   assert.match(rpgStyles, /\.social-profile-card \.social-profile-identity\{/);
   assert.match(rpgStyles, /\.social-campaign>div\{/);
+  assert.match(rpgStyles, /\.secondary-mission-list\{/);
   assert.match(rpgStyles, /@keyframes profile-disciple-turn/);
   assert.match(rpgStyles, /\.profile-name-edit\{/);
   assert.match(rpgStyles, /\.profile-edit-panel\{/);
@@ -104,9 +108,9 @@ assert.match(app, /A Edição Chama da Fé não é usada nas missões/);
     assert.match(campaign, new RegExp(`"${slug}:${from}-${to}": "`));
   }
   const progressRoute = await text("app/api/progress/route.ts");
-  assert.match(progressRoute, /const baseXpGain = actCompleted \? 100 : missionCompleted \? 80 : 40/);
+  assert.match(progressRoute, /const baseXpGain = actCompleted \? 100 : missionCompleted \|\| secondaryMissionCompleted \? 80 : 40/);
   assert.match(progressRoute, /function xpWithStreakBonus/);
-  assert.match(progressRoute, /const coinGain = actCompleted \? 10 : missionCompleted \? 8 : 4/);
+  assert.match(progressRoute, /const coinGain = actCompleted \? 10 : missionCompleted \|\| secondaryMissionCompleted \? 8 : 4/);
   assert.match(progress, /getSessionUser/);
   const libraryRoute = await text("app/api/library/route.ts");
   assert.match(libraryRoute, /last_reading_json/);
@@ -159,6 +163,7 @@ test("keeps social privacy behind authenticated public identifiers", async () =>
   const reaction = await text("app/api/social/activities/[id]/reaction/route.ts");
   const notifications = await text("app/api/social/notifications/route.ts");
   const blocks = await text("app/api/social/blocks/[handle]/route.ts");
+  const secondary = await text("app/api/secondary-missions/route.ts");
   const friendship = await text("app/api/social/friends/[handle]/route.ts");
   const migration = await text("drizzle/0006_social_foundation.sql");
   const socialSafetyMigration = await text("drizzle/0007_social_notifications_blocks.sql");
@@ -196,6 +201,8 @@ test("keeps social privacy behind authenticated public identifiers", async () =>
   assert.match(migration, /`show_activities` integer DEFAULT 1/);
   assert.match(socialSafetyMigration, /CREATE TABLE `social_notifications`/);
   assert.match(socialSafetyMigration, /CREATE TABLE `user_blocks`/);
+  assert.match(secondary, /user_secondary_missions/);
+  assert.match(secondary, /coins - \?/);
 });
 
 test("is installable as a mobile application", async () => {
