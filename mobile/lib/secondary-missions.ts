@@ -15,6 +15,7 @@ export type SecondaryMission = {
   discovery: string;
   next: string;
   insights: Record<number, MissionInsight[]>;
+  hiddenInsight?: { chapter: number; insight: MissionInsight };
 };
 
 export const secondaryMissions: SecondaryMission[] = [{
@@ -34,17 +35,15 @@ export const secondaryMissions: SecondaryMission[] = [{
   insights: {
     5: [
       { kind: "Palavra no original", title: "Bem-aventurados", reference: "Mateus 5:3", original: "μακάριοι", transliteration: "makárioi", meaning: "abençoados; em condição de favor divino", content: "No grego bíblico, aponta para quem é reconhecido como feliz por Deus — não para uma emoção passageira." },
-      { kind: "Palavra no original", title: "Sal", reference: "Mateus 5:13", original: "ἅλας", transliteration: "hálas", meaning: "sal; aquilo que preserva e dá sabor", content: "O termo mantém o sentido comum de sal, uma imagem de algo que preserva e torna perceptível sua presença." },
     ],
     6: [
       { kind: "Palavra no original", title: "Hipócritas", reference: "Mateus 6:2", original: "ὑποκριταί", transliteration: "hypokritaí", meaning: "atores; quem desempenha um papel diante de uma plateia", content: "No uso bíblico, Jesus aplica a palavra à devoção encenada para receber a aprovação das pessoas." },
-      { kind: "Palavra no original", title: "Mamom", reference: "Mateus 6:24", original: "μαμωνᾶς", transliteration: "mamōnás", meaning: "riqueza, bens, propriedade", content: "A forma grega preserva uma palavra semítica. No texto, riqueza aparece como um possível senhor que disputa lealdade com Deus." },
     ],
     7: [
       { kind: "Palavra no original", title: "A porta estreita", reference: "Mateus 7:13–14", original: "στενὴ ἡ πύλη", transliteration: "stenē hē pýlē", meaning: "estreita, apertada, é a porta", content: "A expressão forma uma imagem de passagem limitada e torna concreta a escolha de seguir Jesus com decisão e prática." },
-      { kind: "Palavra no original", title: "Casa sobre a rocha", reference: "Mateus 7:24–27", original: "πέτρα", transliteration: "pétra", meaning: "rocha; massa de pedra firme", content: "No grego bíblico, a palavra traz a ideia de um fundamento rochoso e sólido para a casa que enfrenta as tempestades." },
     ],
   },
+  hiddenInsight: { chapter: 6, insight: { kind: "Palavra no original", title: "Mamom", reference: "Mateus 6:24", original: "μαμωνᾶς", transliteration: "mamōnás", meaning: "riqueza, bens, propriedade", content: "A forma grega preserva uma palavra semítica. No texto, riqueza aparece como um possível senhor que disputa lealdade com Deus." } },
 }];
 
 export function secondaryMissionById(id: string) {

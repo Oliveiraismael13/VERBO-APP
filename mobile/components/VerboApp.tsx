@@ -177,8 +177,9 @@ export default function VerboApp() {
   const replayingSecondaryMission = Boolean(activeSecondaryStatus?.replaying);
   const replayChapterComplete = Boolean(replayingSecondaryMission && activeSecondaryStatus?.replayChapters.includes(`${bookSlug}:${chapter}`));
   const insightMission = secondaryMissions.find((mission) => mission.bookSlug === bookSlug && Boolean(mission.insights[chapter]));
+  const secondaryChapterInsights = insightMission ? [...insightMission.insights[chapter], ...(insightMission.hiddenInsight?.chapter === chapter ? [insightMission.hiddenInsight.insight] : [])] : [];
   const primaryMissionScroll = book && missionForChapter(bookSlug, chapter) ? mainMissionScrollForChapter(bookSlug, chapter, book.testament) : null;
-  const secondaryScrollKeys = insightMission?.insights[chapter].map((_, index) => `secondary:${insightMission.id}:${chapter}:${index}`) || [];
+  const secondaryScrollKeys = insightMission ? secondaryChapterInsights.map((_, index) => `secondary:${insightMission.id}:${chapter}:${index}`) : [];
   const secondaryScrollUnlocked = secondaryScrollKeys.length > 0 && secondaryScrollKeys.every((key) => progress.foundScrolls?.includes(key));
   const secondaryMissionActive = activeSecondaryMission?.id === insightMission?.id;
   const primaryScrollKey = `primary:${bookSlug}:${chapter}`;
@@ -467,7 +468,7 @@ export default function VerboApp() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error);
       const { reward: earned, ...nextProgress } = data;
-      const secondaryScrolls = secondaryChapterActive && activeSecondaryMission?.insights[chapter] ? activeSecondaryMission.insights[chapter].map((_, index) => `secondary:${activeSecondaryMission.id}:${chapter}:${index}`) : [];
+      const secondaryScrolls = secondaryChapterActive && activeSecondaryMission ? secondaryChapterInsights.map((_, index) => `secondary:${activeSecondaryMission.id}:${chapter}:${index}`) : [];
       const primaryScrollFoundOnCompletion = Boolean(missionMode && primaryMissionScroll?.requirement === "complete" && !progress.foundScrolls?.includes(primaryScrollKey) && nextProgress.completed.includes(`${bookSlug}:${chapter}`));
       const foundOnCompletion = [...secondaryScrolls, ...(primaryScrollFoundOnCompletion ? [primaryScrollKey] : [])];
       const firstScrollDiscovery = foundOnCompletion.length > 0 && !(progress.foundScrolls?.length);
@@ -915,7 +916,7 @@ export default function VerboApp() {
           </article>
 
           {primaryMissionScroll && (missionMode || primaryScrollUnlocked) && <MissionInsights insights={[primaryMissionScroll]} chapter={chapter} unlocked={primaryScrollUnlocked} source="primary" language={book?.testament === "old" ? "hebraico bíblico" : "grego bíblico"} />}
-          {insightMission && (secondaryMissionActive || secondaryScrollUnlocked) && <MissionInsights insights={insightMission.insights[chapter]} chapter={chapter} unlocked={secondaryScrollUnlocked} source="secondary" language="grego bíblico" />}
+          {insightMission && (secondaryMissionActive || secondaryScrollUnlocked) && <MissionInsights insights={secondaryChapterInsights} chapter={chapter} unlocked={secondaryScrollUnlocked} source="secondary" language="grego bíblico" />}
 
           {(missionMode || Boolean(activeSecondaryMission && activeSecondaryMission.bookSlug === bookSlug && chapter >= activeSecondaryMission.from && chapter <= activeSecondaryMission.to)) && <button className={`chapter-complete ${(replayingSecondaryMission ? replayChapterComplete : progress.completed.includes(`${bookSlug}:${chapter}`)) ? "done" : ""}`} onClick={completeChapter} disabled={savingChapter || (replayingSecondaryMission ? replayChapterComplete : progress.completed.includes(`${bookSlug}:${chapter}`))}>
             <span>{replayingSecondaryMission ? replayChapterComplete ? "✓" : "⚔" : progress.completed.includes(`${bookSlug}:${chapter}`) ? "✓" : "⚔"}</span>
@@ -1114,7 +1115,7 @@ function MissionStoryPanel({ context, progress }: { context: ReturnType<typeof m
 function MissionInsights({ insights, chapter, unlocked, source, language }: { insights: SecondaryMission["insights"][number]; chapter: number; unlocked: boolean; source: "primary" | "secondary"; language: "hebraico bíblico" | "grego bíblico" }) {
   const [open, setOpen] = useState(false);
   const collection = source === "primary" ? "GRANDE JORNADA" : "MISSÃO SECUNDÁRIA";
-  if (!unlocked) return <aside className={`mission-insights mission-insights-locked ${source}-scroll`}><div className="scroll-seal">✦</div><div><small>PERGAMINHO · {collection} · CAPÍTULO {chapter}</small><b>{insights.length} {insights.length === 1 ? "pergaminho oculto" : "pergaminhos ocultos"}</b><p>Há uma descoberta guardada neste capítulo. Siga sua jornada na Palavra para que ela se revele.</p></div></aside>;
+  if (!unlocked) return <aside className={`mission-insights mission-insights-locked ${source}-scroll`}><div className="scroll-seal">✦</div><div><small>PERGAMINHO · {collection} · CAPÍTULO {chapter}</small><b>Pergaminho oculto</b><p>Há uma descoberta guardada neste capítulo. Siga sua jornada na Palavra para que ela se revele.</p></div></aside>;
   return <aside className={`mission-insights mission-scrolls ${source}-scroll ${open ? "open" : ""}`}><button onClick={() => setOpen(!open)} aria-expanded={open}><span className="scroll-mark">▤</span><div><small>PERGAMINHOS · {collection} · CAPÍTULO {chapter}</small><b>{open ? "Recolher pergaminhos" : `${insights.length} ${insights.length === 1 ? "pergaminho descoberto" : "pergaminhos descobertos"}`}</b></div><i>{open ? "−" : "+"}</i></button>{open && <div className="mission-insight-list">{insights.map((insight) => <article key={insight.title} className="original-word"><small>{insight.kind} · {insight.reference}</small><h3>{insight.title}</h3><div className="original-language"><b>{insight.original}</b><span>Transliteração · {insight.transliteration}</span><em><small>Significado no {language}</small>{insight.meaning}</em></div><p>{insight.content}</p></article>)}</div>}</aside>;
 }
 

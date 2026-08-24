@@ -58,7 +58,9 @@ test("contains the authenticated Verbo application routes", async () => {
   assert.match(app, /source="secondary"/);
   assert.match(app, /scrollsUnlocked/);
   assert.doesNotMatch(secondaryMissionContent, /Curiosidade/);
-  assert.equal((secondaryMissionContent.match(/\{ kind: "Palavra no original"/g) || []).length, 7);
+  assert.equal((secondaryMissionContent.match(/\{ kind: "Palavra no original"/g) || []).length, 5);
+  assert.match(secondaryMissionContent, /hiddenInsight/);
+  assert.match(app, /secondaryChapterInsights/);
   assert.match(mainMissionScrolls, /hebrewScrolls/);
   assert.match(mainMissionScrolls, /greekScrolls/);
   assert.match(mainMissionScrolls, /mainMissionScrollForChapter/);
