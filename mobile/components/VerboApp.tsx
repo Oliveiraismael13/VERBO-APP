@@ -98,6 +98,19 @@ export default function VerboApp() {
     if (videoRef.current) videoRef.current.srcObject = null;
   }, []);
 
+  const connectCameraPreview = useCallback((video: HTMLVideoElement | null) => {
+    videoRef.current = video;
+    const stream = streamRef.current;
+    if (!video || !stream) return;
+
+    video.srcObject = stream;
+    void video.play().catch(() => {
+      stopCamera();
+      setCameraError("Não foi possível iniciar a prévia da câmera. Tente novamente.");
+      setCameraState("denied");
+    });
+  }, [stopCamera]);
+
   useEffect(() => {
     const savedTheme = localStorage.getItem("verbo-theme");
     // eslint-disable-next-line react-hooks/set-state-in-effect -- tema salvo só existe no navegador
@@ -171,21 +184,6 @@ export default function VerboApp() {
   }, [bookSlug, translation]);
 
   useEffect(() => () => stopCamera(), [stopCamera]);
-
-  // O elemento de vídeo só é montado depois de `cameraState` passar para "live".
-  // Conectar o stream no mesmo clique de getUserMedia deixava videoRef nulo e a
-  // prévia ficava vazia em celulares.
-  useEffect(() => {
-    const video = videoRef.current;
-    const stream = streamRef.current;
-    if (screen !== "camera" || cameraState !== "live" || !video || !stream) return;
-
-    video.srcObject = stream;
-    void video.play().catch(() => {
-      setCameraError("Não foi possível iniciar a prévia da câmera. Tente novamente.");
-      setCameraState("denied");
-    });
-  }, [cameraState, screen]);
 
   useEffect(() => {
     if (screen !== "bible" || !recognizedPassage || recognizedPassage.bookSlug !== bookSlug || recognizedPassage.chapter !== chapter || !book) return;
@@ -704,7 +702,7 @@ export default function VerboApp() {
             <button onClick={() => notify("Ajuda: enquadre de 1 a 4 linhas")}>?</button>
           </div>
           <div className="viewfinder">
-            {cameraState === "live" && <video ref={videoRef} autoPlay muted playsInline />}
+            {cameraState === "live" && <video ref={connectCameraPreview} autoPlay muted playsInline />}
             {(cameraState === "idle" || cameraState === "denied") && (
               <div className="camera-empty"><span>⌁</span><b>{cameraState === "denied" ? "Não foi possível abrir a câmera" : "Encontre a referência em segundos"}</b><p>{cameraState === "denied" ? cameraError || "Envie uma foto da página ou permita o uso da câmera nas configurações." : "Aponte para um trecho bíblico impresso ou em outra tela."}</p><button onClick={openCamera}>Ativar câmera</button></div>
             )}
@@ -725,7 +723,6 @@ export default function VerboApp() {
           <div className="camera-controls">
             <label className="upload">▧<input type="file" accept="image/*" onChange={(event) => { const file = event.target.files?.[0]; if (file) void scan(file); }} /><span>Galeria</span></label>
             <button className="shutter" onClick={() => void scan()} disabled={cameraState !== "live"}><i /></button>
-            <button className="demo" onClick={() => { setManualReference(""); setRecognitionOptions([]); setRecognizedPassage(null); setCameraState("uncertain"); }}>⌕<span>Referência</span></button>
           </div>
           <p className="prototype-note">O texto é processado no seu dispositivo e comparado com a Bíblia disponível no app.</p>
         </section>
