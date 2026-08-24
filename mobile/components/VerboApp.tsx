@@ -107,6 +107,7 @@ export default function VerboApp() {
   const [secondaryBriefingId, setSecondaryBriefingId] = useState<string | null>(null);
   const [leaveMissionDialog, setLeaveMissionDialog] = useState(false);
   const [pendingScreen, setPendingScreen] = useState<Screen | null>(null);
+  const [missionAmbientOn, setMissionAmbientOn] = useState(false);
   const [reward, setReward] = useState<ChapterReward | null>(null);
   const [savingChapter, setSavingChapter] = useState(false);
   const [lastReadingReady, setLastReadingReady] = useState(false);
@@ -114,12 +115,64 @@ export default function VerboApp() {
   const lastReadingRef = useRef<LastReading | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const ambientSoundRef = useRef<{ context: AudioContext; sources: AudioScheduledSourceNode[] } | null>(null);
 
   const stopCamera = useCallback(() => {
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
     if (videoRef.current) videoRef.current.srcObject = null;
   }, []);
+
+  const stopMissionAmbient = useCallback(() => {
+    const ambient = ambientSoundRef.current;
+    if (!ambient) return;
+    ambient.sources.forEach((source) => source.stop());
+    void ambient.context.close();
+    ambientSoundRef.current = null;
+  }, []);
+
+  const toggleMissionAmbient = useCallback(() => {
+    if (ambientSoundRef.current) {
+      stopMissionAmbient();
+      setMissionAmbientOn(false);
+      return;
+    }
+    if (!window.AudioContext) {
+      notify("Seu navegador não oferece som ambiente.");
+      return;
+    }
+    const context = new window.AudioContext();
+    const master = context.createGain();
+    master.gain.value = 0.032;
+    master.connect(context.destination);
+    const windBuffer = context.createBuffer(1, context.sampleRate * 4, context.sampleRate);
+    const windData = windBuffer.getChannelData(0);
+    let flow = 0;
+    for (let index = 0; index < windData.length; index += 1) {
+      flow = flow * 0.992 + (Math.random() * 2 - 1) * 0.018;
+      windData[index] = flow;
+    }
+    const wind = context.createBufferSource();
+    wind.buffer = windBuffer;
+    wind.loop = true;
+    const windFilter = context.createBiquadFilter();
+    windFilter.type = "lowpass";
+    windFilter.frequency.value = 520;
+    const windGain = context.createGain();
+    windGain.gain.value = 0.7;
+    wind.connect(windFilter).connect(windGain).connect(master);
+    const drone = context.createOscillator();
+    drone.type = "sine";
+    drone.frequency.value = 174.61;
+    const droneGain = context.createGain();
+    droneGain.gain.value = 0.09;
+    drone.connect(droneGain).connect(master);
+    wind.start();
+    drone.start();
+    ambientSoundRef.current = { context, sources: [wind, drone] };
+    void context.resume();
+    setMissionAmbientOn(true);
+  }, [stopMissionAmbient]);
 
   const connectCameraPreview = useCallback((video: HTMLVideoElement | null) => {
     videoRef.current = video;
@@ -173,6 +226,14 @@ export default function VerboApp() {
   const activeSecondaryMission = activeSecondaryStatus ? secondaryMissionById(activeSecondaryStatus.id) : null;
   const replayingSecondaryMission = Boolean(activeSecondaryStatus?.replaying);
   const replayChapterComplete = Boolean(replayingSecondaryMission && activeSecondaryStatus?.replayChapters.includes(`${bookSlug}:${chapter}`));
+
+  useEffect(() => () => stopMissionAmbient(), [stopMissionAmbient]);
+  useEffect(() => {
+    if (!missionMode && !activeSecondaryMission && missionAmbientOn) {
+      stopMissionAmbient();
+      setMissionAmbientOn(false);
+    }
+  }, [missionMode, activeSecondaryMission, missionAmbientOn, stopMissionAmbient]);
 
   const verseKey = `${bookSlug}:${chapter}:${selectedVerse}`;
   const selectedVerseKeys = useMemo(() => selectedVerses.map((number) => `${bookSlug}:${chapter}:${number}`), [bookSlug, chapter, selectedVerses]);
@@ -777,7 +838,7 @@ export default function VerboApp() {
         <section className="reader page-in" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd} onClick={(event) => { if (!(event.target as HTMLElement).closest("[data-verse], .verse-tools")) { setSelectedVerses([]); setVerseSelected(false); setHighlightPickerOpen(false); } }}>
           {(missionMode || activeSecondaryMission) && <div className="mission-mode-banner"><div className="mission-disciple" aria-label="Seu Discípulo caminhando"><PixelDisciple /><small>DISCÍPULO</small></div><div className="mission-reference"><b>{activeSecondaryMission ? replayingSecondaryMission ? "RELEITURA ATIVA" : "MISSÃO SECUNDÁRIA ATIVA" : "JORNADA PRINCIPAL ATIVA"}</b><strong>{activeSecondaryMission ? activeSecondaryMission.title : `${book?.name ?? "Carregando"} ${chapter}`}</strong><small>{activeSecondaryMission ? replayingSecondaryMission ? `Releia Mateus ${activeSecondaryMission.from}–${activeSecondaryMission.to}, sem recompensas adicionais.` : `${activeSecondaryMission.subtitle} · Mateus ${activeSecondaryMission.from}–${activeSecondaryMission.to}` : "Conclua este capítulo para liberar o próximo."}</small></div><button onClick={() => activeSecondaryMission ? go("studies") : (setMissionMode(false), notify("Você voltou à Bíblia livre"))}>{activeSecondaryMission ? "Ver missão" : "Sair da missão"}</button></div>}
           {missionMode && <MissionStoryPanel context={missionForChapter(bookSlug, chapter)} progress={progress} />}
-          {activeSecondaryMission && <SecondaryMissionStoryPanel mission={activeSecondaryMission} progress={progress} status={activeSecondaryStatus} />}
+          {activeSecondaryMission && <SecondaryMissionStoryPanel mission={activeSecondaryMission} progress={progress} status={activeSecondaryStatus} ambientOn={missionAmbientOn} toggleAmbient={toggleMissionAmbient} />}
           <div className="reference-row">
             <div>
               <p className="eyebrow">{book?.testament === "old" ? `ANTIGO TESTAMENTO · ${oldTestamentBookCount} LIVROS` : "NOVO TESTAMENTO · 27 LIVROS"}</p>
@@ -907,7 +968,7 @@ export default function VerboApp() {
       {bookPicker && manifest && <BookPicker manifest={manifest} currentSlug={bookSlug} currentChapter={chapter} close={() => setBookPicker(false)} choose={chooseBook} />}
       {searchOpen && <SearchOverlay manifest={manifest} close={() => setSearchOpen(false)} choose={chooseBook} open={() => { setSearchOpen(false); go("result"); }} />}
       {missionBriefingOpen && <MissionBriefing manifest={manifest} progress={progress} start={beginMission} close={() => setMissionBriefingOpen(false)} />}
-      {secondaryBriefingId && secondaryMissionById(secondaryBriefingId) && <SecondaryMissionBriefing mission={secondaryMissionById(secondaryBriefingId)!} progress={progress} status={secondaryMissionStates.find((mission) => mission.id === secondaryBriefingId)} start={beginSecondaryMission} close={() => setSecondaryBriefingId(null)} />}
+      {secondaryBriefingId && secondaryMissionById(secondaryBriefingId) && <SecondaryMissionBriefing mission={secondaryMissionById(secondaryBriefingId)!} progress={progress} status={secondaryMissionStates.find((mission) => mission.id === secondaryBriefingId)} ambientOn={missionAmbientOn} toggleAmbient={toggleMissionAmbient} start={beginSecondaryMission} close={() => setSecondaryBriefingId(null)} />}
       {leaveMissionDialog && <div className="leave-mission-backdrop" role="presentation"><section className="leave-mission-dialog" role="dialog" aria-modal="true" aria-label="Sair da missão"><p>MISSÃO EM ANDAMENTO</p><h2>Deseja sair da missão?</h2><span>Seu progresso fica salvo e você poderá continuar mais tarde pela aba Missões.</span><div><button className="secondary" onClick={() => { setLeaveMissionDialog(false); setPendingScreen(null); }}>Continuar missão</button><button onClick={() => void leaveActiveMission()}>Sair da missão</button></div></section></div>}
       {noteEditorOpen && <div className="note-overlay" role="dialog" aria-modal="true" aria-label="Nova anotação"><section><button className="note-close" onClick={() => setNoteEditorOpen(false)} aria-label="Fechar">×</button><p className="eyebrow">ANOTAÇÃO PESSOAL</p><h2>{book?.name} {chapter}:{selectedVerses[0] || selectedVerse}{selectedVerses.length > 1 ? `-${selectedVerses.at(-1)}` : ""}</h2><textarea value={noteDraft} onChange={(event) => setNoteDraft(event.target.value)} placeholder="O que Deus falou com você neste trecho?" autoFocus /><div><button className="secondary-note" onClick={() => { setNoteDraft(""); }}>Limpar</button><button className="save-note" onClick={saveNote}>Salvar anotação</button></div></section></div>}
       {toast && <div className="toast">✓ {toast}</div>}
@@ -1018,10 +1079,18 @@ function MissionBriefing({ manifest, progress, start, close }: { manifest: Bible
   return <div className="mission-briefing-backdrop" role="dialog" aria-modal="true" aria-label="Abertura da jornada"><section className="mission-briefing"><button className="mission-briefing-close" onClick={close} aria-label="Fechar">×</button><PixelDisciple /><p>JORNADA: A GRANDE HISTÓRIA</p><span>ATO {context.act.number} · {context.act.title}</span><h1>Missão {missionIndex} — {context.mission.title}</h1><div className="mission-progress mission-progress-stage"><span>MISSÃO ATUAL · {progressInStage.done} de {progressInStage.total} capítulos bíblicos</span><i><b style={{ width: `${progressInStage.percent}%` }} /></i></div><div className="mission-progress"><span>ATO · {progressInAct.done} de {progressInAct.total} capítulos bíblicos</span><i><b style={{ width: `${progressInAct.percent}%` }} /></i></div><blockquote>{narrative.introduction}</blockquote><div className="mission-briefing-ref"><small>LEITURA DE HOJE</small><b>{book?.name || next.slug} {next.chapter}</b></div><button className="mission-begin-button" onClick={start}>Começar jornada <b>→</b></button></section></div>;
 }
 
-function SecondaryMissionBriefing({ mission, progress, status, start, close }: { mission: SecondaryMission; progress: PlayerProgress; status?: SecondaryMissionStatus; start: (mission: SecondaryMission) => void; close: () => void }) {
+function MountainAtmosphere() {
+  return <div className="mountain-atmosphere" aria-hidden="true"><i className="mountain-sun" /><i className="mountain-mist mist-one" /><i className="mountain-mist mist-two" /><i className="mountain-ridge ridge-far" /><i className="mountain-ridge ridge-near" /></div>;
+}
+
+function MissionAmbientToggle({ active, toggle }: { active: boolean; toggle: () => void }) {
+  return <button className={`mission-ambient-toggle ${active ? "on" : ""}`} onClick={toggle} aria-pressed={active}><span>{active ? "◖" : "◌"}</span><b>Som ambiente</b><small>{active ? "ligado" : "desligado"}</small></button>;
+}
+
+function SecondaryMissionBriefing({ mission, progress, status, ambientOn, toggleAmbient, start, close }: { mission: SecondaryMission; progress: PlayerProgress; status?: SecondaryMissionStatus; ambientOn: boolean; toggleAmbient: () => void; start: (mission: SecondaryMission) => void; close: () => void }) {
   const replaying = Boolean(status?.replaying);
   const missionProgress = secondaryStatusProgress(mission, progress, status);
-  return <div className="mission-briefing-backdrop" role="dialog" aria-modal="true" aria-label={`Abertura da missão ${mission.title}`}><section className="mission-briefing secondary-mission-briefing"><button className="mission-briefing-close" onClick={close} aria-label="Fechar">×</button><PixelDisciple /><p>{replaying ? "JORNADA ESPECIAL · RELEITURA" : "JORNADA ESPECIAL · 400 SICLOS DE PRATA"}</p><span>{mission.subtitle}</span><h1>{mission.title}</h1><div className="mission-progress mission-progress-stage"><span>CAPÍTULOS PARA CONCLUSÃO · {missionProgress.done} de {missionProgress.total}</span><i><b style={{ width: `${missionProgress.percent}%` }} /></i></div><blockquote>{mission.introduction}</blockquote><div className="mission-briefing-ref"><small>{replaying ? "RELEITURA DA MISSÃO" : "RECOMPENSA DA MISSÃO"}</small><b>{replaying ? "Reviva toda a jornada · sem XP ou siclos adicionais" : `+${mission.completionXp} XP · +${mission.completionCoins} siclos`}</b></div><div className="secondary-briefing-note"><b>O que você vai encontrar</b><span>Bem-aventuranças, oração, confiança no Pai e a vida construída sobre a rocha.</span></div><button className="mission-begin-button" onClick={() => start(mission)}>{replaying ? "Começar releitura" : "Começar Sermão do Monte"} <b>→</b></button></section></div>;
+  return <div className="mission-briefing-backdrop" role="dialog" aria-modal="true" aria-label={`Abertura da missão ${mission.title}`}><section className="mission-briefing secondary-mission-briefing"><MountainAtmosphere /><button className="mission-briefing-close" onClick={close} aria-label="Fechar">×</button><MissionAmbientToggle active={ambientOn} toggle={toggleAmbient} /><PixelDisciple /><p>{replaying ? "JORNADA ESPECIAL · RELEITURA" : "JORNADA ESPECIAL · 400 SICLOS DE PRATA"}</p><span>{mission.subtitle}</span><h1>{mission.title}</h1><div className="mission-progress mission-progress-stage"><span>CAPÍTULOS PARA CONCLUSÃO · {missionProgress.done} de {missionProgress.total}</span><i><b style={{ width: `${missionProgress.percent}%` }} /></i></div><blockquote>{mission.introduction}</blockquote><div className="mission-briefing-ref"><small>{replaying ? "RELEITURA DA MISSÃO" : "RECOMPENSA DA MISSÃO"}</small><b>{replaying ? "Reviva toda a jornada · sem XP ou siclos adicionais" : `+${mission.completionXp} XP · +${mission.completionCoins} siclos`}</b></div><div className="secondary-briefing-note"><b>O que você vai encontrar</b><span>Bem-aventuranças, oração, confiança no Pai e a vida construída sobre a rocha.</span></div><button className="mission-begin-button" onClick={() => start(mission)}>{replaying ? "Começar releitura" : "Começar Sermão do Monte"} <b>→</b></button></section></div>;
 }
 
 function MissionStoryPanel({ context, progress }: { context: ReturnType<typeof missionForChapter>; progress: PlayerProgress }) {
@@ -1033,10 +1102,10 @@ function MissionStoryPanel({ context, progress }: { context: ReturnType<typeof m
   return <aside className="mission-story-panel"><div><p>MISSÃO {index} DE {context.act.missions.length} · ATO {context.act.number}</p><h2>{context.mission.title}</h2><span>{narrative.introduction}</span></div><div className="mission-story-progress"><div className="mission-stage-progress"><small>CAPÍTULOS PARA CONCLUSÃO <HelpButton title="Capítulos para conclusão" text="Marque os capítulos da missão como lidos para avançar. Ao concluir todos, a próxima missão é liberada." /></small><b>{progressInStage.done}/{progressInStage.total}</b><i><em style={{ width: `${progressInStage.percent}%` }} /></i></div><div><small>ATO</small><b>{progressInAct.done}/{progressInAct.total}</b><i><em style={{ width: `${progressInAct.percent}%` }} /></i></div></div><blockquote><small>CONTEXTO HISTÓRICO</small>{narrative.historicalContext}</blockquote></aside>;
 }
 
-function SecondaryMissionStoryPanel({ mission, progress, status }: { mission: SecondaryMission; progress: PlayerProgress; status: SecondaryMissionStatus | null }) {
+function SecondaryMissionStoryPanel({ mission, progress, status, ambientOn, toggleAmbient }: { mission: SecondaryMission; progress: PlayerProgress; status: SecondaryMissionStatus | null; ambientOn: boolean; toggleAmbient: () => void }) {
   const missionProgress = secondaryStatusProgress(mission, progress, status);
   const replaying = Boolean(status?.replaying);
-  return <aside className="mission-story-panel secondary-mission-story"><div><p>{replaying ? "JORNADA ESPECIAL · RELEITURA" : "JORNADA ESPECIAL · MISSÃO SECUNDÁRIA"}</p><h2>{mission.title}</h2><span>{mission.introduction}</span></div><div className="mission-story-progress"><div className="mission-stage-progress"><small>CAPÍTULOS PARA CONCLUSÃO <HelpButton title="Missão secundária" text={replaying ? `Leia novamente Mateus ${mission.from} a ${mission.to}. Esta releitura não concede XP nem siclos adicionais.` : `Leia Mateus ${mission.from} a ${mission.to}. Ao concluir os ${missionProgress.total} capítulos, você recebe a recompensa especial de +${mission.completionXp} XP.`} /></small><b>{missionProgress.done}/{missionProgress.total}</b><i><em style={{ width: `${missionProgress.percent}%` }} /></i></div></div><blockquote><small>CONTEXTO DA JORNADA</small>{mission.historicalContext}</blockquote></aside>;
+  return <aside className="mission-story-panel secondary-mission-story"><MountainAtmosphere /><MissionAmbientToggle active={ambientOn} toggle={toggleAmbient} /><div><p>{replaying ? "JORNADA ESPECIAL · RELEITURA" : "JORNADA ESPECIAL · MISSÃO SECUNDÁRIA"}</p><h2>{mission.title}</h2><span>{mission.introduction}</span></div><div className="mission-story-progress"><div className="mission-stage-progress"><small>CAPÍTULOS PARA CONCLUSÃO <HelpButton title="Missão secundária" text={replaying ? `Leia novamente Mateus ${mission.from} a ${mission.to}. Esta releitura não concede XP nem siclos adicionais.` : `Leia Mateus ${mission.from} a ${mission.to}. Ao concluir os ${missionProgress.total} capítulos, você recebe a recompensa especial de +${mission.completionXp} XP.`} /></small><b>{missionProgress.done}/{missionProgress.total}</b><i><em style={{ width: `${missionProgress.percent}%` }} /></i></div></div><blockquote><small>CONTEXTO DA JORNADA</small>{mission.historicalContext}</blockquote></aside>;
 }
 
 function RewardModal({ reward, level, close }: { reward: ChapterReward; level: number; close: () => void }) {

@@ -32,6 +32,8 @@ test("contains the authenticated Verbo application routes", async () => {
   assert.match(app, /Começar releitura/);
   assert.match(app, /isSecondaryMissionChapterUnlocked/);
   assert.match(app, /Conclua o capítulo atual para liberar o próximo da missão/);
+  assert.match(app, /function MissionAmbientToggle/);
+  assert.match(app, /function MountainAtmosphere/);
   assert.match(app, />Social</);
   assert.match(app, /function SocialPage/);
   assert.match(app, /\/api\/social\/friends/);
@@ -102,6 +104,8 @@ assert.match(app, /A Edição Chama da Fé não é usada nas missões/);
   assert.match(rpgStyles, /\.social-profile-card \.social-profile-identity\{/);
   assert.match(rpgStyles, /\.social-campaign>div\{/);
   assert.match(rpgStyles, /\.secondary-mission-list\{/);
+  assert.match(rpgStyles, /\.mission-ambient-toggle\{/);
+  assert.match(rpgStyles, /@keyframes sermon-mist/);
   assert.match(rpgStyles, /@keyframes profile-disciple-turn/);
   assert.match(rpgStyles, /\.profile-name-edit\{/);
   assert.match(rpgStyles, /\.profile-edit-panel\{/);
