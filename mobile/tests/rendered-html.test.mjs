@@ -75,6 +75,9 @@ test("contains the authenticated Verbo application routes", async () => {
   assert.match(app, />Social</);
   assert.match(app, /function SocialPage/);
   assert.match(app, /social-topbar/);
+  assert.match(app, /social-add-friend/);
+  assert.match(app, /social-finder-dialog/);
+  assert.doesNotMatch(app, /ENCONTRAR ALGUÉM/);
   assert.match(app, /social-stories-rail/);
   assert.match(app, /feedOrder/);
   assert.match(app, /Celebradas/);
