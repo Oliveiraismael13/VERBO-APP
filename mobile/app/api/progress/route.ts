@@ -148,7 +148,7 @@ export async function POST(request: Request) {
       const missedDays = current?.missed_streak_days ?? 0;
       const cost = missedDays * STREAK_RESTORE_COIN_COST;
       if (!missedDays) return withCors(Response.json({ error: "Não há dias perdidos para restaurar." }, { status: 400 }));
-      if ((current?.coins ?? 0) < cost) return withCors(Response.json({ error: `Você precisa de ${cost} moedas para restaurar os dias perdidos.` }, { status: 400 }));
+      if ((current?.coins ?? 0) < cost) return withCors(Response.json({ error: `Você precisa de ${cost} siclos de prata para restaurar os dias perdidos.` }, { status: 400 }));
       const restoredStreak = current?.streak_before_break ?? 0;
       await env.DB.prepare("UPDATE user_progress SET coins = coins - ?, streak = ?, streak_before_break = 0, missed_streak_days = 0, updated_at = ? WHERE user_id = ?")
         .bind(cost, restoredStreak, Date.now(), user.id).run();
