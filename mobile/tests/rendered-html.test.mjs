@@ -37,6 +37,7 @@ test("contains the authenticated Verbo application routes", async () => {
   assert.match(app, /PERGAMINHOS DE ESTUDO/);
   assert.match(app, /chapterInsightsUnlocked/);
   assert.match(app, /original-language/);
+  assert.match(app, /Significado no grego bíblico/);
   assert.match(app, /scrollsUnlocked/);
   assert.doesNotMatch(secondaryMissionContent, /Curiosidade/);
   assert.equal((secondaryMissionContent.match(/\{ kind: "Palavra no original"/g) || []).length, 7);

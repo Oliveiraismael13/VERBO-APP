@@ -33,16 +33,16 @@ export const secondaryMissions: SecondaryMission[] = [{
   next: "Leve a leitura para a prática: ouça as palavras de Jesus e construa sobre a rocha.",
   insights: {
     5: [
-      { kind: "Palavra no original", title: "Bem-aventurados", reference: "Mateus 5:3", original: "μακάριοι", transliteration: "makárioi", meaning: "felizes, favorecidos", content: "Não descreve uma alegria que depende do momento, mas a condição de quem recebe o favor de Deus." },
-      { kind: "Palavra no original", title: "Sal", reference: "Mateus 5:13", original: "ἅλας", transliteration: "hálas", meaning: "sal", content: "Uma imagem cotidiana e concreta. Jesus usa o sal para falar de uma fé que tem presença real e perceptível no mundo." },
+      { kind: "Palavra no original", title: "Bem-aventurados", reference: "Mateus 5:3", original: "μακάριοι", transliteration: "makárioi", meaning: "abençoados; em condição de favor divino", content: "No grego bíblico, aponta para quem é reconhecido como feliz por Deus — não para uma emoção passageira." },
+      { kind: "Palavra no original", title: "Sal", reference: "Mateus 5:13", original: "ἅλας", transliteration: "hálas", meaning: "sal; aquilo que preserva e dá sabor", content: "O termo mantém o sentido comum de sal, uma imagem de algo que preserva e torna perceptível sua presença." },
     ],
     6: [
-      { kind: "Palavra no original", title: "Hipócritas", reference: "Mateus 6:2", original: "ὑποκριταί", transliteration: "hypokritaí", meaning: "atores, pessoas que representam um papel", content: "O termo podia ser usado para atores. Jesus critica uma devoção encenada para receber a aprovação das pessoas." },
-      { kind: "Palavra no original", title: "Mamom", reference: "Mateus 6:24", original: "μαμωνᾶς", transliteration: "mamōnás", meaning: "riqueza, bens", content: "A forma grega preserva uma palavra semítica ligada às riquezas. Jesus contrasta dois senhores: Deus e os bens quando eles passam a exigir o lugar de Deus." },
+      { kind: "Palavra no original", title: "Hipócritas", reference: "Mateus 6:2", original: "ὑποκριταί", transliteration: "hypokritaí", meaning: "atores; quem desempenha um papel diante de uma plateia", content: "No uso bíblico, Jesus aplica a palavra à devoção encenada para receber a aprovação das pessoas." },
+      { kind: "Palavra no original", title: "Mamom", reference: "Mateus 6:24", original: "μαμωνᾶς", transliteration: "mamōnás", meaning: "riqueza, bens, propriedade", content: "A forma grega preserva uma palavra semítica. No texto, riqueza aparece como um possível senhor que disputa lealdade com Deus." },
     ],
     7: [
-      { kind: "Palavra no original", title: "A porta estreita", reference: "Mateus 7:13–14", original: "στενὴ ἡ πύλη", transliteration: "stenē hē pýlē", meaning: "apertada é a porta", content: "A imagem torna concreta a escolha de seguir Jesus: um caminho que pede decisão e prática, não somente conhecimento." },
-      { kind: "Palavra no original", title: "Casa sobre a rocha", reference: "Mateus 7:24–27", original: "πέτρα", transliteration: "pétra", meaning: "rocha, pedra firme", content: "O sermão termina com uma imagem de fundamento. Ouvir as palavras de Jesus se torna estabilidade quando conduz à prática." },
+      { kind: "Palavra no original", title: "A porta estreita", reference: "Mateus 7:13–14", original: "στενὴ ἡ πύλη", transliteration: "stenē hē pýlē", meaning: "estreita, apertada, é a porta", content: "A expressão forma uma imagem de passagem limitada e torna concreta a escolha de seguir Jesus com decisão e prática." },
+      { kind: "Palavra no original", title: "Casa sobre a rocha", reference: "Mateus 7:24–27", original: "πέτρα", transliteration: "pétra", meaning: "rocha; massa de pedra firme", content: "No grego bíblico, a palavra traz a ideia de um fundamento rochoso e sólido para a casa que enfrenta as tempestades." },
     ],
   },
 }];
