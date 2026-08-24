@@ -91,7 +91,7 @@ test("contains the authenticated Verbo application routes", async () => {
   assert.match(app, /Trocar foto/);
   assert.match(app, /profile-display-name/);
   assert.match(app, /onDisplayNameChange/);
-  assert.match(app, /<PixelDisciple turning \/>/);
+  assert.match(app, /<PixelDisciple level=\{xpProgress\.level\} turning \/>/);
   assert.doesNotMatch(app, />Perfil<\/button>/);
   assert.doesNotMatch(app, /go\("profile"\)/);
   assert.match(app, /ANTIGO TESTAMENTO · \$\{oldTestamentBookCount\} LIVROS/);
@@ -129,7 +129,8 @@ assert.match(app, /A Edição Chama da Fé não é usada nas missões/);
   assert.match(app, /keys\.forEach\(\(key\) => \{ highlights\[key\] = color; \}\)/);
   assert.match(auth, /resizeProfilePhoto/);
   assert.match(auth, /type="file" accept="image\/\*"/);
-  assert.match(app, /homem-50lvl-idle-south\.png/);
+  assert.match(app, /const tier = level >= 50 \? 50 : level >= 40 \? 40 : 30/);
+  assert.match(app, /homem-\$\{tier\}lvl-idle-\$\{direction\}\.png/);
   assert.match(styles, /campaign-mission\.current\{border-color:#ad96db;background:#f6f2fd\}/);
   assert.match(styles, /journey-cta\{width:100%;border:0;border-radius:10px;background:#604a8f/);
   assert.match(styles, /profile-status\{display:flex;align-items:center;gap:5px;white-space:nowrap;border:1px solid #d5c5ef/);
