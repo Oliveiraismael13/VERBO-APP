@@ -34,7 +34,8 @@ test("contains the authenticated Verbo application routes", async () => {
   assert.match(app, /social-profile-page/);
   assert.match(app, /profile-disciple-label/);
   assert.match(app, /Nome da sua conta/);
-  assert.match(app, /Alterar nome/);
+  assert.match(app, /Editar perfil/);
+  assert.match(app, /Trocar foto/);
   assert.match(app, /profile-display-name/);
   assert.match(app, /onDisplayNameChange/);
   assert.match(app, /<PixelDisciple turning \/>/);
@@ -87,6 +88,7 @@ assert.match(app, /A Edição Chama da Fé não é usada nas missões/);
   assert.match(rpgStyles, /\.social-profile-page\{min-height:calc\(100dvh - 148px\)/);
   assert.match(rpgStyles, /@keyframes profile-disciple-turn/);
   assert.match(rpgStyles, /\.profile-name-edit\{/);
+  assert.match(rpgStyles, /\.profile-edit-panel\{/);
   assert.match(styles, /left:50%;bottom:-9px;transform:translateX\(-50%\)/);
   assert.match(styles, /\.chapter-grid\{display:grid;grid-template-columns:repeat\(5,1fr\)/);
   assert.match(styles, /\.deuterocanonical-note\{display:flex/);
