@@ -71,6 +71,7 @@ assert.match(app, /A Edição Chama da Fé não é usada nas missões/);
   assert.match(styles, /profile-status\{display:flex;align-items:center;gap:5px;white-space:nowrap;border:1px solid #d5c5ef/);
   assert.match(styles, /profile-avatar\{display:grid;place-items:center;width:58px;height:58px;border-radius:50%;overflow:hidden;background:#604a8f/);
   assert.match(styles, /profile-avatar-picker\{position:relative;overflow:visible;cursor:pointer\}/);
+  assert.match(styles, /bottom-nav\{[^}]*grid-template-columns:repeat\(5,1fr\)/);
   assert.match(rpgStyles, /\.social-page\{min-height:calc\(100dvh - 148px\)/);
   assert.match(styles, /left:50%;bottom:-9px;transform:translateX\(-50%\)/);
   assert.match(styles, /\.chapter-grid\{display:grid;grid-template-columns:repeat\(5,1fr\)/);
