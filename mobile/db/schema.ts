@@ -96,6 +96,7 @@ export const socialPrivacySettings = sqliteTable("social_privacy_settings", {
   profileVisibility: text("profile_visibility", { enum: ["friends", "private"] }).notNull().default("friends"),
   showProgress: integer("show_progress", { mode: "boolean" }).notNull().default(true),
   showFavorites: integer("show_favorites", { mode: "boolean" }).notNull().default(false),
+  showNotes: integer("show_notes", { mode: "boolean" }).notNull().default(false),
   showActivities: integer("show_activities", { mode: "boolean" }).notNull().default(false),
   showStats: integer("show_stats", { mode: "boolean" }).notNull().default(true),
   allowFriendRequests: integer("allow_friend_requests", { mode: "boolean" }).notNull().default(true),
@@ -138,6 +139,16 @@ export const socialReactions = sqliteTable("social_reactions", {
   reaction: text("reaction", { enum: ["amen", "celebrate"] }).notNull(),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
 }, (t) => [primaryKey({ columns: [t.activityId, t.userId] })]);
+
+export const socialSharedNotes = sqliteTable("social_shared_notes", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: text("user_id").notNull().references(() => users.id),
+  activityId: integer("activity_id").notNull().unique().references(() => socialActivities.id),
+  reference: text("reference").notNull(),
+  noteText: text("note_text").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  noteCreatedAt: integer("note_created_at", { mode: "timestamp" }).notNull().default(0),
+}, (t) => [uniqueIndex("idx_social_shared_notes_user_reference").on(t.userId, t.reference), index("idx_social_shared_notes_user_created").on(t.userId, t.createdAt)]);
 
 export const socialNotifications = sqliteTable("social_notifications", {
   id: integer("id").primaryKey({ autoIncrement: true }),

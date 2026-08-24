@@ -29,13 +29,14 @@ export async function PATCH(request: Request) {
     if (body.profileVisibility !== undefined && body.profileVisibility !== "friends" && body.profileVisibility !== "private") {
       return withCors(Response.json({ error: "A visibilidade do perfil é inválida" }, { status: 400 }));
     }
-    for (const key of ["showProgress", "showFavorites", "showActivities", "showStats", "allowFriendRequests"] as const) {
+    for (const key of ["showProgress", "showFavorites", "showNotes", "showActivities", "showStats", "allowFriendRequests"] as const) {
       if (body[key] !== undefined && !isBoolean(body[key])) return withCors(Response.json({ error: "As preferências devem ser verdadeiras ou falsas" }, { status: 400 }));
     }
     const next = {
       profileVisibility: body.profileVisibility ?? current.profileVisibility,
       showProgress: body.showProgress ?? current.showProgress,
       showFavorites: body.showFavorites ?? current.showFavorites,
+      showNotes: body.showNotes ?? current.showNotes,
       showActivities: body.showActivities ?? current.showActivities,
       showStats: body.showStats ?? current.showStats,
       allowFriendRequests: body.allowFriendRequests ?? current.allowFriendRequests,

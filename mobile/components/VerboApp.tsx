@@ -43,7 +43,7 @@ const translations = {
 
 type Translation = keyof typeof translations;
 type LastReading = { bookSlug: string; chapter: number };
-type PlayerProgress = { xp: number; level: number; coins: number; streak: number; completed: string[]; achievements: string[]; dailyNoteCompleted?: boolean; xpBonusPercent?: number; missedStreakDays?: number; displayName?: string; profilePhoto?: string; favorites?: string[]; highlights?: Record<string, string>; notes?: Record<string, string>; plans?: string[]; shared?: string[]; foundScrolls?: string[]; lastReading?: LastReading | null };
+type PlayerProgress = { xp: number; level: number; coins: number; streak: number; completed: string[]; achievements: string[]; dailyNoteCompleted?: boolean; xpBonusPercent?: number; missedStreakDays?: number; displayName?: string; profilePhoto?: string; favorites?: string[]; highlights?: Record<string, string>; notes?: Record<string, string>; noteDates?: Record<string, number>; plans?: string[]; shared?: string[]; foundScrolls?: string[]; lastReading?: LastReading | null };
 type ChapterReward = { xp: number; coins: number; levelUp: boolean; unlocked: string[]; scrollsUnlocked?: number; scrollXp?: number; firstScrollDiscovery?: boolean; missionCompleted?: boolean; missionTitle?: string; secondaryMissionCompleted?: boolean; replayCompleted?: boolean; actCompleted?: boolean; actTitle?: string };
 type ScrollDiscovery = { count: number; xp: number; first: boolean };
 type DeveloperGift = { id: number; amount: number; message: string };
@@ -250,8 +250,8 @@ export default function VerboApp() {
     window.setTimeout(() => setToast(""), 1800);
   };
 
-  const saveRemoteLibrary = async (next: Partial<Pick<PlayerProgress, "favorites" | "highlights" | "notes" | "plans" | "shared" | "foundScrolls">>, base = progress) => {
-    await fetch("/api/library", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ favorites: base.favorites || [], highlights: base.highlights || {}, notes: base.notes || {}, plans: base.plans || [], shared: base.shared || [], foundScrolls: base.foundScrolls || [], lastReading: lastReadingRef.current, ...next }) }).catch(() => undefined);
+  const saveRemoteLibrary = async (next: Partial<Pick<PlayerProgress, "favorites" | "highlights" | "notes" | "noteDates" | "plans" | "shared" | "foundScrolls">>, base = progress) => {
+    await fetch("/api/library", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ favorites: base.favorites || [], highlights: base.highlights || {}, notes: base.notes || {}, noteDates: base.noteDates || {}, plans: base.plans || [], shared: base.shared || [], foundScrolls: base.foundScrolls || [], lastReading: lastReadingRef.current, ...next }) }).catch(() => undefined);
   };
 
   const claimDeveloperGift = async () => {
@@ -610,15 +610,16 @@ export default function VerboApp() {
   const saveNote = async () => {
     const keys = selectedVerseKeys.length ? selectedVerseKeys : [verseKey];
     const notes = { ...(progress.notes || JSON.parse(localStorage.getItem("verbo-mobile-notes") || "{}")) } as Record<string, string>;
+    const noteDates = { ...(progress.noteDates || {}) } as Record<string, number>;
     const savedNote = noteDraft.trim();
     keys.forEach((key) => {
-      if (savedNote) notes[key] = savedNote;
-      else delete notes[key];
+      if (savedNote) { notes[key] = savedNote; noteDates[key] ||= Date.now(); }
+      else { delete notes[key]; delete noteDates[key]; }
     });
     localStorage.setItem("verbo-mobile-notes", JSON.stringify(notes));
-    const updated = { ...progress, notes };
+    const updated = { ...progress, notes, noteDates };
     setProgress(updated);
-    await saveRemoteLibrary({ notes }, updated);
+    await saveRemoteLibrary({ notes, noteDates }, updated);
     unlockPrimaryScrollIfReady(updated);
     if (savedNote) void unlockSecondaryHiddenScrollIfReady(updated);
     setNoteEditorOpen(false);
@@ -1274,6 +1275,7 @@ function PlansPage() {
 
 type SocialContact = { publicHandle: string; displayName: string; profilePhoto: string };
 type FriendRequest = SocialContact & { id: number; createdAt: number };
+type SharedSocialNote = { id: number; activityId: number; reference: string; text: string; createdAt: number; noteCreatedAt: number; reactions: { amen: number; celebrate: number; viewer?: "amen" | "celebrate" } };
 type SocialProfile = {
   publicHandle: string;
   relationship: "self" | "friend" | "none";
@@ -1282,13 +1284,15 @@ type SocialProfile = {
   displayName?: string;
   profilePhoto?: string;
   progress?: { level: number; xp: number; streak: number };
-  campaign?: { actNumber: number; actTitle: string; missionTitle: string; done: number; total: number };
-  stats?: { completedChapters: number; favoriteVerses: number };
+  campaign?: { actNumber: number; actTitle: string; missionTitle: string; done: number; total: number; percent: number; completedActs: number; totalActs: number; completedChapters: number; totalChapters: number };
+  stats?: { completedChapters: number; favoriteVerses: number; notes: number };
   favorites?: string[];
+  secondaryMissions?: { completed: number; total: number; xp: number; missions: { id: string; title: string; completedAt: number }[] };
+  notes?: SharedSocialNote[];
 };
 type SocialData = { friends: SocialContact[]; requests: { incoming: FriendRequest[]; outgoing: FriendRequest[] } };
-type FeedActivity = { id: number; kind: "mission_completed" | "chapter_completed" | "streak_milestone" | "achievement_unlocked"; title: string; detail: string; reference?: string; createdAt: number; actor: SocialContact; reactions: { amen: number; celebrate: number; viewer?: "amen" | "celebrate" } };
-type SocialPrivacy = { publicHandle: string; showActivities: boolean; profileVisibility: "friends" | "private"; showProgress: boolean; showFavorites: boolean; showStats: boolean; allowFriendRequests: boolean };
+type FeedActivity = { id: number; kind: "mission_completed" | "chapter_completed" | "streak_milestone" | "achievement_unlocked"; category?: "note_shared"; title: string; detail: string; reference?: string; createdAt: number; actor: SocialContact; reactions: { amen: number; celebrate: number; viewer?: "amen" | "celebrate" } };
+type SocialPrivacy = { publicHandle: string; showActivities: boolean; profileVisibility: "friends" | "private"; showProgress: boolean; showFavorites: boolean; showNotes: boolean; showStats: boolean; allowFriendRequests: boolean };
 type SocialNotification = { id: number; kind: "friend_request" | "friend_accepted" | "reaction"; createdAt: number; read: boolean; actor: SocialContact; activityTitle?: string };
 
 const emptySocial: SocialData = { friends: [], requests: { incoming: [], outgoing: [] } };
@@ -1297,11 +1301,22 @@ function SocialAvatar({ contact, small = false }: { contact: Pick<SocialContact,
   return <span className={`social-avatar ${small ? "small" : ""}`}>{contact.profilePhoto ? <ProfilePhoto src={contact.profilePhoto} /> : contact.displayName.slice(0, 1).toUpperCase()}</span>;
 }
 
+function socialReference(reference: string, manifest: BibleManifest | null) {
+  const [slug, chapter, verse] = reference.split(":");
+  return `${manifest?.books.find((book) => book.slug === slug)?.name || slug} ${chapter}:${verse}`;
+}
+
+function SharedNotesManager({ notes, sharedNotes, manifest, working, onShare, onOpen }: { notes: [string, string][]; sharedNotes: SharedSocialNote[]; manifest: BibleManifest | null; working: boolean; onShare: (reference: string, action: "share" | "unshare") => void; onOpen: (reference: string) => void }) {
+  const shared = new Set(sharedNotes.map((note) => note.reference));
+  return <section className="social-note-manager"><div className="social-section-title"><div><p className="eyebrow">ANOTAÇÕES COMPARTILHADAS</p><h2>Palavras que edificam</h2></div><span>{shared.size}</span></div><p>Escolha reflexões da sua biblioteca para que seus amigos possam ler, abrir o trecho bíblico e reagir.</p>{notes.length ? <div>{notes.map(([reference, text]) => <article key={reference}><button className="social-shared-note-copy" onClick={() => onOpen(reference)}><small>{socialReference(reference, manifest)}</small><b>{text}</b><span>Abrir na Bíblia ›</span></button><button className={shared.has(reference) ? "shared" : ""} disabled={working} onClick={() => onShare(reference, shared.has(reference) ? "unshare" : "share")}>{shared.has(reference) ? "Remover" : "Compartilhar"}</button></article>)}</div> : <div className="social-notes-empty">Suas anotações pessoais aparecerão aqui quando você as criar na Bíblia.</div>}</section>;
+}
+
 function SocialPage({ notify, dark, setDark, progress, manifest, onOpenFavorite, onProfilePhotoChange, onDisplayNameChange }: { notify: (message: string) => void; dark: boolean; setDark: (value: boolean) => void; progress: PlayerProgress; manifest: BibleManifest | null; onOpenFavorite: (reference: string) => void; onProfilePhotoChange: (file: File) => void; onDisplayNameChange: (displayName: string) => Promise<boolean> }) {
   const [data, setData] = useState<SocialData>(emptySocial);
   const [activities, setActivities] = useState<FeedActivity[]>([]);
   const [notifications, setNotifications] = useState<SocialNotification[]>([]);
   const [blockedUsers, setBlockedUsers] = useState<SocialContact[]>([]);
+  const [sharedNotes, setSharedNotes] = useState<SharedSocialNote[]>([]);
   const [privacy, setPrivacy] = useState<SocialPrivacy | null>(null);
   const [publicHandle, setPublicHandle] = useState("");
   const [query, setQuery] = useState("");
@@ -1313,7 +1328,7 @@ function SocialPage({ notify, dark, setDark, progress, manifest, onOpenFavorite,
   const [feedOrder, setFeedOrder] = useState<"recent" | "celebrated">("recent");
 
   const loadSocial = useCallback(async () => {
-    const [friendsResponse, privacyResponse, feedResponse, notificationsResponse, blocksResponse] = await Promise.all([fetch("/api/social/friends"), fetch("/api/social/privacy"), fetch("/api/social/feed"), fetch("/api/social/notifications"), fetch("/api/social/blocks")]);
+    const [friendsResponse, privacyResponse, feedResponse, notificationsResponse, blocksResponse, notesResponse] = await Promise.all([fetch("/api/social/friends"), fetch("/api/social/privacy"), fetch("/api/social/feed"), fetch("/api/social/notifications"), fetch("/api/social/blocks"), fetch("/api/social/notes")]);
     if (friendsResponse.ok) setData(await friendsResponse.json() as SocialData);
     if (privacyResponse.ok) {
       const nextPrivacy = await privacyResponse.json() as SocialPrivacy;
@@ -1323,6 +1338,7 @@ function SocialPage({ notify, dark, setDark, progress, manifest, onOpenFavorite,
     if (feedResponse.ok) setActivities((await feedResponse.json() as { activities?: FeedActivity[] }).activities || []);
     if (notificationsResponse.ok) setNotifications((await notificationsResponse.json() as { notifications?: SocialNotification[] }).notifications || []);
     if (blocksResponse.ok) setBlockedUsers((await blocksResponse.json() as { blocked?: SocialContact[] }).blocked || []);
+    if (notesResponse.ok) setSharedNotes((await notesResponse.json() as { notes?: SharedSocialNote[] }).notes || []);
   }, []);
 
   useEffect(() => {
@@ -1421,6 +1437,69 @@ function SocialPage({ notify, dark, setDark, progress, manifest, onOpenFavorite,
     }
   };
 
+  const reactToSharedNote = async (note: SharedSocialNote, reaction: "amen" | "celebrate") => {
+    setWorking(true);
+    try {
+      const nextReaction = note.reactions.viewer === reaction ? null : reaction;
+      const response = await fetch(`/api/social/activities/${note.activityId}/reaction`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ reaction: nextReaction }) });
+      const result = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(result.error || "Não foi possível registrar a reação");
+      if (selectedProfile) await openProfile(selectedProfile.publicHandle);
+      await loadSocial();
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Não foi possível registrar a reação");
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const updateNotesPrivacy = async (showNotes: boolean) => {
+    setWorking(true);
+    try {
+      const response = await fetch("/api/social/privacy", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ showNotes }) });
+      const next = await response.json() as SocialPrivacy & { error?: string };
+      if (!response.ok) throw new Error(next.error || "Não foi possível salvar a preferência");
+      setPrivacy(next);
+      notify(showNotes ? "Anotações selecionadas poderão ser compartilhadas com amigos" : "Suas anotações compartilhadas ficaram privadas");
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Não foi possível salvar a preferência");
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const updateProfilePrivacy = async (update: Partial<Pick<SocialPrivacy, "showProgress" | "showFavorites" | "showStats">>, message: string) => {
+    setWorking(true);
+    try {
+      const response = await fetch("/api/social/privacy", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(update) });
+      const next = await response.json() as SocialPrivacy & { error?: string };
+      if (!response.ok) throw new Error(next.error || "Não foi possível salvar a preferência");
+      setPrivacy(next);
+      notify(message);
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Não foi possível salvar a preferência");
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const shareNote = async (reference: string, action: "share" | "unshare") => {
+    setWorking(true);
+    try {
+      const response = await fetch("/api/social/notes", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action, reference }) });
+      const result = await response.json() as { notes?: SharedSocialNote[]; error?: string };
+      if (!response.ok) throw new Error(result.error || "Não foi possível atualizar a anotação");
+      setSharedNotes(result.notes || []);
+      if (selectedProfile) await openProfile(selectedProfile.publicHandle);
+      await loadSocial();
+      notify(action === "share" ? "Anotação compartilhada com amigos" : "Anotação removida do perfil social");
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Não foi possível atualizar a anotação");
+    } finally {
+      setWorking(false);
+    }
+  };
+
   const removeFriend = async (handle: string) => {
     if (!window.confirm("Remover esta pessoa da sua lista de amigos?")) return;
     setWorking(true);
@@ -1492,15 +1571,19 @@ function SocialPage({ notify, dark, setDark, progress, manifest, onOpenFavorite,
   const orderedActivities = useMemo(() => [...activities].sort((first, second) => feedOrder === "recent"
     ? second.createdAt - first.createdAt
     : (second.reactions.amen + second.reactions.celebrate) - (first.reactions.amen + first.reactions.celebrate)), [activities, feedOrder]);
-  const activityLabel = (activity: FeedActivity) => activity.kind === "mission_completed" ? "MISSÃO" : activity.kind === "chapter_completed" ? "LEITURA" : activity.kind === "streak_milestone" ? "CHAMA ACESA" : "CONQUISTA";
+  const activityLabel = (activity: FeedActivity) => activity.category === "note_shared" ? "ANOTAÇÃO" : activity.kind === "mission_completed" ? "MISSÃO" : activity.kind === "chapter_completed" ? "LEITURA" : activity.kind === "streak_milestone" ? "CHAMA ACESA" : "CONQUISTA";
 
   if (accountView) {
+    const personalNotes = Object.entries(progress.notes || {}).filter(([, note]) => note.trim());
     return <>
       <ProfilePage dark={dark} setDark={setDark} progress={progress} manifest={manifest} onOpenFavorite={onOpenFavorite} onProfilePhotoChange={onProfilePhotoChange} onDisplayNameChange={onDisplayNameChange} />
       <section className="generic-page social-page social-account-page page-in">
         <button className="social-back" onClick={() => setAccountView(false)}>‹ Voltar à comunidade</button>
         <section className="social-handle"><p>SEU IDENTIFICADOR PÚBLICO</p><b>{publicHandle ? `@${publicHandle}` : "Preparando seu identificador…"}</b><button onClick={() => void copyHandle()} disabled={!publicHandle}>Copiar</button><small>Compartilhe somente este código para receber pedidos. Seu e-mail nunca aparece.</small></section>
         {privacy && <section className="social-detail social-privacy"><p className="eyebrow">PRIVACIDADE DAS ATIVIDADES</p><label><span><b>Compartilhar conquistas</b><small>Missões e marcos de leitura aparecem para seus amigos.</small></span><input type="checkbox" checked={privacy.showActivities} disabled={working} onChange={(event) => void updateActivityPrivacy(event.target.checked)} /></label></section>}
+        {privacy && <section className="social-detail social-privacy social-profile-privacy"><p className="eyebrow">O QUE AMIGOS VEEM</p><label><span><b>Jornada e missões</b><small>Nível, XP, chama acesa, missão principal e missões secundárias.</small></span><input type="checkbox" checked={privacy.showProgress} disabled={working} onChange={(event) => void updateProfilePrivacy({ showProgress: event.target.checked }, event.target.checked ? "Sua jornada ficará visível para amigos" : "Sua jornada ficará privada")} /></label><label><span><b>Estatísticas do acervo</b><small>Capítulos lidos, favoritos e quantidade de anotações.</small></span><input type="checkbox" checked={privacy.showStats} disabled={working} onChange={(event) => void updateProfilePrivacy({ showStats: event.target.checked }, event.target.checked ? "Estatísticas compartilhadas" : "Estatísticas privadas")} /></label><label><span><b>Versículos favoritos</b><small>Lista de referências salvas na sua biblioteca.</small></span><input type="checkbox" checked={privacy.showFavorites} disabled={working} onChange={(event) => void updateProfilePrivacy({ showFavorites: event.target.checked }, event.target.checked ? "Favoritos compartilhados" : "Favoritos privados")} /></label></section>}
+        {privacy && <section className="social-detail social-privacy"><p className="eyebrow">PRIVACIDADE DAS ANOTAÇÕES</p><label><span><b>Permitir anotações compartilhadas</b><small>Você escolhe cada anotação; só as selecionadas aparecem para seus amigos.</small></span><input type="checkbox" checked={privacy.showNotes} disabled={working} onChange={(event) => void updateNotesPrivacy(event.target.checked)} /></label></section>}
+        <SharedNotesManager notes={personalNotes} sharedNotes={sharedNotes} manifest={manifest} working={working} onShare={(reference, action) => void shareNote(reference, action)} onOpen={onOpenFavorite} />
         {blockedUsers.length > 0 && <section className="social-detail social-blocked"><p className="eyebrow">PERFIS BLOQUEADOS</p>{blockedUsers.map((contact) => <div key={contact.publicHandle}><span><b>{contact.displayName}</b><small>@{contact.publicHandle}</small></span><button disabled={working} onClick={() => void unblockProfile(contact.publicHandle)}>Desbloquear</button></div>)}</section>}
         <button type="button" className="social-logout" onClick={async () => { await fetch("/api/auth/logout", { method: "POST" }); window.location.href = "/"; }}>Sair da conta</button>
       </section>
@@ -1520,10 +1603,12 @@ function SocialPage({ notify, dark, setDark, progress, manifest, onOpenFavorite,
         {selectedProfile.relationship === "none" && <div className="social-danger-actions"><button disabled={working} onClick={() => void blockProfile(selectedProfile.publicHandle)}>Bloquear perfil</button></div>}
       </section>
       {selectedProfile.profileVisible && <>
-        {selectedProfile.progress && <section className="social-stats"><article><b>{selectedProfile.progress.level}</b><small>nível</small></article><article><b>{selectedProfile.progress.streak}</b><small>dias de leitura</small></article><article><b>{selectedProfile.progress.xp.toLocaleString("pt-BR")}</b><small>XP</small></article></section>}
-        {selectedProfile.campaign && <section className="social-detail social-campaign"><p className="eyebrow">MISSÃO PRINCIPAL ATUAL</p><div><span>ATO {selectedProfile.campaign.actNumber} · {selectedProfile.campaign.actTitle}</span><b>{selectedProfile.campaign.missionTitle}</b><small>{selectedProfile.campaign.done} de {selectedProfile.campaign.total} capítulos concluídos</small><i><u style={{ width: `${(selectedProfile.campaign.done / selectedProfile.campaign.total) * 100}%` }} /></i></div></section>}
-        {selectedProfile.stats && <section className="social-detail"><p className="eyebrow">JORNADA</p><div><span>▥ Capítulos concluídos</span><b>{selectedProfile.stats.completedChapters}</b></div><div><span>♡ Versículos favoritos</span><b>{selectedProfile.stats.favoriteVerses}</b></div></section>}
-        {selectedProfile.favorites && <section className="social-detail"><p className="eyebrow">FAVORITOS COMPARTILHADOS</p>{selectedProfile.favorites.length ? <div className="social-favorites">{selectedProfile.favorites.slice(0, 6).map((favorite) => <span key={favorite}>♡ {favorite.replaceAll(":", " ")}</span>)}</div> : <small>Nenhum favorito compartilhado.</small>}</section>}
+        {selectedProfile.progress && <section className="social-stats social-journey-stats"><article><b>{selectedProfile.progress.level}</b><small>nível</small></article><article><b>{selectedProfile.progress.xp.toLocaleString("pt-BR")}</b><small>XP total</small></article><article><b>{selectedProfile.progress.streak}</b><small>chama acesa</small></article></section>}
+        {selectedProfile.campaign && <section className="social-detail social-campaign social-journey-progress"><p className="eyebrow">JORNADA PRINCIPAL</p><div><span>{selectedProfile.campaign.percent}% DA GRANDE JORNADA · {selectedProfile.campaign.completedActs} de {selectedProfile.campaign.totalActs} atos concluídos</span><b>{selectedProfile.campaign.missionTitle}</b><small>Missão atual · {selectedProfile.campaign.done} de {selectedProfile.campaign.total} capítulos · {selectedProfile.campaign.completedChapters} de {selectedProfile.campaign.totalChapters} no total</small><i><u style={{ width: `${selectedProfile.campaign.percent}%` }} /></i></div></section>}
+        {selectedProfile.stats && <section className="social-detail social-profile-library"><p className="eyebrow">ACERVO BÍBLICO</p><div><span>▥ Capítulos concluídos</span><b>{selectedProfile.stats.completedChapters}</b></div><div><span>♡ Versículos favoritos</span><b>{selectedProfile.stats.favoriteVerses}</b></div><div><span>✎ Anotações realizadas</span><b>{selectedProfile.stats.notes}</b></div></section>}
+        {selectedProfile.favorites && <section className="social-detail social-favorite-list"><p className="eyebrow">FAVORITOS COMPARTILHADOS · {selectedProfile.favorites.length}</p>{selectedProfile.favorites.length ? <div className="social-favorites">{selectedProfile.favorites.map((favorite) => <button key={favorite} onClick={() => onOpenFavorite(favorite)}>♡ {socialReference(favorite, manifest)} <em>›</em></button>)}</div> : <small>Nenhum favorito compartilhado.</small>}</section>}
+        {selectedProfile.secondaryMissions && <section className="social-detail social-secondary-summary"><p className="eyebrow">MISSÕES SECUNDÁRIAS</p><div><span>✦ Missões concluídas</span><b>{selectedProfile.secondaryMissions.completed} de {selectedProfile.secondaryMissions.total}</b></div><div><span>◆ XP obtido nas missões</span><b>{selectedProfile.secondaryMissions.xp.toLocaleString("pt-BR")}</b></div>{selectedProfile.secondaryMissions.missions.length > 0 && <ul>{selectedProfile.secondaryMissions.missions.map((mission) => <li key={mission.id}><span>{mission.title}</span><small>{new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(mission.completedAt))}</small></li>)}</ul>}</section>}
+        {selectedProfile.notes && <section className="social-detail social-profile-notes"><p className="eyebrow">ANOTAÇÕES COMPARTILHADAS · {selectedProfile.notes.length}</p>{selectedProfile.notes.length ? <div>{selectedProfile.notes.map((note) => <article key={note.id}><button className="social-shared-note-copy" onClick={() => onOpenFavorite(note.reference)}><small>{profileContact.displayName} · {new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(note.noteCreatedAt))}</small><b>{note.text}</b><span>{socialReference(note.reference, manifest)} · Abrir trecho ›</span></button><div className="social-reactions"><button className={note.reactions.viewer === "amen" ? "active" : ""} disabled={working} onClick={() => void reactToSharedNote(note, "amen")}>🙏 <span>{note.reactions.amen || "Amém"}</span></button><button className={note.reactions.viewer === "celebrate" ? "active" : ""} disabled={working} onClick={() => void reactToSharedNote(note, "celebrate")}>✦ <span>{note.reactions.celebrate || "Celebrar"}</span></button></div></article>)}</div> : <small>Este amigo ainda não compartilhou anotações.</small>}</section>}
         {recentProfileActivities.length > 0 && <section className="social-detail social-profile-activities"><p className="eyebrow">ÚLTIMAS CONQUISTAS</p>{recentProfileActivities.map((activity) => <div key={activity.id}><b>{activity.title}</b>{activity.detail && <small>{activity.detail}</small>}</div>)}</section>}
         {selectedProfile.relationship === "self" && privacy && <section className="social-detail social-privacy"><p className="eyebrow">PRIVACIDADE DAS ATIVIDADES</p><label><span><b>Compartilhar conquistas</b><small>Missões e marcos de leitura aparecem para seus amigos.</small></span><input type="checkbox" checked={privacy.showActivities} disabled={working} onChange={(event) => void updateActivityPrivacy(event.target.checked)} /></label></section>}
         {selectedProfile.relationship === "self" && blockedUsers.length > 0 && <section className="social-detail social-blocked"><p className="eyebrow">PERFIS BLOQUEADOS</p>{blockedUsers.map((contact) => <div key={contact.publicHandle}><span><b>{contact.displayName}</b><small>@{contact.publicHandle}</small></span><button disabled={working} onClick={() => void unblockProfile(contact.publicHandle)}>Desbloquear</button></div>)}</section>}

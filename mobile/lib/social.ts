@@ -1,11 +1,13 @@
 import { env } from "cloudflare:workers";
 import { campaignActs } from "./campaign";
+import { secondaryMissions } from "./secondary-missions";
 
 export type SocialPrivacy = {
   publicHandle: string;
   profileVisibility: "friends" | "private";
   showProgress: boolean;
   showFavorites: boolean;
+  showNotes: boolean;
   showActivities: boolean;
   showStats: boolean;
   allowFriendRequests: boolean;
@@ -25,10 +27,14 @@ export type SocialProfile = {
   displayName?: string;
   profilePhoto?: string;
   progress?: { level: number; xp: number; streak: number };
-  campaign?: { actNumber: number; actTitle: string; missionTitle: string; done: number; total: number };
-  stats?: { completedChapters: number; favoriteVerses: number };
+  campaign?: { actNumber: number; actTitle: string; missionTitle: string; done: number; total: number; percent: number; completedActs: number; totalActs: number; completedChapters: number; totalChapters: number };
+  stats?: { completedChapters: number; favoriteVerses: number; notes: number };
   favorites?: string[];
+  secondaryMissions?: { completed: number; total: number; xp: number; missions: { id: string; title: string; completedAt: number }[] };
+  notes?: SocialSharedNote[];
 };
+
+export type SocialSharedNote = { id: number; activityId: number; reference: string; text: string; createdAt: number; noteCreatedAt: number; reactions: { amen: number; celebrate: number; viewer?: "amen" | "celebrate" } };
 
 export type SocialActivityKind = "mission_completed" | "chapter_completed" | "streak_milestone" | "achievement_unlocked";
 export type SocialActivity = {
@@ -37,6 +43,7 @@ export type SocialActivity = {
   title: string;
   detail: string;
   reference?: string;
+  category?: "note_shared";
   createdAt: number;
   actor: SocialContact;
   reactions: { amen: number; celebrate: number; viewer?: "amen" | "celebrate" };
@@ -56,6 +63,7 @@ type PrivacyRow = {
   profile_visibility: "friends" | "private";
   show_progress: number;
   show_favorites: number;
+  show_notes: number;
   show_activities: number;
   show_stats: number;
   allow_friend_requests: number;
@@ -69,6 +77,7 @@ type SocialUserRow = {
   profile_visibility: "friends" | "private" | null;
   show_progress: number | null;
   show_favorites: number | null;
+  show_notes: number | null;
   show_stats: number | null;
   allow_friend_requests: number | null;
 };
@@ -77,6 +86,7 @@ const defaults = {
   profileVisibility: "friends" as const,
   showProgress: true,
   showFavorites: false,
+  showNotes: false,
   showActivities: true,
   showStats: true,
   allowFriendRequests: true,
@@ -90,7 +100,7 @@ export async function ensureSocialSchema() {
 
   await env.DB.batch([
     env.DB.prepare("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_public_handle ON users(public_handle) WHERE public_handle IS NOT NULL"),
-    env.DB.prepare("CREATE TABLE IF NOT EXISTS social_privacy_settings (user_id TEXT PRIMARY KEY NOT NULL, profile_visibility TEXT NOT NULL DEFAULT 'friends' CHECK(profile_visibility IN ('friends', 'private')), show_progress INTEGER NOT NULL DEFAULT 1 CHECK(show_progress IN (0, 1)), show_favorites INTEGER NOT NULL DEFAULT 0 CHECK(show_favorites IN (0, 1)), show_activities INTEGER NOT NULL DEFAULT 1 CHECK(show_activities IN (0, 1)), show_stats INTEGER NOT NULL DEFAULT 1 CHECK(show_stats IN (0, 1)), allow_friend_requests INTEGER NOT NULL DEFAULT 1 CHECK(allow_friend_requests IN (0, 1)), updated_at INTEGER NOT NULL, FOREIGN KEY (user_id) REFERENCES users(id))"),
+    env.DB.prepare("CREATE TABLE IF NOT EXISTS social_privacy_settings (user_id TEXT PRIMARY KEY NOT NULL, profile_visibility TEXT NOT NULL DEFAULT 'friends' CHECK(profile_visibility IN ('friends', 'private')), show_progress INTEGER NOT NULL DEFAULT 1 CHECK(show_progress IN (0, 1)), show_favorites INTEGER NOT NULL DEFAULT 0 CHECK(show_favorites IN (0, 1)), show_notes INTEGER NOT NULL DEFAULT 0 CHECK(show_notes IN (0, 1)), show_activities INTEGER NOT NULL DEFAULT 1 CHECK(show_activities IN (0, 1)), show_stats INTEGER NOT NULL DEFAULT 1 CHECK(show_stats IN (0, 1)), allow_friend_requests INTEGER NOT NULL DEFAULT 1 CHECK(allow_friend_requests IN (0, 1)), updated_at INTEGER NOT NULL, FOREIGN KEY (user_id) REFERENCES users(id))"),
     env.DB.prepare("CREATE TABLE IF NOT EXISTS friend_requests (id INTEGER PRIMARY KEY AUTOINCREMENT, sender_id TEXT NOT NULL, recipient_id TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'accepted', 'declined', 'cancelled')), created_at INTEGER NOT NULL, responded_at INTEGER, FOREIGN KEY (sender_id) REFERENCES users(id), FOREIGN KEY (recipient_id) REFERENCES users(id), CHECK(sender_id <> recipient_id))"),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_friend_requests_recipient_status ON friend_requests(recipient_id, status)"),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_friend_requests_sender_status ON friend_requests(sender_id, status)"),
@@ -103,7 +113,13 @@ export async function ensureSocialSchema() {
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_social_notifications_user_read_created ON social_notifications(user_id, read_at, created_at)"),
     env.DB.prepare("CREATE TABLE IF NOT EXISTS user_blocks (blocker_id TEXT NOT NULL, blocked_id TEXT NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY (blocker_id, blocked_id), FOREIGN KEY (blocker_id) REFERENCES users(id), FOREIGN KEY (blocked_id) REFERENCES users(id), CHECK(blocker_id <> blocked_id))"),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_user_blocks_blocked ON user_blocks(blocked_id)"),
+    env.DB.prepare("CREATE TABLE IF NOT EXISTS social_shared_notes (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT NOT NULL, activity_id INTEGER NOT NULL UNIQUE, reference TEXT NOT NULL, note_text TEXT NOT NULL, created_at INTEGER NOT NULL, note_created_at INTEGER NOT NULL DEFAULT 0, UNIQUE(user_id, reference), FOREIGN KEY (user_id) REFERENCES users(id), FOREIGN KEY (activity_id) REFERENCES social_activities(id))"),
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_social_shared_notes_user_created ON social_shared_notes(user_id, created_at)"),
   ]);
+  const privacyColumns = await env.DB.prepare("PRAGMA table_info(social_privacy_settings)").all<{ name: string }>();
+  if (!privacyColumns.results.some((column) => column.name === "show_notes")) await env.DB.prepare("ALTER TABLE social_privacy_settings ADD COLUMN show_notes INTEGER NOT NULL DEFAULT 0").run();
+  const sharedNoteColumns = await env.DB.prepare("PRAGMA table_info(social_shared_notes)").all<{ name: string }>();
+  if (!sharedNoteColumns.results.some((column) => column.name === "note_created_at")) await env.DB.prepare("ALTER TABLE social_shared_notes ADD COLUMN note_created_at INTEGER NOT NULL DEFAULT 0").run();
 }
 
 function newHandle() {
@@ -138,6 +154,7 @@ function fromRow(publicHandle: string, row: PrivacyRow | null): SocialPrivacy {
     profileVisibility: row.profile_visibility,
     showProgress: Boolean(row.show_progress),
     showFavorites: Boolean(row.show_favorites),
+    showNotes: Boolean(row.show_notes),
     showActivities: Boolean(row.show_activities),
     showStats: Boolean(row.show_stats),
     allowFriendRequests: Boolean(row.allow_friend_requests),
@@ -146,14 +163,14 @@ function fromRow(publicHandle: string, row: PrivacyRow | null): SocialPrivacy {
 
 export async function getSocialPrivacy(userId: string): Promise<SocialPrivacy> {
   const publicHandle = await ensureSocialUser(userId);
-  const row = await env.DB.prepare("SELECT profile_visibility, show_progress, show_favorites, show_activities, show_stats, allow_friend_requests FROM social_privacy_settings WHERE user_id = ?").bind(userId).first<PrivacyRow>();
+  const row = await env.DB.prepare("SELECT profile_visibility, show_progress, show_favorites, show_notes, show_activities, show_stats, allow_friend_requests FROM social_privacy_settings WHERE user_id = ?").bind(userId).first<PrivacyRow>();
   return fromRow(publicHandle, row);
 }
 
 export async function saveSocialPrivacy(userId: string, next: Omit<SocialPrivacy, "publicHandle">): Promise<SocialPrivacy> {
   const publicHandle = await ensureSocialUser(userId);
-  await env.DB.prepare("UPDATE social_privacy_settings SET profile_visibility = ?, show_progress = ?, show_favorites = ?, show_activities = ?, show_stats = ?, allow_friend_requests = ?, updated_at = ? WHERE user_id = ?")
-    .bind(next.profileVisibility, Number(next.showProgress), Number(next.showFavorites), Number(next.showActivities), Number(next.showStats), Number(next.allowFriendRequests), Date.now(), userId)
+  await env.DB.prepare("UPDATE social_privacy_settings SET profile_visibility = ?, show_progress = ?, show_favorites = ?, show_notes = ?, show_activities = ?, show_stats = ?, allow_friend_requests = ?, updated_at = ? WHERE user_id = ?")
+    .bind(next.profileVisibility, Number(next.showProgress), Number(next.showFavorites), Number(next.showNotes), Number(next.showActivities), Number(next.showStats), Number(next.allowFriendRequests), Date.now(), userId)
     .run();
   return { publicHandle, ...next };
 }
@@ -201,7 +218,7 @@ export function contactFromRow(row: Pick<SocialUserRow, "public_handle" | "displ
 
 export async function findSocialUser(publicHandle: string) {
   await ensureSocialSchema();
-  return env.DB.prepare("SELECT users.id, users.public_handle, users.display_name, users.profile_photo, social_privacy_settings.profile_visibility, social_privacy_settings.show_progress, social_privacy_settings.show_favorites, social_privacy_settings.show_stats, social_privacy_settings.allow_friend_requests FROM users LEFT JOIN social_privacy_settings ON social_privacy_settings.user_id = users.id WHERE users.public_handle = ?")
+  return env.DB.prepare("SELECT users.id, users.public_handle, users.display_name, users.profile_photo, social_privacy_settings.profile_visibility, social_privacy_settings.show_progress, social_privacy_settings.show_favorites, social_privacy_settings.show_notes, social_privacy_settings.show_stats, social_privacy_settings.allow_friend_requests FROM users LEFT JOIN social_privacy_settings ON social_privacy_settings.user_id = users.id WHERE users.public_handle = ?")
     .bind(publicHandle)
     .first<SocialUserRow>();
 }
@@ -215,6 +232,18 @@ function favoriteVerses(value: string | null | undefined) {
   }
 }
 
+function savedNotes(value: string | null | undefined, datesValue?: string | null) {
+  try {
+    const notes = JSON.parse(value || "{}");
+    const dates = JSON.parse(datesValue || "{}");
+    return notes && typeof notes === "object" && !Array.isArray(notes)
+      ? Object.entries(notes).filter(([reference, note]) => typeof reference === "string" && typeof note === "string" && Boolean(note.trim())).map(([reference, note]) => ({ reference, text: (note as string).trim(), createdAt: typeof dates?.[reference] === "number" ? dates[reference] : 0 }))
+      : [];
+  } catch {
+    return [];
+  }
+}
+
 function campaignProgress(completed: { book_slug: string; chapter: number }[]) {
   const completedSet = new Set(completed.map((item) => `${item.book_slug}:${item.chapter}`));
   const missionComplete = (mission: (typeof campaignActs)[number]["missions"][number]) => Array.from({ length: mission.to - mission.from + 1 }, (_, index) => completedSet.has(`${mission.slug}:${mission.from + index}`)).every(Boolean);
@@ -223,21 +252,39 @@ function campaignProgress(completed: { book_slug: string; chapter: number }[]) {
   const mission = act.missions.find((item) => !missionComplete(item)) || act.missions.at(-1)!;
   const total = mission.to - mission.from + 1;
   const done = Array.from({ length: total }, (_, index) => completedSet.has(`${mission.slug}:${mission.from + index}`)).filter(Boolean).length;
-  return { actNumber: act.number, actTitle: act.title, missionTitle: mission.title, done, total };
+  const campaignChapters = new Set(campaignActs.flatMap((campaignAct) => campaignAct.ranges.flatMap((range) => Array.from({ length: range.to - range.from + 1 }, (_, index) => `${range.slug}:${range.from + index}`))));
+  const completedChapters = Array.from(campaignChapters).filter((chapter) => completedSet.has(chapter)).length;
+  const completedActs = campaignActs.filter(actComplete).length;
+  return { actNumber: act.number, actTitle: act.title, missionTitle: mission.title, done, total, percent: campaignChapters.size ? Math.round(completedChapters / campaignChapters.size * 100) : 0, completedActs, totalActs: campaignActs.length, completedChapters, totalChapters: campaignChapters.size };
 }
 
-async function profileData(userId: string, includeProgress: boolean, includeStats: boolean, includeFavorites: boolean) {
-  const [progress, campaignChapters, completed, library] = await Promise.all([
+async function sharedNotesForProfile(userId: string, viewerId: string): Promise<SocialSharedNote[]> {
+  const rows = await env.DB.prepare("SELECT social_shared_notes.id, social_shared_notes.activity_id, social_shared_notes.reference, social_shared_notes.note_text, social_shared_notes.created_at, social_shared_notes.note_created_at, COALESCE(SUM(CASE WHEN social_reactions.reaction = 'amen' THEN 1 ELSE 0 END), 0) AS amen_count, COALESCE(SUM(CASE WHEN social_reactions.reaction = 'celebrate' THEN 1 ELSE 0 END), 0) AS celebrate_count, MAX(CASE WHEN social_reactions.user_id = ? THEN social_reactions.reaction ELSE NULL END) AS viewer_reaction FROM social_shared_notes LEFT JOIN social_reactions ON social_reactions.activity_id = social_shared_notes.activity_id WHERE social_shared_notes.user_id = ? GROUP BY social_shared_notes.id ORDER BY social_shared_notes.created_at DESC LIMIT 20")
+    .bind(viewerId, userId)
+    .all<{ id: number; activity_id: number; reference: string; note_text: string; created_at: number; note_created_at: number; amen_count: number; celebrate_count: number; viewer_reaction: "amen" | "celebrate" | null }>();
+  return rows.results.map((row) => ({ id: row.id, activityId: row.activity_id, reference: row.reference, text: row.note_text, createdAt: row.created_at, noteCreatedAt: row.note_created_at || row.created_at, reactions: { amen: Number(row.amen_count), celebrate: Number(row.celebrate_count), ...(row.viewer_reaction ? { viewer: row.viewer_reaction } : {}) } }));
+}
+
+async function profileData(userId: string, viewerId: string, includeProgress: boolean, includeStats: boolean, includeFavorites: boolean, includeNotes: boolean) {
+  const [progress, campaignChapters, completed, library, secondary] = await Promise.all([
     includeProgress ? env.DB.prepare("SELECT level, xp, streak FROM user_progress WHERE user_id = ?").bind(userId).first<{ level: number; xp: number; streak: number }>() : null,
     includeProgress ? env.DB.prepare("SELECT book_slug, chapter FROM completed_chapters WHERE user_id = ?").bind(userId).all<{ book_slug: string; chapter: number }>().catch(() => null) : null,
     includeStats ? env.DB.prepare("SELECT COUNT(*) AS count FROM completed_chapters WHERE user_id = ?").bind(userId).first<{ count: number }>().catch(() => null) : null,
-    (includeStats || includeFavorites) ? env.DB.prepare("SELECT favorites_json FROM user_library WHERE user_id = ?").bind(userId).first<{ favorites_json: string }>().catch(() => null) : null,
+    (includeStats || includeFavorites) ? env.DB.prepare("SELECT favorites_json, notes_json, note_dates_json FROM user_library WHERE user_id = ?").bind(userId).first<{ favorites_json: string; notes_json: string; note_dates_json: string }>().catch(() => null) : null,
+    includeProgress ? env.DB.prepare("SELECT mission_id, completed_at FROM user_secondary_missions WHERE user_id = ? AND completed_at IS NOT NULL ORDER BY completed_at DESC").bind(userId).all<{ mission_id: string; completed_at: number }>().catch(() => null) : null,
   ]);
   const favorites = favoriteVerses(library?.favorites_json);
+  const notes = savedNotes(library?.notes_json, library?.note_dates_json);
+  const completedSecondary = (secondary?.results || []).map((row) => {
+    const mission = secondaryMissions.find((item) => item.id === row.mission_id);
+    return mission ? { id: mission.id, title: mission.title, completedAt: row.completed_at, xp: mission.completionXp } : null;
+  }).filter((mission): mission is { id: string; title: string; completedAt: number; xp: number } => Boolean(mission));
   return {
     ...(includeProgress && progress ? { progress, campaign: campaignProgress(campaignChapters?.results || []) } : {}),
-    ...(includeStats ? { stats: { completedChapters: completed?.count ?? 0, favoriteVerses: favorites.length } } : {}),
+    ...(includeStats ? { stats: { completedChapters: completed?.count ?? 0, favoriteVerses: favorites.length, notes: notes.length } } : {}),
     ...(includeFavorites ? { favorites } : {}),
+    ...(includeProgress ? { secondaryMissions: { completed: completedSecondary.length, total: secondaryMissions.length, xp: completedSecondary.reduce((total, mission) => total + mission.xp, 0), missions: completedSecondary.map(({ xp: _xp, ...mission }) => mission) } } : {}),
+    ...(includeNotes ? { notes: await sharedNotesForProfile(userId, viewerId) } : {}),
   };
 }
 
@@ -255,14 +302,63 @@ export async function getSocialProfile(viewerId: string, publicHandle: string): 
   const includeProgress = relationship === "self" || Boolean(target.show_progress ?? defaults.showProgress);
   const includeStats = relationship === "self" || Boolean(target.show_stats ?? defaults.showStats);
   const includeFavorites = relationship === "self" || Boolean(target.show_favorites ?? defaults.showFavorites);
+  const includeNotes = relationship === "self" || Boolean(target.show_notes ?? defaults.showNotes);
   return {
     publicHandle: target.public_handle,
     relationship,
     profileVisible,
     canSendFriendRequest,
     ...contactFromRow(target),
-    ...await profileData(target.id, includeProgress, includeStats, includeFavorites),
+    ...await profileData(target.id, viewerId, includeProgress, includeStats, includeFavorites, includeNotes),
   };
+}
+
+function validVerseReference(reference: unknown) {
+  return typeof reference === "string" && /^[a-z0-9]+:\d{1,3}:\d{1,3}$/.test(reference) ? reference : null;
+}
+
+export async function listOwnSharedNotes(userId: string) {
+  await ensureSocialUser(userId);
+  return sharedNotesForProfile(userId, userId);
+}
+
+export async function shareSocialNote(userId: string, reference: unknown) {
+  await ensureSocialUser(userId);
+  const safeReference = validVerseReference(reference);
+  if (!safeReference) return { ok: false as const, status: 400, error: "Referência bíblica inválida" };
+  const privacy = await getSocialPrivacy(userId);
+  if (!privacy.showNotes) return { ok: false as const, status: 403, error: "Ative o compartilhamento de anotações nas preferências do perfil." };
+  const library = await env.DB.prepare("SELECT notes_json, note_dates_json FROM user_library WHERE user_id = ?").bind(userId).first<{ notes_json: string; note_dates_json: string }>();
+  const note = savedNotes(library?.notes_json, library?.note_dates_json).find((item) => item.reference === safeReference);
+  if (!note) return { ok: false as const, status: 404, error: "Anotação não encontrada" };
+  const now = Date.now();
+  const payload = JSON.stringify({ title: "Compartilhou uma anotação", detail: note.text.slice(0, 180), reference: safeReference, category: "note_shared" });
+  const existing = await env.DB.prepare("SELECT id, activity_id FROM social_shared_notes WHERE user_id = ? AND reference = ?").bind(userId, safeReference).first<{ id: number; activity_id: number }>();
+  if (existing) {
+    await env.DB.batch([
+      env.DB.prepare("UPDATE social_shared_notes SET note_text = ?, created_at = ?, note_created_at = ? WHERE id = ?").bind(note.text.slice(0, 1200), now, note.createdAt || now, existing.id),
+      env.DB.prepare("UPDATE social_activities SET payload_json = ?, visibility = 'friends', created_at = ? WHERE id = ? AND actor_id = ?").bind(payload, now, existing.activity_id, userId),
+    ]);
+    return { ok: true as const, id: existing.id };
+  }
+  const activity = await env.DB.prepare("INSERT INTO social_activities (actor_id, kind, payload_json, visibility, created_at) VALUES (?, 'achievement_unlocked', ?, 'friends', ?)").bind(userId, payload, now).run();
+  const result = await env.DB.prepare("INSERT INTO social_shared_notes (user_id, activity_id, reference, note_text, created_at, note_created_at) VALUES (?, ?, ?, ?, ?, ?)").bind(userId, Number(activity.meta.last_row_id), safeReference, note.text.slice(0, 1200), now, note.createdAt || now).run();
+  return { ok: true as const, id: Number(result.meta.last_row_id) };
+}
+
+export async function unshareSocialNote(userId: string, reference: unknown) {
+  await ensureSocialUser(userId);
+  const safeReference = validVerseReference(reference);
+  if (!safeReference) return { ok: false as const, status: 400, error: "Referência bíblica inválida" };
+  const existing = await env.DB.prepare("SELECT id, activity_id FROM social_shared_notes WHERE user_id = ? AND reference = ?").bind(userId, safeReference).first<{ id: number; activity_id: number }>();
+  if (!existing) return { ok: false as const, status: 404, error: "Anotação compartilhada não encontrada" };
+  await env.DB.batch([
+    env.DB.prepare("DELETE FROM social_notifications WHERE activity_id = ?").bind(existing.activity_id),
+    env.DB.prepare("DELETE FROM social_reactions WHERE activity_id = ?").bind(existing.activity_id),
+    env.DB.prepare("DELETE FROM social_shared_notes WHERE id = ? AND user_id = ?").bind(existing.id, userId),
+    env.DB.prepare("DELETE FROM social_activities WHERE id = ? AND actor_id = ?").bind(existing.activity_id, userId),
+  ]);
+  return { ok: true as const };
 }
 
 export async function listFriends(userId: string): Promise<SocialContact[]> {
@@ -391,11 +487,12 @@ function validActivityText(value: unknown, maxLength: number) {
 
 function parseActivityPayload(value: string) {
   try {
-    const payload = JSON.parse(value) as { title?: unknown; detail?: unknown; reference?: unknown };
+    const payload = JSON.parse(value) as { title?: unknown; detail?: unknown; reference?: unknown; category?: unknown };
     return {
       title: validActivityText(payload.title, 100) || "Avançou na jornada",
       detail: validActivityText(payload.detail, 180),
       reference: validActivityText(payload.reference, 60) || undefined,
+      ...(payload.category === "note_shared" ? { category: "note_shared" as const } : {}),
     };
   } catch {
     return { title: "Avançou na jornada", detail: "" };
