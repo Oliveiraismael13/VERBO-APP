@@ -617,7 +617,7 @@ export default function VerboApp() {
   const catholicEdition = translations[translation].canon === "catholic-73";
   const oldTestamentBookCount = catholicEdition ? 46 : 39;
   return (
-    <main className={`app-shell rpg-shell ${dark ? "dark" : ""} ${missionMode ? "mission-active" : ""}`}>
+    <main className={`app-shell rpg-shell ${dark ? "dark" : ""} ${missionMode ? "mission-active" : ""} ${screen === "journey" ? "journey-surface" : screen === "social" ? "social-surface" : ""}`}>
       {screen !== "camera" && (
         <header className="topbar">
           {screen === "result" ? (
