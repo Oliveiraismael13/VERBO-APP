@@ -30,6 +30,8 @@ test("contains the authenticated Verbo application routes", async () => {
   assert.match(app, /leaveActiveMission/);
   assert.match(app, /record-replay/);
   assert.match(app, /Começar releitura/);
+  assert.match(app, /isSecondaryMissionChapterUnlocked/);
+  assert.match(app, /Conclua o capítulo atual para liberar o próximo da missão/);
   assert.match(app, />Social</);
   assert.match(app, /function SocialPage/);
   assert.match(app, /\/api\/social\/friends/);

@@ -56,6 +56,15 @@ function secondaryStatusProgress(mission: SecondaryMission, progress: PlayerProg
   return secondaryMissionProgress(mission, progress.completed);
 }
 
+function isSecondaryMissionChapterUnlocked(mission: SecondaryMission, progress: PlayerProgress, status: SecondaryMissionStatus | null, chapter: number) {
+  if (chapter < mission.from || chapter > mission.to) return false;
+  const completed = new Set(status?.replaying ? status.replayChapters : progress.completed);
+  for (let current = mission.from; current < chapter; current += 1) {
+    if (!completed.has(`${mission.bookSlug}:${current}`)) return false;
+  }
+  return true;
+}
+
 const topics = [
   { icon: "♡", title: "Amor de Deus", count: "42 passagens", color: "rose" },
   { icon: "✦", title: "Salvação", count: "36 passagens", color: "gold" },
@@ -566,6 +575,10 @@ export default function VerboApp() {
       notify("Este capítulo será liberado conforme você avança na missão");
       return;
     }
+    if (activeSecondaryMission && (slug !== activeSecondaryMission.bookSlug || !isSecondaryMissionChapterUnlocked(activeSecondaryMission, progress, activeSecondaryStatus, nextChapter))) {
+      notify("Conclua o capítulo atual para liberar o próximo da missão");
+      return;
+    }
     setBookSlug(slug);
     setChapter(nextChapter);
     setSelectedVerse(1);
@@ -694,6 +707,10 @@ export default function VerboApp() {
         notify("Conclua este capítulo para liberar o próximo");
         return;
       }
+      if (activeSecondaryMission && (bookSlug !== activeSecondaryMission.bookSlug || !isSecondaryMissionChapterUnlocked(activeSecondaryMission, progress, activeSecondaryStatus, target))) {
+        notify("Conclua o capítulo atual para liberar o próximo da missão");
+        return;
+      }
       setChapter(target);
       setSelectedVerse(1);
       setSelectedVerses([]);
@@ -712,6 +729,7 @@ export default function VerboApp() {
     const target = chapter + 1;
     if (target <= book.chapters.length) {
       if (missionMode && !isMainChapterUnlocked(manifest, updatedProgress, bookSlug, target)) return;
+      if (activeSecondaryMission && (bookSlug !== activeSecondaryMission.bookSlug || target > activeSecondaryMission.to)) return;
       setChapter(target);
       setSelectedVerse(1);
       setSelectedVerses([]);
