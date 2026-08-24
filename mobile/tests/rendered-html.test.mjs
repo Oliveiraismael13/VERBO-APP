@@ -40,6 +40,8 @@ test("contains the authenticated Verbo application routes", async () => {
   assert.match(app, /original-language/);
   assert.match(app, /Significado no \{language\}/);
   assert.match(app, /mainMissionScrollForChapter/);
+  assert.match(app, /pergaminhos encontrados/);
+  assert.doesNotMatch(app, /níveis disponíveis/);
   assert.match(app, /source="primary"/);
   assert.match(app, /source="secondary"/);
   assert.match(app, /scrollsUnlocked/);
