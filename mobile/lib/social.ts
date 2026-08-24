@@ -10,6 +10,24 @@ export type SocialPrivacy = {
   allowFriendRequests: boolean;
 };
 
+export type SocialContact = {
+  publicHandle: string;
+  displayName: string;
+  profilePhoto: string;
+};
+
+export type SocialProfile = {
+  publicHandle: string;
+  relationship: "self" | "friend" | "none";
+  profileVisible: boolean;
+  canSendFriendRequest: boolean;
+  displayName?: string;
+  profilePhoto?: string;
+  progress?: { level: number; xp: number; streak: number };
+  stats?: { completedChapters: number; favoriteVerses: number };
+  favorites?: string[];
+};
+
 type UserRow = { public_handle: string | null };
 type PrivacyRow = {
   profile_visibility: "friends" | "private";
@@ -18,6 +36,18 @@ type PrivacyRow = {
   show_activities: number;
   show_stats: number;
   allow_friend_requests: number;
+};
+
+type SocialUserRow = {
+  id: string;
+  public_handle: string;
+  display_name: string | null;
+  profile_photo: string | null;
+  profile_visibility: "friends" | "private" | null;
+  show_progress: number | null;
+  show_favorites: number | null;
+  show_stats: number | null;
+  allow_friend_requests: number | null;
 };
 
 const defaults = {
@@ -99,4 +129,142 @@ export async function saveSocialPrivacy(userId: string, next: Omit<SocialPrivacy
     .bind(next.profileVisibility, Number(next.showProgress), Number(next.showFavorites), Number(next.showActivities), Number(next.showStats), Number(next.allowFriendRequests), Date.now(), userId)
     .run();
   return { publicHandle, ...next };
+}
+
+export function normalizePublicHandle(value: unknown) {
+  const handle = typeof value === "string" ? value.trim().toLowerCase() : "";
+  return /^[a-z0-9-]{4,32}$/.test(handle) ? handle : null;
+}
+
+function orderedPair(firstUserId: string, secondUserId: string) {
+  return firstUserId < secondUserId ? [firstUserId, secondUserId] as const : [secondUserId, firstUserId] as const;
+}
+
+export async function areFriends(firstUserId: string, secondUserId: string) {
+  if (firstUserId === secondUserId) return false;
+  await ensureSocialSchema();
+  const [userAId, userBId] = orderedPair(firstUserId, secondUserId);
+  const friendship = await env.DB.prepare("SELECT 1 AS found FROM friendships WHERE user_a_id = ? AND user_b_id = ?").bind(userAId, userBId).first<{ found: number }>();
+  return Boolean(friendship);
+}
+
+export function contactFromRow(row: Pick<SocialUserRow, "public_handle" | "display_name" | "profile_photo">): SocialContact {
+  return {
+    publicHandle: row.public_handle,
+    displayName: row.display_name?.trim() || "Discípulo do Verbo",
+    profilePhoto: row.profile_photo || "",
+  };
+}
+
+export async function findSocialUser(publicHandle: string) {
+  await ensureSocialSchema();
+  return env.DB.prepare("SELECT users.id, users.public_handle, users.display_name, users.profile_photo, social_privacy_settings.profile_visibility, social_privacy_settings.show_progress, social_privacy_settings.show_favorites, social_privacy_settings.show_stats, social_privacy_settings.allow_friend_requests FROM users LEFT JOIN social_privacy_settings ON social_privacy_settings.user_id = users.id WHERE users.public_handle = ?")
+    .bind(publicHandle)
+    .first<SocialUserRow>();
+}
+
+function favoriteVerses(value: string | null | undefined) {
+  try {
+    const favorites = JSON.parse(value || "[]");
+    return Array.isArray(favorites) ? favorites.filter((favorite): favorite is string => typeof favorite === "string").slice(0, 500) : [];
+  } catch {
+    return [];
+  }
+}
+
+async function profileData(userId: string, includeProgress: boolean, includeStats: boolean, includeFavorites: boolean) {
+  const [progress, completed, library] = await Promise.all([
+    includeProgress ? env.DB.prepare("SELECT level, xp, streak FROM user_progress WHERE user_id = ?").bind(userId).first<{ level: number; xp: number; streak: number }>() : null,
+    includeStats ? env.DB.prepare("SELECT COUNT(*) AS count FROM completed_chapters WHERE user_id = ?").bind(userId).first<{ count: number }>().catch(() => null) : null,
+    (includeStats || includeFavorites) ? env.DB.prepare("SELECT favorites_json FROM user_library WHERE user_id = ?").bind(userId).first<{ favorites_json: string }>().catch(() => null) : null,
+  ]);
+  const favorites = favoriteVerses(library?.favorites_json);
+  return {
+    ...(includeProgress && progress ? { progress } : {}),
+    ...(includeStats ? { stats: { completedChapters: completed?.count ?? 0, favoriteVerses: favorites.length } } : {}),
+    ...(includeFavorites ? { favorites } : {}),
+  };
+}
+
+export async function getSocialProfile(viewerId: string, publicHandle: string): Promise<SocialProfile | null> {
+  await ensureSocialUser(viewerId);
+  const target = await findSocialUser(publicHandle);
+  if (!target) return null;
+
+  const relationship: SocialProfile["relationship"] = target.id === viewerId ? "self" : await areFriends(viewerId, target.id) ? "friend" : "none";
+  const profileVisible = relationship === "self" || (relationship === "friend" && (target.profile_visibility ?? defaults.profileVisibility) === "friends");
+  const canSendFriendRequest = relationship === "none" && Boolean(target.allow_friend_requests ?? defaults.allowFriendRequests);
+  if (!profileVisible) return { publicHandle: target.public_handle, relationship, profileVisible, canSendFriendRequest };
+
+  const includeProgress = relationship === "self" || Boolean(target.show_progress ?? defaults.showProgress);
+  const includeStats = relationship === "self" || Boolean(target.show_stats ?? defaults.showStats);
+  const includeFavorites = relationship === "self" || Boolean(target.show_favorites ?? defaults.showFavorites);
+  return {
+    publicHandle: target.public_handle,
+    relationship,
+    profileVisible,
+    canSendFriendRequest,
+    ...contactFromRow(target),
+    ...await profileData(target.id, includeProgress, includeStats, includeFavorites),
+  };
+}
+
+export async function listFriends(userId: string): Promise<SocialContact[]> {
+  await ensureSocialUser(userId);
+  const rows = await env.DB.prepare("SELECT users.public_handle, users.display_name, users.profile_photo FROM friendships JOIN users ON users.id = CASE WHEN friendships.user_a_id = ? THEN friendships.user_b_id ELSE friendships.user_a_id END WHERE friendships.user_a_id = ? OR friendships.user_b_id = ? ORDER BY lower(users.display_name), users.public_handle")
+    .bind(userId, userId, userId)
+    .all<Pick<SocialUserRow, "public_handle" | "display_name" | "profile_photo">>();
+  return rows.results.map(contactFromRow);
+}
+
+export async function listFriendRequests(userId: string) {
+  await ensureSocialUser(userId);
+  const [incoming, outgoing] = await Promise.all([
+    env.DB.prepare("SELECT friend_requests.id, friend_requests.created_at, users.public_handle, users.display_name, users.profile_photo FROM friend_requests JOIN users ON users.id = friend_requests.sender_id WHERE friend_requests.recipient_id = ? AND friend_requests.status = 'pending' ORDER BY friend_requests.created_at DESC")
+      .bind(userId)
+      .all<{ id: number; created_at: number } & Pick<SocialUserRow, "public_handle" | "display_name" | "profile_photo">>(),
+    env.DB.prepare("SELECT friend_requests.id, friend_requests.created_at, users.public_handle, users.display_name, users.profile_photo FROM friend_requests JOIN users ON users.id = friend_requests.recipient_id WHERE friend_requests.sender_id = ? AND friend_requests.status = 'pending' ORDER BY friend_requests.created_at DESC")
+      .bind(userId)
+      .all<{ id: number; created_at: number } & Pick<SocialUserRow, "public_handle" | "display_name" | "profile_photo">>(),
+  ]);
+  const toRequest = (row: { id: number; created_at: number } & Pick<SocialUserRow, "public_handle" | "display_name" | "profile_photo">) => ({ id: row.id, createdAt: row.created_at, ...contactFromRow(row) });
+  return { incoming: incoming.results.map(toRequest), outgoing: outgoing.results.map(toRequest) };
+}
+
+export async function createFriendRequest(senderId: string, recipientHandle: string) {
+  await ensureSocialUser(senderId);
+  const recipient = await findSocialUser(recipientHandle);
+  if (!recipient || recipient.id === senderId || !Boolean(recipient.allow_friend_requests ?? defaults.allowFriendRequests)) return { ok: false as const, status: 404, error: "Este perfil não está disponível para pedidos de amizade" };
+  if (await areFriends(senderId, recipient.id)) return { ok: false as const, status: 409, error: "Vocês já são amigos" };
+
+  const pending = await env.DB.prepare("SELECT id, sender_id FROM friend_requests WHERE status = 'pending' AND ((sender_id = ? AND recipient_id = ?) OR (sender_id = ? AND recipient_id = ?)) ORDER BY created_at DESC LIMIT 1")
+    .bind(senderId, recipient.id, recipient.id, senderId)
+    .first<{ id: number; sender_id: string }>();
+  if (pending) {
+    return pending.sender_id === senderId
+      ? { ok: false as const, status: 409, error: "O pedido de amizade já foi enviado" }
+      : { ok: false as const, status: 409, error: "Há um pedido deste perfil aguardando sua resposta" };
+  }
+
+  const result = await env.DB.prepare("INSERT INTO friend_requests (sender_id, recipient_id, status, created_at) VALUES (?, ?, 'pending', ?)").bind(senderId, recipient.id, Date.now()).run();
+  return { ok: true as const, requestId: result.meta.last_row_id, recipient: contactFromRow(recipient) };
+}
+
+export async function respondToFriendRequest(userId: string, requestId: number, action: "accept" | "decline" | "cancel") {
+  await ensureSocialUser(userId);
+  const request = await env.DB.prepare("SELECT id, sender_id, recipient_id FROM friend_requests WHERE id = ? AND status = 'pending'").bind(requestId).first<{ id: number; sender_id: string; recipient_id: string }>();
+  if (!request) return { ok: false as const, status: 404, error: "Pedido de amizade não encontrado" };
+  const isRecipient = request.recipient_id === userId;
+  const isSender = request.sender_id === userId;
+  if ((action === "accept" || action === "decline") && !isRecipient) return { ok: false as const, status: 403, error: "Você não pode responder a este pedido" };
+  if (action === "cancel" && !isSender) return { ok: false as const, status: 403, error: "Você não pode cancelar este pedido" };
+
+  const status = action === "accept" ? "accepted" : action === "decline" ? "declined" : "cancelled";
+  const statements = [env.DB.prepare("UPDATE friend_requests SET status = ?, responded_at = ? WHERE id = ? AND status = 'pending'").bind(status, Date.now(), requestId)];
+  if (action === "accept") {
+    const [userAId, userBId] = orderedPair(request.sender_id, request.recipient_id);
+    statements.push(env.DB.prepare("INSERT OR IGNORE INTO friendships (user_a_id, user_b_id, created_at) VALUES (?, ?, ?)").bind(userAId, userBId, Date.now()));
+  }
+  await env.DB.batch(statements);
+  return { ok: true as const, status };
 }

@@ -120,6 +120,9 @@ test("does not expose a public preview directory", async () => {
 test("keeps social privacy behind authenticated public identifiers", async () => {
   const social = await text("lib/social.ts");
   const privacy = await text("app/api/social/privacy/route.ts");
+  const friends = await text("app/api/social/friends/route.ts");
+  const requests = await text("app/api/social/friends/requests/[id]/route.ts");
+  const profile = await text("app/api/social/profiles/[handle]/route.ts");
   const migration = await text("drizzle/0006_social_foundation.sql");
 
   assert.match(social, /public_handle/);
@@ -131,6 +134,14 @@ test("keeps social privacy behind authenticated public identifiers", async () =>
   assert.match(privacy, /allowFriendRequests/);
   assert.match(privacy, /showFavorites/);
   assert.doesNotMatch(privacy, /email/);
+  assert.match(social, /areFriends/);
+  assert.match(social, /respondToFriendRequest/);
+  assert.match(social, /profileVisible/);
+  assert.match(friends, /createFriendRequest/);
+  assert.match(requests, /body\.action !== "accept"/);
+  assert.match(profile, /getSocialProfile/);
+  assert.doesNotMatch(friends, /email/);
+  assert.doesNotMatch(profile, /email/);
   assert.match(migration, /CREATE TABLE `social_privacy_settings`/);
 });
 
