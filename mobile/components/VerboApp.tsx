@@ -43,10 +43,18 @@ const translations = {
 type Translation = keyof typeof translations;
 type LastReading = { bookSlug: string; chapter: number };
 type PlayerProgress = { xp: number; level: number; coins: number; streak: number; completed: string[]; achievements: string[]; dailyNoteCompleted?: boolean; xpBonusPercent?: number; missedStreakDays?: number; displayName?: string; profilePhoto?: string; favorites?: string[]; highlights?: Record<string, string>; notes?: Record<string, string>; plans?: string[]; lastReading?: LastReading | null };
-type ChapterReward = { xp: number; coins: number; levelUp: boolean; unlocked: string[]; missionCompleted?: boolean; missionTitle?: string; secondaryMissionCompleted?: boolean; actCompleted?: boolean; actTitle?: string };
-type SecondaryMissionStatus = { id: string; unlocked: boolean; active: boolean; completed: boolean; replaying: boolean; done: number; total: number };
+type ChapterReward = { xp: number; coins: number; levelUp: boolean; unlocked: string[]; missionCompleted?: boolean; missionTitle?: string; secondaryMissionCompleted?: boolean; replayCompleted?: boolean; actCompleted?: boolean; actTitle?: string };
+type SecondaryMissionStatus = { id: string; unlocked: boolean; active: boolean; completed: boolean; replaying: boolean; replayChapters: string[]; done: number; total: number };
 
 const emptyProgress: PlayerProgress = { xp: 0, level: 1, coins: 0, streak: 0, completed: [], achievements: [], dailyNoteCompleted: false };
+
+function secondaryStatusProgress(mission: SecondaryMission, progress: PlayerProgress, status?: SecondaryMissionStatus | null) {
+  if (status?.replaying) {
+    const done = status.replayChapters.length;
+    return { done, total: mission.to - mission.from + 1, percent: Math.round(done / (mission.to - mission.from + 1) * 100) };
+  }
+  return secondaryMissionProgress(mission, progress.completed);
+}
 
 const topics = [
   { icon: "♡", title: "Amor de Deus", count: "42 passagens", color: "rose" },
@@ -155,6 +163,7 @@ export default function VerboApp() {
   const activeSecondaryStatus = secondaryMissionStates.find((mission) => mission.active) || null;
   const activeSecondaryMission = activeSecondaryStatus ? secondaryMissionById(activeSecondaryStatus.id) : null;
   const replayingSecondaryMission = Boolean(activeSecondaryStatus?.replaying);
+  const replayChapterComplete = Boolean(replayingSecondaryMission && activeSecondaryStatus?.replayChapters.includes(`${bookSlug}:${chapter}`));
 
   const verseKey = `${bookSlug}:${chapter}:${selectedVerse}`;
   const selectedVerseKeys = useMemo(() => selectedVerses.map((number) => `${bookSlug}:${chapter}:${number}`), [bookSlug, chapter, selectedVerses]);
@@ -384,9 +393,18 @@ export default function VerboApp() {
       notify("Entre na missão para registrar este capítulo");
       return;
     }
-    if (progress.completed.includes(`${bookSlug}:${chapter}`) || savingChapter) return;
+    if ((replayingSecondaryMission ? replayChapterComplete : progress.completed.includes(`${bookSlug}:${chapter}`)) || savingChapter) return;
     setSavingChapter(true);
     try {
+      if (replayingSecondaryMission && activeSecondaryMission) {
+        const response = await fetch("/api/secondary-missions", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ missionId: activeSecondaryMission.id, action: "record-replay", chapter }) });
+        const data = await response.json() as { missions?: SecondaryMissionStatus[]; replayCompleted?: boolean; error?: string };
+        if (!response.ok) throw new Error(data.error || "Não foi possível registrar a releitura.");
+        setSecondaryMissionStates(data.missions || []);
+        if (data.replayCompleted) setReward({ xp: 0, coins: 0, levelUp: false, unlocked: [], missionCompleted: true, missionTitle: activeSecondaryMission.title, replayCompleted: true });
+        else advanceToNextChapter(progress);
+        return;
+      }
       const response = await fetch("/api/progress", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -605,6 +623,18 @@ export default function VerboApp() {
     }
   };
 
+  const restartSecondaryMission = async (mission: SecondaryMission) => {
+    try {
+      const response = await fetch("/api/secondary-missions", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ missionId: mission.id }) });
+      const data = await response.json() as { missions?: SecondaryMissionStatus[]; error?: string };
+      if (!response.ok) throw new Error(data.error || "Não foi possível reiniciar a missão.");
+      setSecondaryMissionStates(data.missions || []);
+      setSecondaryBriefingId(mission.id);
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Não foi possível reiniciar a missão.");
+    }
+  };
+
   const beginSecondaryMission = (mission: SecondaryMission) => {
     if (!translations[translation].missions) changeTranslation("BLIVRE");
     setMissionMode(false);
@@ -723,13 +753,13 @@ export default function VerboApp() {
         </header>
       )}
 
-      {screen === "journey" && <JourneyPage manifest={manifest} progress={progress} activeSecondaryMission={activeSecondaryMission} replayingSecondaryMission={replayingSecondaryMission} onContinue={openMissionBriefing} onContinueSecondary={beginSecondaryMission} onOpenBible={() => { setMissionMode(false); go("bible"); }} onRestoreStreak={() => void restoreStreak()} />}
+      {screen === "journey" && <JourneyPage manifest={manifest} progress={progress} activeSecondaryMission={activeSecondaryMission} activeSecondaryStatus={activeSecondaryStatus} replayingSecondaryMission={replayingSecondaryMission} onContinue={openMissionBriefing} onContinueSecondary={beginSecondaryMission} onOpenBible={() => { setMissionMode(false); go("bible"); }} onRestoreStreak={() => void restoreStreak()} />}
 
       {screen === "bible" && (
         <section className="reader page-in" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd} onClick={(event) => { if (!(event.target as HTMLElement).closest("[data-verse], .verse-tools")) { setSelectedVerses([]); setVerseSelected(false); setHighlightPickerOpen(false); } }}>
           {(missionMode || activeSecondaryMission) && <div className="mission-mode-banner"><div className="mission-disciple" aria-label="Seu Discípulo caminhando"><PixelDisciple /><small>DISCÍPULO</small></div><div className="mission-reference"><b>{activeSecondaryMission ? replayingSecondaryMission ? "RELEITURA ATIVA" : "MISSÃO SECUNDÁRIA ATIVA" : "JORNADA PRINCIPAL ATIVA"}</b><strong>{activeSecondaryMission ? activeSecondaryMission.title : `${book?.name ?? "Carregando"} ${chapter}`}</strong><small>{activeSecondaryMission ? replayingSecondaryMission ? `Releia Mateus ${activeSecondaryMission.from}–${activeSecondaryMission.to}, sem recompensas adicionais.` : `${activeSecondaryMission.subtitle} · Mateus ${activeSecondaryMission.from}–${activeSecondaryMission.to}` : "Conclua este capítulo para liberar o próximo."}</small></div><button onClick={() => activeSecondaryMission ? go("studies") : (setMissionMode(false), notify("Você voltou à Bíblia livre"))}>{activeSecondaryMission ? "Ver missão" : "Sair da missão"}</button></div>}
           {missionMode && <MissionStoryPanel context={missionForChapter(bookSlug, chapter)} progress={progress} />}
-          {activeSecondaryMission && <SecondaryMissionStoryPanel mission={activeSecondaryMission} progress={progress} />}
+          {activeSecondaryMission && <SecondaryMissionStoryPanel mission={activeSecondaryMission} progress={progress} status={activeSecondaryStatus} />}
           <div className="reference-row">
             <div>
               <p className="eyebrow">{book?.testament === "old" ? `ANTIGO TESTAMENTO · ${oldTestamentBookCount} LIVROS` : "NOVO TESTAMENTO · 27 LIVROS"}</p>
@@ -792,9 +822,9 @@ export default function VerboApp() {
             })}
           </article>
 
-          {(missionMode || Boolean(activeSecondaryMission && activeSecondaryMission.bookSlug === bookSlug && chapter >= activeSecondaryMission.from && chapter <= activeSecondaryMission.to)) && <button className={`chapter-complete ${progress.completed.includes(`${bookSlug}:${chapter}`) ? "done" : ""}`} onClick={completeChapter} disabled={savingChapter || progress.completed.includes(`${bookSlug}:${chapter}`)}>
-            <span>{progress.completed.includes(`${bookSlug}:${chapter}`) ? "✓" : "⚔"}</span>
-            <div><b>{progress.completed.includes(`${bookSlug}:${chapter}`) ? "Capítulo concluído" : "Marcar capítulo como lido"}</b><small>{progress.completed.includes(`${bookSlug}:${chapter}`) ? "Recompensa conquistada" : "+40 XP · +4 siclos de prata"}</small></div>
+          {(missionMode || Boolean(activeSecondaryMission && activeSecondaryMission.bookSlug === bookSlug && chapter >= activeSecondaryMission.from && chapter <= activeSecondaryMission.to)) && <button className={`chapter-complete ${(replayingSecondaryMission ? replayChapterComplete : progress.completed.includes(`${bookSlug}:${chapter}`)) ? "done" : ""}`} onClick={completeChapter} disabled={savingChapter || (replayingSecondaryMission ? replayChapterComplete : progress.completed.includes(`${bookSlug}:${chapter}`))}>
+            <span>{replayingSecondaryMission ? replayChapterComplete ? "✓" : "⚔" : progress.completed.includes(`${bookSlug}:${chapter}`) ? "✓" : "⚔"}</span>
+            <div><b>{replayingSecondaryMission ? replayChapterComplete ? "Capítulo relido" : "Marcar capítulo como relido" : progress.completed.includes(`${bookSlug}:${chapter}`) ? "Capítulo concluído" : "Marcar capítulo como lido"}</b><small>{replayingSecondaryMission ? replayChapterComplete ? "Releitura registrada" : "Sem XP ou siclos adicionais" : progress.completed.includes(`${bookSlug}:${chapter}`) ? "Recompensa conquistada" : "+40 XP · +4 siclos de prata"}</small></div>
             <em>{savingChapter ? "…" : "›"}</em>
           </button>}
 
@@ -842,7 +872,7 @@ export default function VerboApp() {
       )}
 
       {screen === "result" && <StudyResult translation={translation} setTranslation={changeTranslation} saved={saved} setSaved={setSaved} notify={notify} />}
-      {screen === "studies" && <StudiesPage manifest={manifest} progress={progress} secondaryMissionStates={secondaryMissionStates} onStart={openMissionBriefing} onUnlockSecondary={unlockSecondaryMission} onContinueSecondary={beginSecondaryMission} />}
+      {screen === "studies" && <StudiesPage manifest={manifest} progress={progress} secondaryMissionStates={secondaryMissionStates} onStart={openMissionBriefing} onUnlockSecondary={unlockSecondaryMission} onContinueSecondary={beginSecondaryMission} onRestartSecondary={restartSecondaryMission} />}
       {screen === "plans" && <PlansPage />}
       {screen === "social" && <SocialPage notify={notify} dark={dark} setDark={setDark} progress={progress} manifest={manifest} onOpenFavorite={openFavorite} onProfilePhotoChange={updateProfilePhoto} onDisplayNameChange={updateDisplayName} />}
 
@@ -859,7 +889,7 @@ export default function VerboApp() {
       {bookPicker && manifest && <BookPicker manifest={manifest} currentSlug={bookSlug} currentChapter={chapter} close={() => setBookPicker(false)} choose={chooseBook} />}
       {searchOpen && <SearchOverlay manifest={manifest} close={() => setSearchOpen(false)} choose={chooseBook} open={() => { setSearchOpen(false); go("result"); }} />}
       {missionBriefingOpen && <MissionBriefing manifest={manifest} progress={progress} start={beginMission} close={() => setMissionBriefingOpen(false)} />}
-      {secondaryBriefingId && secondaryMissionById(secondaryBriefingId) && <SecondaryMissionBriefing mission={secondaryMissionById(secondaryBriefingId)!} progress={progress} start={beginSecondaryMission} close={() => setSecondaryBriefingId(null)} />}
+      {secondaryBriefingId && secondaryMissionById(secondaryBriefingId) && <SecondaryMissionBriefing mission={secondaryMissionById(secondaryBriefingId)!} progress={progress} status={secondaryMissionStates.find((mission) => mission.id === secondaryBriefingId)} start={beginSecondaryMission} close={() => setSecondaryBriefingId(null)} />}
       {leaveMissionDialog && <div className="leave-mission-backdrop" role="presentation"><section className="leave-mission-dialog" role="dialog" aria-modal="true" aria-label="Sair da missão"><p>MISSÃO EM ANDAMENTO</p><h2>Deseja sair da missão?</h2><span>Seu progresso fica salvo e você poderá continuar mais tarde pela aba Missões.</span><div><button className="secondary" onClick={() => { setLeaveMissionDialog(false); setPendingScreen(null); }}>Continuar missão</button><button onClick={() => void leaveActiveMission()}>Sair da missão</button></div></section></div>}
       {noteEditorOpen && <div className="note-overlay" role="dialog" aria-modal="true" aria-label="Nova anotação"><section><button className="note-close" onClick={() => setNoteEditorOpen(false)} aria-label="Fechar">×</button><p className="eyebrow">ANOTAÇÃO PESSOAL</p><h2>{book?.name} {chapter}:{selectedVerses[0] || selectedVerse}{selectedVerses.length > 1 ? `-${selectedVerses.at(-1)}` : ""}</h2><textarea value={noteDraft} onChange={(event) => setNoteDraft(event.target.value)} placeholder="O que Deus falou com você neste trecho?" autoFocus /><div><button className="secondary-note" onClick={() => { setNoteDraft(""); }}>Limpar</button><button className="save-note" onClick={saveNote}>Salvar anotação</button></div></section></div>}
       {toast && <div className="toast">✓ {toast}</div>}
@@ -901,12 +931,12 @@ function isActComplete(act: (typeof campaignActs)[number], completed: string[]) 
   });
 }
 
-function JourneyPage({ manifest, progress, activeSecondaryMission, replayingSecondaryMission, onContinue, onContinueSecondary, onOpenBible, onRestoreStreak }: { manifest: BibleManifest | null; progress: PlayerProgress; activeSecondaryMission: SecondaryMission | null; replayingSecondaryMission: boolean; onContinue: () => void; onContinueSecondary: (mission: SecondaryMission) => void; onOpenBible: () => void; onRestoreStreak: () => void }) {
+function JourneyPage({ manifest, progress, activeSecondaryMission, activeSecondaryStatus, replayingSecondaryMission, onContinue, onContinueSecondary, onOpenBible, onRestoreStreak }: { manifest: BibleManifest | null; progress: PlayerProgress; activeSecondaryMission: SecondaryMission | null; activeSecondaryStatus: SecondaryMissionStatus | null; replayingSecondaryMission: boolean; onContinue: () => void; onContinueSecondary: (mission: SecondaryMission) => void; onOpenBible: () => void; onRestoreStreak: () => void }) {
   const completedCount = progress.completed.length;
   const noteCompleted = Boolean(progress.dailyNoteCompleted);
   const xpProgress = getXpProgress(progress.xp);
   const mission = nextMainMission(manifest, progress);
-  const secondaryProgress = activeSecondaryMission ? secondaryMissionProgress(activeSecondaryMission, progress.completed) : null;
+  const secondaryProgress = activeSecondaryMission ? secondaryStatusProgress(activeSecondaryMission, progress, activeSecondaryStatus) : null;
   const milestones = campaignActs.map((act, index) => {
     const complete = isActComplete(act, progress.completed);
     const previousComplete = index === 0 || isActComplete(campaignActs[index - 1], progress.completed);
@@ -970,9 +1000,10 @@ function MissionBriefing({ manifest, progress, start, close }: { manifest: Bible
   return <div className="mission-briefing-backdrop" role="dialog" aria-modal="true" aria-label="Abertura da jornada"><section className="mission-briefing"><button className="mission-briefing-close" onClick={close} aria-label="Fechar">×</button><PixelDisciple /><p>JORNADA: A GRANDE HISTÓRIA</p><span>ATO {context.act.number} · {context.act.title}</span><h1>Missão {missionIndex} — {context.mission.title}</h1><div className="mission-progress mission-progress-stage"><span>MISSÃO ATUAL · {progressInStage.done} de {progressInStage.total} capítulos bíblicos</span><i><b style={{ width: `${progressInStage.percent}%` }} /></i></div><div className="mission-progress"><span>ATO · {progressInAct.done} de {progressInAct.total} capítulos bíblicos</span><i><b style={{ width: `${progressInAct.percent}%` }} /></i></div><blockquote>{narrative.introduction}</blockquote><div className="mission-briefing-ref"><small>LEITURA DE HOJE</small><b>{book?.name || next.slug} {next.chapter}</b></div><button className="mission-begin-button" onClick={start}>Começar jornada <b>→</b></button></section></div>;
 }
 
-function SecondaryMissionBriefing({ mission, progress, start, close }: { mission: SecondaryMission; progress: PlayerProgress; start: (mission: SecondaryMission) => void; close: () => void }) {
-  const status = secondaryMissionProgress(mission, progress.completed);
-  return <div className="mission-briefing-backdrop" role="dialog" aria-modal="true" aria-label={`Abertura da missão ${mission.title}`}><section className="mission-briefing secondary-mission-briefing"><button className="mission-briefing-close" onClick={close} aria-label="Fechar">×</button><PixelDisciple /><p>JORNADA ESPECIAL · 400 SICLOS DE PRATA</p><span>{mission.subtitle}</span><h1>{mission.title}</h1><div className="mission-progress mission-progress-stage"><span>CAPÍTULOS PARA CONCLUSÃO · {status.done} de {status.total}</span><i><b style={{ width: `${status.percent}%` }} /></i></div><blockquote>{mission.introduction}</blockquote><div className="mission-briefing-ref"><small>RECOMPENSA DA MISSÃO</small><b>+{mission.completionXp} XP · +{mission.completionCoins} siclos</b></div><div className="secondary-briefing-note"><b>O que você vai encontrar</b><span>Bem-aventuranças, oração, confiança no Pai e a vida construída sobre a rocha.</span></div><button className="mission-begin-button" onClick={() => start(mission)}>Começar Sermão do Monte <b>→</b></button></section></div>;
+function SecondaryMissionBriefing({ mission, progress, status, start, close }: { mission: SecondaryMission; progress: PlayerProgress; status?: SecondaryMissionStatus; start: (mission: SecondaryMission) => void; close: () => void }) {
+  const replaying = Boolean(status?.replaying);
+  const missionProgress = secondaryStatusProgress(mission, progress, status);
+  return <div className="mission-briefing-backdrop" role="dialog" aria-modal="true" aria-label={`Abertura da missão ${mission.title}`}><section className="mission-briefing secondary-mission-briefing"><button className="mission-briefing-close" onClick={close} aria-label="Fechar">×</button><PixelDisciple /><p>{replaying ? "JORNADA ESPECIAL · RELEITURA" : "JORNADA ESPECIAL · 400 SICLOS DE PRATA"}</p><span>{mission.subtitle}</span><h1>{mission.title}</h1><div className="mission-progress mission-progress-stage"><span>CAPÍTULOS PARA CONCLUSÃO · {missionProgress.done} de {missionProgress.total}</span><i><b style={{ width: `${missionProgress.percent}%` }} /></i></div><blockquote>{mission.introduction}</blockquote><div className="mission-briefing-ref"><small>{replaying ? "RELEITURA DA MISSÃO" : "RECOMPENSA DA MISSÃO"}</small><b>{replaying ? "Reviva toda a jornada · sem XP ou siclos adicionais" : `+${mission.completionXp} XP · +${mission.completionCoins} siclos`}</b></div><div className="secondary-briefing-note"><b>O que você vai encontrar</b><span>Bem-aventuranças, oração, confiança no Pai e a vida construída sobre a rocha.</span></div><button className="mission-begin-button" onClick={() => start(mission)}>{replaying ? "Começar releitura" : "Começar Sermão do Monte"} <b>→</b></button></section></div>;
 }
 
 function MissionStoryPanel({ context, progress }: { context: ReturnType<typeof missionForChapter>; progress: PlayerProgress }) {
@@ -984,16 +1015,17 @@ function MissionStoryPanel({ context, progress }: { context: ReturnType<typeof m
   return <aside className="mission-story-panel"><div><p>MISSÃO {index} DE {context.act.missions.length} · ATO {context.act.number}</p><h2>{context.mission.title}</h2><span>{narrative.introduction}</span></div><div className="mission-story-progress"><div className="mission-stage-progress"><small>CAPÍTULOS PARA CONCLUSÃO <HelpButton title="Capítulos para conclusão" text="Marque os capítulos da missão como lidos para avançar. Ao concluir todos, a próxima missão é liberada." /></small><b>{progressInStage.done}/{progressInStage.total}</b><i><em style={{ width: `${progressInStage.percent}%` }} /></i></div><div><small>ATO</small><b>{progressInAct.done}/{progressInAct.total}</b><i><em style={{ width: `${progressInAct.percent}%` }} /></i></div></div><blockquote><small>CONTEXTO HISTÓRICO</small>{narrative.historicalContext}</blockquote></aside>;
 }
 
-function SecondaryMissionStoryPanel({ mission, progress }: { mission: SecondaryMission; progress: PlayerProgress }) {
-  const status = secondaryMissionProgress(mission, progress.completed);
-  return <aside className="mission-story-panel secondary-mission-story"><div><p>JORNADA ESPECIAL · MISSÃO SECUNDÁRIA</p><h2>{mission.title}</h2><span>{mission.introduction}</span></div><div className="mission-story-progress"><div className="mission-stage-progress"><small>CAPÍTULOS PARA CONCLUSÃO <HelpButton title="Missão secundária" text={`Leia Mateus ${mission.from} a ${mission.to}. Ao concluir os ${status.total} capítulos, você recebe a recompensa especial de +${mission.completionXp} XP.`} /></small><b>{status.done}/{status.total}</b><i><em style={{ width: `${status.percent}%` }} /></i></div></div><blockquote><small>CONTEXTO DA JORNADA</small>{mission.historicalContext}</blockquote></aside>;
+function SecondaryMissionStoryPanel({ mission, progress, status }: { mission: SecondaryMission; progress: PlayerProgress; status: SecondaryMissionStatus | null }) {
+  const missionProgress = secondaryStatusProgress(mission, progress, status);
+  const replaying = Boolean(status?.replaying);
+  return <aside className="mission-story-panel secondary-mission-story"><div><p>{replaying ? "JORNADA ESPECIAL · RELEITURA" : "JORNADA ESPECIAL · MISSÃO SECUNDÁRIA"}</p><h2>{mission.title}</h2><span>{mission.introduction}</span></div><div className="mission-story-progress"><div className="mission-stage-progress"><small>CAPÍTULOS PARA CONCLUSÃO <HelpButton title="Missão secundária" text={replaying ? `Leia novamente Mateus ${mission.from} a ${mission.to}. Esta releitura não concede XP nem siclos adicionais.` : `Leia Mateus ${mission.from} a ${mission.to}. Ao concluir os ${missionProgress.total} capítulos, você recebe a recompensa especial de +${mission.completionXp} XP.`} /></small><b>{missionProgress.done}/{missionProgress.total}</b><i><em style={{ width: `${missionProgress.percent}%` }} /></i></div></div><blockquote><small>CONTEXTO DA JORNADA</small>{mission.historicalContext}</blockquote></aside>;
 }
 
 function RewardModal({ reward, level, close }: { reward: ChapterReward; level: number; close: () => void }) {
   const completedMission = reward.missionTitle ? campaignActs.flatMap((act) => act.missions).find((mission) => mission.title === reward.missionTitle) : undefined;
-  const secondaryMission = reward.secondaryMissionCompleted ? secondaryMissions.find((mission) => mission.title === reward.missionTitle) : undefined;
+  const secondaryMission = reward.secondaryMissionCompleted || reward.replayCompleted ? secondaryMissions.find((mission) => mission.title === reward.missionTitle) : undefined;
   const narrative = completedMission ? narrativeForMission(completedMission) : secondaryMission || null;
-  return <div className="reward-backdrop"><div className="reward-modal" role="dialog" aria-modal="true" aria-label="Recompensa da missão"><div className="reward-rays" /><span className="reward-chest">♛</span><p>{reward.actCompleted ? `ATO CONCLUÍDO · ${reward.actTitle}` : reward.missionCompleted ? `MISSÃO CONCLUÍDA · ${reward.missionTitle}` : reward.levelUp ? "NOVO NÍVEL ALCANÇADO" : "CAPÍTULO CONCLUÍDO"}</p><h2>{reward.levelUp ? `Nível ${level}` : "Recompensa obtida"}</h2><div><b>+{reward.xp}<small>XP</small></b><b>+{reward.coins}<small>SICLOS DE PRATA</small></b></div>{narrative && <blockquote className="mission-reveal"><b>{narrative.discovery}</b><span>{narrative.next}</span></blockquote>}{reward.unlocked.length > 0 && <em>✦ Nova conquista desbloqueada</em>}<button onClick={close}>Continuar jornada</button></div></div>;
+  return <div className="reward-backdrop"><div className="reward-modal" role="dialog" aria-modal="true" aria-label="Recompensa da missão"><div className="reward-rays" /><span className="reward-chest">♛</span><p>{reward.replayCompleted ? `RELEITURA CONCLUÍDA · ${reward.missionTitle}` : reward.actCompleted ? `ATO CONCLUÍDO · ${reward.actTitle}` : reward.missionCompleted ? `MISSÃO CONCLUÍDA · ${reward.missionTitle}` : reward.levelUp ? "NOVO NÍVEL ALCANÇADO" : "CAPÍTULO CONCLUÍDO"}</p><h2>{reward.replayCompleted ? "Jornada revisitada" : reward.levelUp ? `Nível ${level}` : "Recompensa obtida"}</h2>{reward.replayCompleted ? <div><b>SEM<small>XP ADICIONAL</small></b><b>SEM<small>SICLOS ADICIONAIS</small></b></div> : <div><b>+{reward.xp}<small>XP</small></b><b>+{reward.coins}<small>SICLOS DE PRATA</small></b></div>}{narrative && <blockquote className="mission-reveal"><b>{narrative.discovery}</b><span>{narrative.next}</span></blockquote>}{reward.unlocked.length > 0 && <em>✦ Nova conquista desbloqueada</em>}<button onClick={close}>Continuar jornada</button></div></div>;
 }
 
 function StudyResult({ translation, setTranslation, saved, setSaved, notify }: { translation: Translation; setTranslation: (value: Translation) => void; saved: boolean; setSaved: (value: boolean) => void; notify: (value: string) => void }) {
@@ -1057,7 +1089,7 @@ function isCampaignMissionComplete(mission: (typeof campaignActs)[number]["missi
   return true;
 }
 
-function StudiesPage({ manifest, progress, secondaryMissionStates, onStart, onUnlockSecondary, onContinueSecondary }: { manifest: BibleManifest | null; progress: PlayerProgress; secondaryMissionStates: SecondaryMissionStatus[]; onStart: () => void; onUnlockSecondary: (missionId: string) => void; onContinueSecondary: (mission: SecondaryMission) => void }) {
+function StudiesPage({ manifest, progress, secondaryMissionStates, onStart, onUnlockSecondary, onContinueSecondary, onRestartSecondary }: { manifest: BibleManifest | null; progress: PlayerProgress; secondaryMissionStates: SecondaryMissionStatus[]; onStart: () => void; onUnlockSecondary: (missionId: string) => void; onContinueSecondary: (mission: SecondaryMission) => void; onRestartSecondary: (mission: SecondaryMission) => void }) {
   const activeActIndex = campaignActs.findIndex((act) => !isActComplete(act, progress.completed));
   const actIndex = activeActIndex === -1 ? campaignActs.length - 1 : activeActIndex;
   const act = campaignActs[actIndex];
@@ -1090,7 +1122,7 @@ function StudiesPage({ manifest, progress, secondaryMissionStates, onStart, onUn
       <button className="journey-cta mission-current-cta" onClick={onStart} disabled={!activeMission}> {activeMission ? `Abrir missão atual · ${activeMission.name} ${activeMission.chapter}` : "Campanha concluída"} <b>→</b></button>
       {nextAct && <div className="campaign-next"><span>PRÓXIMO ATO</span><b>{nextAct.title}</b><small>Desbloqueado após a conclusão de {actChapters}.</small></div>}
     </section>
-    <section className="secondary-missions"><div className="campaign-heading"><div><p className="eyebrow">CONTEÚDO OPCIONAL</p><h2>Missões secundárias</h2></div><span className="campaign-status">ESPECIAIS</span></div><p>Jornadas curtas, cuidadosamente preparadas para aprofundar grandes trechos das Escrituras. Desbloqueie com siclos de prata e receba a mesma recompensa de conclusão da missão principal.</p><div className="secondary-mission-list">{secondaryMissions.map((mission) => { const state = secondaryMissionStates.find((item) => item.id === mission.id); const status = secondaryMissionProgress(mission, progress.completed); const active = Boolean(state?.active); const complete = Boolean(state?.completed); const replaying = Boolean(state?.replaying); return <article key={mission.id} className={`${active ? "active" : ""} ${complete ? "complete" : ""}`}><div className="secondary-mission-icon">✦</div><div><small>{replaying ? "RELEITURA ATIVA · SEM NOVO XP" : active ? "MISSÃO ATIVA" : complete ? "JORNADA CONCLUÍDA · RELEITURA DISPONÍVEL" : state?.unlocked ? "DESBLOQUEADA" : `DESBLOQUEAR · ◆ ${mission.cost}`}</small><h3>{mission.title}</h3><p>{mission.subtitle}</p><span>Mateus {mission.from}–{mission.to} · {status.total} capítulos · {complete ? "releitura sem recompensa adicional" : `+${mission.completionXp} XP na primeira conclusão`}</span>{(state?.unlocked || complete) && <i><em style={{ width: `${status.percent}%` }} /></i>}</div><button onClick={() => state?.unlocked ? onContinueSecondary(mission) : onUnlockSecondary(mission.id)}>{replaying ? "Continuar releitura" : active ? "Continuar" : complete ? "Reler missão" : state?.unlocked ? "Iniciar" : `◆ ${mission.cost}`}</button></article>; })}</div></section>
+    <section className="secondary-missions"><div className="campaign-heading"><div><p className="eyebrow">CONTEÚDO OPCIONAL</p><h2>Missões secundárias</h2></div><span className="campaign-status">ESPECIAIS</span></div><p>Jornadas curtas, cuidadosamente preparadas para aprofundar grandes trechos das Escrituras. Desbloqueie com siclos de prata e receba a mesma recompensa de conclusão da missão principal.</p><div className="secondary-mission-list">{secondaryMissions.map((mission) => { const state = secondaryMissionStates.find((item) => item.id === mission.id); const status = secondaryStatusProgress(mission, progress, state); const active = Boolean(state?.active); const complete = Boolean(state?.completed); const replaying = Boolean(state?.replaying); return <article key={mission.id} className={`${active ? "active" : ""} ${complete ? "complete" : ""}`}><div className="secondary-mission-icon">✦</div><div><small>{replaying ? "RELEITURA ATIVA · SEM NOVO XP" : active ? "MISSÃO ATIVA" : complete ? "JORNADA CONCLUÍDA · RELEITURA DISPONÍVEL" : state?.unlocked ? "DESBLOQUEADA" : `DESBLOQUEAR · ◆ ${mission.cost}`}</small><h3>{mission.title}</h3><p>{mission.subtitle}</p><span>Mateus {mission.from}–{mission.to} · {status.total} capítulos · {complete ? "releitura sem recompensa adicional" : `+${mission.completionXp} XP na primeira conclusão`}</span>{(state?.unlocked || complete) && <i><em style={{ width: `${status.percent}%` }} /></i>}</div><button onClick={() => !state?.unlocked ? onUnlockSecondary(mission.id) : complete && !active ? onRestartSecondary(mission) : onContinueSecondary(mission)}>{replaying ? "Continuar releitura" : active ? "Continuar" : complete ? "Reler missão" : "Iniciar"}</button></article>; })}</div></section>
   </section>;
 }
 

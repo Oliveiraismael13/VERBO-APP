@@ -28,6 +28,8 @@ test("contains the authenticated Verbo application routes", async () => {
   assert.match(app, /secondary-missions/);
   assert.match(app, /Deseja sair da missão\?/);
   assert.match(app, /leaveActiveMission/);
+  assert.match(app, /record-replay/);
+  assert.match(app, /Começar releitura/);
   assert.match(app, />Social</);
   assert.match(app, /function SocialPage/);
   assert.match(app, /\/api\/social\/friends/);
@@ -114,10 +116,12 @@ assert.match(app, /A Edição Chama da Fé não é usada nas missões/);
   assert.match(progressRoute, /const baseXpGain = actCompleted \? 100 : missionCompleted \|\| secondaryMissionCompleted \? 80 : 40/);
   assert.match(progressRoute, /function xpWithStreakBonus/);
   assert.match(progressRoute, /const coinGain = actCompleted \? 10 : missionCompleted \|\| secondaryMissionCompleted \? 8 : 4/);
-  assert.match(secondaryMissionsRoute, /replaying: Boolean\(record\?\.active && record\?\.completed_at\)/);
+  assert.match(secondaryMissionsRoute, /const replaying = Boolean\(record\?\.active && record\?\.completed_at\)/);
   assert.match(secondaryMissionsRoute, /SET active = 1 WHERE user_id = \? AND mission_id = \?/
   );
   assert.match(secondaryMissionsRoute, /body\.action === "pause"/);
+  assert.match(secondaryMissionsRoute, /user_secondary_mission_replays/);
+  assert.match(secondaryMissionsRoute, /record-replay/);
   assert.match(progress, /getSessionUser/);
   const libraryRoute = await text("app/api/library/route.ts");
   assert.match(libraryRoute, /last_reading_json/);
