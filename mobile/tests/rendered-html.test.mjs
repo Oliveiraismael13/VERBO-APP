@@ -49,7 +49,9 @@ test("contains the authenticated Verbo application routes", async () => {
   assert.match(app, /Há diversos pergaminhos de estudo espalhados pela Bíblia/);
   assert.doesNotMatch(app, /unlockHint/);
   assert.match(app, /secondaryScrollUnlocked/);
-  assert.match(app, /secondaryMissionActive \|\| secondaryScrollUnlocked/);
+  assert.match(app, /insightMission && secondaryScrollUnlocked/);
+  assert.match(app, /primaryMissionScroll && primaryScrollUnlocked/);
+  assert.doesNotMatch(app, /Pergaminho oculto/);
   assert.match(app, /foundScrolls/);
   assert.match(app, /shared/);
   assert.match(app, /pergaminhos encontrados/);
@@ -136,7 +138,6 @@ assert.match(app, /A Edição Chama da Fé não é usada nas missões/);
   assert.match(rpgStyles, /\.social-campaign>div\{/);
   assert.match(rpgStyles, /\.secondary-mission-list\{/);
   assert.match(rpgStyles, /\.mission-insights\{/);
-  assert.match(rpgStyles, /\.mission-insights-locked\{/);
   assert.match(rpgStyles, /\.original-language\{/);
   assert.match(rpgStyles, /\.mission-insights\.primary-scroll\{/);
   assert.match(rpgStyles, /@keyframes profile-disciple-turn/);
