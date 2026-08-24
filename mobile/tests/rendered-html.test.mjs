@@ -36,7 +36,7 @@ test("contains the authenticated Verbo application routes", async () => {
   assert.match(app, /Conclua o capítulo atual para liberar o próximo da missão/);
   assert.match(app, /function MissionInsights/);
   assert.match(app, /PERGAMINHOS · \{collection\}/);
-  assert.match(app, /secondaryScrollUnlocked/);
+  assert.match(app, /discoveredSecondaryChapterInsights/);
   assert.match(app, /original-language/);
   assert.match(app, /Significado no \{language\}/);
   assert.match(app, /mainMissionScrollForChapter/);
@@ -51,8 +51,9 @@ test("contains the authenticated Verbo application routes", async () => {
   assert.match(app, /Você ganhou \{gift.amount.toLocaleString/);
   assert.match(app, /Há diversos pergaminhos de estudo espalhados pela Bíblia/);
   assert.doesNotMatch(app, /unlockHint/);
-  assert.match(app, /secondaryScrollUnlocked/);
-  assert.match(app, /insightMission && secondaryScrollUnlocked/);
+  assert.match(app, /secondaryHiddenScrollKey/);
+  assert.match(app, /unlockSecondaryHiddenScrollIfReady/);
+  assert.match(app, /insightMission && discoveredSecondaryChapterInsights\.length > 0/);
   assert.match(app, /primaryMissionScroll && primaryScrollUnlocked/);
   assert.doesNotMatch(app, /Pergaminho oculto/);
   assert.match(app, /foundScrolls/);
@@ -65,6 +66,7 @@ test("contains the authenticated Verbo application routes", async () => {
   assert.doesNotMatch(secondaryMissionContent, /Curiosidade/);
   assert.equal((secondaryMissionContent.match(/\{ kind: "Palavra no original"/g) || []).length, 5);
   assert.match(secondaryMissionContent, /hiddenInsight/);
+  assert.match(secondaryMissionContent, /requirements: \["favorite", "notes-two"\]/);
   assert.match(app, /secondaryChapterInsights/);
   assert.match(mainMissionScrolls, /hebrewScrolls/);
   assert.match(mainMissionScrolls, /greekScrolls/);
@@ -169,6 +171,8 @@ assert.match(app, /A Edição Chama da Fé não é usada nas missões/);
   assert.match(progress, /const SCROLL_XP = 20/);
   assert.match(progress, /user_scroll_rewards/);
   assert.match(progress, /action === "scroll"/);
+  assert.match(progress, /secondarySecretRequirement/);
+  assert.match(progress, /user_library/);
   const libraryRoute = await text("app/api/library/route.ts");
   const giftsRoute = await text("app/api/gifts/route.ts");
   assert.match(libraryRoute, /last_reading_json/);

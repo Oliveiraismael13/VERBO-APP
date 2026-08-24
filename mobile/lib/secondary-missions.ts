@@ -15,7 +15,7 @@ export type SecondaryMission = {
   discovery: string;
   next: string;
   insights: Record<number, MissionInsight[]>;
-  hiddenInsight?: { chapter: number; insight: MissionInsight };
+  hiddenInsight?: { chapter: number; insight: MissionInsight; requirements: ("favorite" | "notes-two")[] };
 };
 
 export const secondaryMissions: SecondaryMission[] = [{
@@ -43,7 +43,7 @@ export const secondaryMissions: SecondaryMission[] = [{
       { kind: "Palavra no original", title: "A porta estreita", reference: "Mateus 7:13–14", original: "στενὴ ἡ πύλη", transliteration: "stenē hē pýlē", meaning: "estreita, apertada, é a porta", content: "A expressão forma uma imagem de passagem limitada e torna concreta a escolha de seguir Jesus com decisão e prática." },
     ],
   },
-  hiddenInsight: { chapter: 6, insight: { kind: "Palavra no original", title: "Mamom", reference: "Mateus 6:24", original: "μαμωνᾶς", transliteration: "mamōnás", meaning: "riqueza, bens, propriedade", content: "A forma grega preserva uma palavra semítica. No texto, riqueza aparece como um possível senhor que disputa lealdade com Deus." } },
+  hiddenInsight: { chapter: 6, requirements: ["favorite", "notes-two"], insight: { kind: "Palavra no original", title: "Mamom", reference: "Mateus 6:24", original: "μαμωνᾶς", transliteration: "mamōnás", meaning: "riqueza, bens, propriedade", content: "A forma grega preserva uma palavra semítica. No texto, riqueza aparece como um possível senhor que disputa lealdade com Deus." } },
 }];
 
 export function secondaryMissionById(id: string) {

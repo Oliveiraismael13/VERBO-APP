@@ -182,7 +182,9 @@ export default function VerboApp() {
   const secondaryChapterInsights = insightMission ? [...insightMission.insights[chapter], ...(insightMission.hiddenInsight?.chapter === chapter ? [insightMission.hiddenInsight.insight] : [])] : [];
   const primaryMissionScroll = book && missionForChapter(bookSlug, chapter) ? mainMissionScrollForChapter(bookSlug, chapter, book.testament) : null;
   const secondaryScrollKeys = insightMission ? secondaryChapterInsights.map((_, index) => `secondary:${insightMission.id}:${chapter}:${index}`) : [];
-  const secondaryScrollUnlocked = secondaryScrollKeys.length > 0 && secondaryScrollKeys.every((key) => progress.foundScrolls?.includes(key));
+  const discoveredSecondaryChapterInsights = secondaryChapterInsights.filter((_, index) => progress.foundScrolls?.includes(secondaryScrollKeys[index]));
+  const activeSecondaryHiddenInsight = Boolean(activeSecondaryMission && !replayingSecondaryMission && activeSecondaryMission.bookSlug === bookSlug && activeSecondaryMission.hiddenInsight?.chapter === chapter) ? activeSecondaryMission.hiddenInsight : null;
+  const secondaryHiddenScrollKey = activeSecondaryMission && activeSecondaryHiddenInsight ? `secondary:${activeSecondaryMission.id}:${chapter}:${activeSecondaryMission.insights[chapter].length}` : null;
   const primaryScrollKey = `primary:${bookSlug}:${chapter}`;
   const primaryScrollUnlocked = Boolean(primaryMissionScroll && progress.foundScrolls?.includes(primaryScrollKey));
 
@@ -292,6 +294,22 @@ export default function VerboApp() {
     setProgress(updated);
     void saveRemoteLibrary({ foundScrolls }, updated);
     setScrollDiscovery({ count: 1, xp: scrollReward.xp || 20, first: firstDiscovery });
+  };
+
+  const unlockSecondaryHiddenScrollIfReady = async (candidate: PlayerProgress) => {
+    if (!secondaryHiddenScrollKey || candidate.foundScrolls?.includes(secondaryHiddenScrollKey)) return;
+    const prefix = `${bookSlug}:${chapter}:`;
+    const hasFavorite = candidate.favorites?.some((key) => key.startsWith(prefix));
+    const noteCount = Object.entries(candidate.notes || {}).filter(([key, note]) => key.startsWith(prefix) && Boolean(note.trim())).length;
+    if (!hasFavorite && noteCount < 2) return;
+    const firstDiscovery = !(candidate.foundScrolls?.length);
+    const scrollReward = await awardScrollXp([secondaryHiddenScrollKey]);
+    if (!scrollReward.xp) return;
+    const foundScrolls = Array.from(new Set([...(candidate.foundScrolls || []), secondaryHiddenScrollKey]));
+    const updated = { ...candidate, ...(scrollReward.progress || {}), foundScrolls };
+    setProgress(updated);
+    void saveRemoteLibrary({ foundScrolls }, updated);
+    setScrollDiscovery({ count: 1, xp: scrollReward.xp, first: firstDiscovery });
   };
 
   useEffect(() => {
@@ -478,7 +496,7 @@ export default function VerboApp() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error);
       const { reward: earned, ...nextProgress } = data;
-      const secondaryScrolls = secondaryChapterActive && activeSecondaryMission ? secondaryChapterInsights.map((_, index) => `secondary:${activeSecondaryMission.id}:${chapter}:${index}`) : [];
+      const secondaryScrolls = secondaryChapterActive && activeSecondaryMission ? activeSecondaryMission.insights[chapter].map((_, index) => `secondary:${activeSecondaryMission.id}:${chapter}:${index}`) : [];
       const primaryScrollFoundOnCompletion = Boolean(missionMode && primaryMissionScroll?.requirement === "complete" && !progress.foundScrolls?.includes(primaryScrollKey) && nextProgress.completed.includes(`${bookSlug}:${chapter}`));
       const foundOnCompletion = [...secondaryScrolls, ...(primaryScrollFoundOnCompletion ? [primaryScrollKey] : [])];
       const firstScrollDiscovery = foundOnCompletion.length > 0 && !(progress.foundScrolls?.length);
@@ -520,7 +538,7 @@ export default function VerboApp() {
     setHighlightPickerOpen(true);
   };
 
-  const toggleFavorite = () => {
+  const toggleFavorite = async () => {
     const favorites = JSON.parse(localStorage.getItem("verbo-mobile-favorites") || "[]") as string[];
     const keys = selectedVerseKeys.length ? selectedVerseKeys : [verseKey];
     const allSaved = keys.every((key) => favorites.includes(key));
@@ -529,8 +547,9 @@ export default function VerboApp() {
     setSaved(!allSaved);
     const updated = { ...progress, favorites: nextFavorites };
     setProgress(updated);
-    void saveRemoteLibrary({ favorites: nextFavorites }, updated);
+    await saveRemoteLibrary({ favorites: nextFavorites }, updated);
     unlockPrimaryScrollIfReady(updated);
+    if (!allSaved) void unlockSecondaryHiddenScrollIfReady(updated);
     notify(allSaved ? "Removido dos favoritos" : keys.length > 1 ? "Versículos salvos" : "Versículo salvo");
   };
 
@@ -599,8 +618,9 @@ export default function VerboApp() {
     localStorage.setItem("verbo-mobile-notes", JSON.stringify(notes));
     const updated = { ...progress, notes };
     setProgress(updated);
-    void saveRemoteLibrary({ notes }, updated);
+    await saveRemoteLibrary({ notes }, updated);
     unlockPrimaryScrollIfReady(updated);
+    if (savedNote) void unlockSecondaryHiddenScrollIfReady(updated);
     setNoteEditorOpen(false);
     const earnedXp = savedNote ? await awardDailyNoteXp() : 0;
     notify(savedNote ? earnedXp ? `Anotação salva · +${earnedXp} XP` : "Anotação salva" : "Anotação removida");
@@ -926,7 +946,7 @@ export default function VerboApp() {
           </article>
 
           {primaryMissionScroll && primaryScrollUnlocked && <MissionInsights insights={[primaryMissionScroll]} chapter={chapter} source="primary" language={book?.testament === "old" ? "hebraico bíblico" : "grego bíblico"} />}
-          {insightMission && secondaryScrollUnlocked && <MissionInsights insights={secondaryChapterInsights} chapter={chapter} source="secondary" language="grego bíblico" />}
+          {insightMission && discoveredSecondaryChapterInsights.length > 0 && <MissionInsights insights={discoveredSecondaryChapterInsights} chapter={chapter} source="secondary" language="grego bíblico" />}
 
           {(missionMode || Boolean(activeSecondaryMission && activeSecondaryMission.bookSlug === bookSlug && chapter >= activeSecondaryMission.from && chapter <= activeSecondaryMission.to)) && <button className={`chapter-complete ${(replayingSecondaryMission ? replayChapterComplete : progress.completed.includes(`${bookSlug}:${chapter}`)) ? "done" : ""}`} onClick={completeChapter} disabled={savingChapter || (replayingSecondaryMission ? replayChapterComplete : progress.completed.includes(`${bookSlug}:${chapter}`))}>
             <span>{replayingSecondaryMission ? replayChapterComplete ? "✓" : "⚔" : progress.completed.includes(`${bookSlug}:${chapter}`) ? "✓" : "⚔"}</span>

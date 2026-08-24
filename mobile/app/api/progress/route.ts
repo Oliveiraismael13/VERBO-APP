@@ -27,6 +27,16 @@ const NOTE_XP = 15;
 const SCROLL_XP = 20;
 const STREAK_RESTORE_COIN_COST = 100;
 const defaultProgress = { xp: 0, level: 1, coins: 0, streak: 0, completed: [] as string[], achievements: [] as string[], dailyNoteCompleted: false };
+
+function secondarySecretRequirement(userId: string, missionId: string) {
+  let hash = 2166136261;
+  for (const character of `${userId}:${missionId}`) hash = Math.imul(hash ^ character.charCodeAt(0), 16777619);
+  return (hash >>> 0) % 2 === 0 ? "favorite" : "notes-two";
+}
+
+function parseLibrary(value: string | null | undefined, fallback: unknown) {
+  try { return value ? JSON.parse(value) : fallback; } catch { return fallback; }
+}
 function todayInBrazil() {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
 }
@@ -163,9 +173,25 @@ export async function POST(request: Request) {
         if (primary && !missionForChapter(bookSlug, chapter)) return withCors(Response.json({ error: "Pergaminho inválido" }, { status: 400 }));
         if (secondary) {
           const mission = secondaryMissionById(secondary[1]);
-          if (!mission || chapter < mission.from || chapter > mission.to || Number(secondary[3]) > 1) return withCors(Response.json({ error: "Pergaminho inválido" }, { status: 400 }));
-          const completed = await env.DB.prepare("SELECT 1 FROM completed_chapters WHERE user_id = ? AND book_slug = ? AND chapter = ?").bind(user.id, bookSlug, chapter).first();
-          if (!completed) return withCors(Response.json({ error: "Conclua o capítulo para encontrar este pergaminho." }, { status: 400 }));
+          const scrollIndex = Number(secondary[3]);
+          const normalScrollCount = mission?.insights[chapter]?.length ?? 0;
+          const isHiddenScroll = Boolean(mission?.hiddenInsight?.chapter === chapter && scrollIndex === normalScrollCount);
+          if (!mission || chapter < mission.from || chapter > mission.to || (scrollIndex >= normalScrollCount && !isHiddenScroll)) return withCors(Response.json({ error: "Pergaminho inválido" }, { status: 400 }));
+          if (isHiddenScroll) {
+            const active = await env.DB.prepare("SELECT 1 FROM user_secondary_missions WHERE user_id = ? AND mission_id = ? AND active = 1 AND completed_at IS NULL").bind(user.id, mission.id).first();
+            if (!active) return withCors(Response.json({ error: "Este pergaminho só pode ser encontrado durante a missão." }, { status: 400 }));
+            const library = await env.DB.prepare("SELECT favorites_json, notes_json FROM user_library WHERE user_id = ?").bind(user.id).first<{ favorites_json: string; notes_json: string }>();
+            const prefix = `${bookSlug}:${chapter}:`;
+            const favorites = parseLibrary(library?.favorites_json, []) as string[];
+            const notes = parseLibrary(library?.notes_json, {}) as Record<string, string>;
+            const hasFavorite = favorites.some((key) => typeof key === "string" && key.startsWith(prefix));
+            const noteCount = Object.entries(notes).filter(([key, note]) => key.startsWith(prefix) && typeof note === "string" && Boolean(note.trim())).length;
+            const requirement = secondarySecretRequirement(user.id, mission.id);
+            if ((requirement === "favorite" && !hasFavorite) || (requirement === "notes-two" && noteCount < 2)) return withCors(Response.json({ ...(await loadProgress(user.id)), reward: null }));
+          } else {
+            const completed = await env.DB.prepare("SELECT 1 FROM completed_chapters WHERE user_id = ? AND book_slug = ? AND chapter = ?").bind(user.id, bookSlug, chapter).first();
+            if (!completed) return withCors(Response.json({ error: "Conclua o capítulo para encontrar este pergaminho." }, { status: 400 }));
+          }
         }
       }
 
