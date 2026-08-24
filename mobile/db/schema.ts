@@ -17,8 +17,8 @@ export const verses = sqliteTable("verses", {
 }, (t) => [primaryKey({ columns: [t.translationId, t.bookId, t.chapter, t.verse] }), index("idx_verses_reference").on(t.bookId, t.chapter, t.verse)]);
 
 export const users = sqliteTable("users", {
-  id: text("id").primaryKey(), displayName: text("display_name"), createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
-});
+  id: text("id").primaryKey(), displayName: text("display_name"), publicHandle: text("public_handle"), createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+}, (t) => [uniqueIndex("idx_users_public_handle").on(t.publicHandle)]);
 
 export const favorites = sqliteTable("favorites", {
   id: integer("id").primaryKey({ autoIncrement: true }), userId: text("user_id").notNull().references(() => users.id),
@@ -90,3 +90,51 @@ export const readingPlans = sqliteTable("reading_plans", {
   id: integer("id").primaryKey({ autoIncrement: true }), slug: text("slug").notNull(), title: text("title").notNull(),
   durationDays: integer("duration_days").notNull(), description: text("description"),
 }, (t) => [uniqueIndex("idx_reading_plans_slug").on(t.slug)]);
+
+export const socialPrivacySettings = sqliteTable("social_privacy_settings", {
+  userId: text("user_id").primaryKey().references(() => users.id),
+  profileVisibility: text("profile_visibility", { enum: ["friends", "private"] }).notNull().default("friends"),
+  showProgress: integer("show_progress", { mode: "boolean" }).notNull().default(true),
+  showFavorites: integer("show_favorites", { mode: "boolean" }).notNull().default(false),
+  showActivities: integer("show_activities", { mode: "boolean" }).notNull().default(false),
+  showStats: integer("show_stats", { mode: "boolean" }).notNull().default(true),
+  allowFriendRequests: integer("allow_friend_requests", { mode: "boolean" }).notNull().default(true),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+});
+
+export const friendRequests = sqliteTable("friend_requests", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  senderId: text("sender_id").notNull().references(() => users.id),
+  recipientId: text("recipient_id").notNull().references(() => users.id),
+  status: text("status", { enum: ["pending", "accepted", "declined", "cancelled"] }).notNull().default("pending"),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  respondedAt: integer("responded_at", { mode: "timestamp" }),
+}, (t) => [
+  index("idx_friend_requests_recipient_status").on(t.recipientId, t.status),
+  index("idx_friend_requests_sender_status").on(t.senderId, t.status),
+]);
+
+export const friendships = sqliteTable("friendships", {
+  userAId: text("user_a_id").notNull().references(() => users.id),
+  userBId: text("user_b_id").notNull().references(() => users.id),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+}, (t) => [
+  primaryKey({ columns: [t.userAId, t.userBId] }),
+  index("idx_friendships_user_b").on(t.userBId),
+]);
+
+export const socialActivities = sqliteTable("social_activities", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  actorId: text("actor_id").notNull().references(() => users.id),
+  kind: text("kind", { enum: ["mission_completed", "chapter_completed", "streak_milestone", "achievement_unlocked"] }).notNull(),
+  payloadJson: text("payload_json").notNull().default("{}"),
+  visibility: text("visibility", { enum: ["friends", "private"] }).notNull().default("friends"),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+}, (t) => [index("idx_social_activities_actor_created").on(t.actorId, t.createdAt)]);
+
+export const socialReactions = sqliteTable("social_reactions", {
+  activityId: integer("activity_id").notNull().references(() => socialActivities.id),
+  userId: text("user_id").notNull().references(() => users.id),
+  reaction: text("reaction", { enum: ["amen", "celebrate"] }).notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+}, (t) => [primaryKey({ columns: [t.activityId, t.userId] })]);

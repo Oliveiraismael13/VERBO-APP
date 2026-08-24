@@ -117,6 +117,23 @@ test("does not expose a public preview directory", async () => {
   await assert.rejects(access(new URL("public/_sites-preview", root)));
 });
 
+test("keeps social privacy behind authenticated public identifiers", async () => {
+  const social = await text("lib/social.ts");
+  const privacy = await text("app/api/social/privacy/route.ts");
+  const migration = await text("drizzle/0006_social_foundation.sql");
+
+  assert.match(social, /public_handle/);
+  assert.match(social, /social_privacy_settings/);
+  assert.match(social, /CREATE UNIQUE INDEX IF NOT EXISTS idx_users_public_handle/);
+  assert.match(social, /friend_requests/);
+  assert.match(social, /social_activities/);
+  assert.match(privacy, /currentUser\(\)/);
+  assert.match(privacy, /allowFriendRequests/);
+  assert.match(privacy, /showFavorites/);
+  assert.doesNotMatch(privacy, /email/);
+  assert.match(migration, /CREATE TABLE `social_privacy_settings`/);
+});
+
 test("is installable as a mobile application", async () => {
   const layout = await text("app/layout.tsx");
   const install = await text("components/AppInstall.tsx");

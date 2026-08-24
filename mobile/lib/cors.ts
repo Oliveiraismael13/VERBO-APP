@@ -8,5 +8,5 @@ export function withCors(response: Response) {
 }
 
 export function corsOptions() {
-  return withCors(new Response(null, { status: 204, headers: { "Access-Control-Allow-Methods": "GET, POST, OPTIONS", "Access-Control-Allow-Headers": "Content-Type" } }));
+  return withCors(new Response(null, { status: 204, headers: { "Access-Control-Allow-Methods": "GET, POST, PATCH, OPTIONS", "Access-Control-Allow-Headers": "Content-Type" } }));
 }
