@@ -219,6 +219,8 @@ assert.match(app, /A Edição Chama da Fé não é usada nas missões/);
   assert.match(progress, /const SCROLL_XP = 20/);
   assert.match(progress, /user_scroll_rewards/);
   assert.match(progress, /action === "scroll"/);
+  assert.match(progress, /recordSocialActivity\(user\.id, "chapter_completed", \{ title: "Concluiu um capítulo da Bíblia"/);
+  assert.match(progress, /recordSocialActivity\(user\.id, "chapter_completed", \{ title: "Avançou na jornada Coop"/);
   assert.match(progress, /secondarySecretRequirement/);
   assert.match(progress, /user_library/);
   const libraryRoute = await text("app/api/library/route.ts");
@@ -350,6 +352,7 @@ test("keeps social privacy behind authenticated public identifiers", async () =>
   assert.match(coop, /recordCoopChapter/);
   assert.match(coopRoute, /inviteToCoopMission/);
   assert.match(coopRoute, /respondToCoopMission/);
+  assert.doesNotMatch(social, /ORDER BY social_activities\.created_at DESC LIMIT 40/);
 });
 
 test("is installable as a mobile application", async () => {
