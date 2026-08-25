@@ -77,9 +77,10 @@ const translations = {
 type Translation = keyof typeof translations;
 type LastReading = { bookSlug: string; chapter: number };
 type CoopContact = { publicHandle: string; displayName: string; profilePhoto: string };
-type CoopMissionState = { status: "none" | "incoming" | "outgoing" | "active"; sessionId?: number; dailyGoal?: number; round?: number; myProgress?: number; partnerProgress?: number; waitingForPartner?: boolean; partner?: CoopContact };
+type CoopReference = { bookSlug: string; chapter: number };
+type CoopMissionState = { status: "none" | "incoming" | "outgoing" | "active"; sessionId?: number; journeyMode?: "whole" | "custom"; start?: CoopReference; end?: CoopReference; current?: CoopReference; myProgress?: number; partnerProgress?: number; waitingForPartner?: boolean; partner?: CoopContact };
 type PlayerProgress = { xp: number; level: number; coins: number; streak: number; completed: string[]; achievements: string[]; dailyNoteCompleted?: boolean; xpBonusPercent?: number; missedStreakDays?: number; displayName?: string; profilePhoto?: string; favorites?: string[]; highlights?: Record<string, string>; notes?: Record<string, string>; noteDates?: Record<string, number>; plans?: string[]; shared?: string[]; foundScrolls?: string[]; lastReading?: LastReading | null; coop?: CoopMissionState };
-type ChapterReward = { xp: number; coins: number; levelUp: boolean; unlocked: string[]; scrollsUnlocked?: number; scrollXp?: number; firstScrollDiscovery?: boolean; missionCompleted?: boolean; missionTitle?: string; secondaryMissionCompleted?: boolean; replayCompleted?: boolean; actCompleted?: boolean; actTitle?: string; coopBonus?: boolean; coopRoundCompleted?: boolean };
+type ChapterReward = { xp: number; coins: number; levelUp: boolean; unlocked: string[]; scrollsUnlocked?: number; scrollXp?: number; firstScrollDiscovery?: boolean; missionCompleted?: boolean; missionTitle?: string; secondaryMissionCompleted?: boolean; replayCompleted?: boolean; actCompleted?: boolean; actTitle?: string; coopBonus?: boolean; coopRoundCompleted?: boolean; coopJourneyCompleted?: boolean };
 type ScrollDiscovery = { count: number; xp: number; first: boolean };
 type DeveloperGift = { id: number; amount: number; message: string };
 type SecondaryMissionStatus = { id: string; unlocked: boolean; active: boolean; completed: boolean; replaying: boolean; replayChapters: string[]; done: number; total: number };
@@ -130,6 +131,7 @@ export default function VerboApp() {
   const [verseSelected, setVerseSelected] = useState(false);
   const [selectedVerses, setSelectedVerses] = useState<number[]>([]);
   const [missionMode, setMissionMode] = useState(false);
+  const [coopMissionMode, setCoopMissionMode] = useState(false);
   const [missionBriefingOpen, setMissionBriefingOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [readerMenu, setReaderMenu] = useState(false);
@@ -524,7 +526,8 @@ export default function VerboApp() {
 
   const completeChapter = async () => {
     const secondaryChapterActive = Boolean(activeSecondaryMission && activeSecondaryMission.bookSlug === bookSlug && chapter >= activeSecondaryMission.from && chapter <= activeSecondaryMission.to);
-    if (!missionMode && !secondaryChapterActive) {
+    const coopChapterActive = Boolean(coopMissionMode && progress.coop?.status === "active" && progress.coop.current?.bookSlug === bookSlug && progress.coop.current?.chapter === chapter);
+    if (!missionMode && !secondaryChapterActive && !coopChapterActive) {
       notify("Entre na missão para registrar este capítulo");
       return;
     }
@@ -543,7 +546,7 @@ export default function VerboApp() {
       const response = await fetch("/api/progress", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ bookSlug, chapter }),
+        body: JSON.stringify({ bookSlug, chapter, coop: coopChapterActive }),
       });
       const data = await response.json() as PlayerProgress & { reward?: ChapterReward; error?: string; coopLocked?: boolean };
       if (!response.ok) throw new Error(data.error);
@@ -566,7 +569,8 @@ export default function VerboApp() {
         if (foundOnCompletion.length) void saveRemoteLibrary({ foundScrolls: updatedProgress.foundScrolls }, updatedProgress);
         unlockPrimaryScrollIfReady(updatedProgress);
         if (earned.secondaryMissionCompleted) void loadSecondaryMissions();
-        advanceToNextChapter(updatedProgress);
+        if (coopChapterActive && earned.coopRoundCompleted && updatedProgress.coop?.current) { setBookSlug(updatedProgress.coop.current.bookSlug); setChapter(updatedProgress.coop.current.chapter); setSelectedVerse(1); }
+        else if (!coopChapterActive) advanceToNextChapter(updatedProgress);
       }
     } catch (error) {
       notify(error instanceof Error ? error.message : "Não foi possível salvar o progresso");
@@ -916,7 +920,7 @@ export default function VerboApp() {
   const oldTestamentBookCount = catholicEdition ? 46 : 39;
   const updateCoopMission = useCallback((coop: CoopMissionState) => setProgress((current) => ({ ...current, coop })), []);
   return (
-    <main className={`app-shell rpg-shell ${dark ? "dark" : ""} ${missionMode || activeSecondaryMission ? "mission-active" : ""} ${screen === "journey" ? "journey-surface" : screen === "social" ? "social-surface" : ""}`}>
+    <main className={`app-shell rpg-shell ${dark ? "dark" : ""} ${missionMode || coopMissionMode || activeSecondaryMission ? "mission-active" : ""} ${screen === "journey" ? "journey-surface" : screen === "social" ? "social-surface" : ""}`}>
       {screen !== "camera" && (
         <header className="topbar">
           {screen === "result" ? (
@@ -933,11 +937,11 @@ export default function VerboApp() {
         </header>
       )}
 
-      {screen === "journey" && <JourneyPage manifest={manifest} progress={progress} activeSecondaryMission={activeSecondaryMission} activeSecondaryStatus={activeSecondaryStatus} replayingSecondaryMission={replayingSecondaryMission} onContinue={openMissionBriefing} onContinueSecondary={beginSecondaryMission} onOpenBible={() => { setMissionMode(false); go("bible"); }} onRestoreStreak={() => void restoreStreak()} onCoopChange={updateCoopMission} />}
+      {screen === "journey" && <JourneyPage manifest={manifest} progress={progress} activeSecondaryMission={activeSecondaryMission} activeSecondaryStatus={activeSecondaryStatus} replayingSecondaryMission={replayingSecondaryMission} onContinue={openMissionBriefing} onContinueSecondary={beginSecondaryMission} onOpenBible={() => { setMissionMode(false); setCoopMissionMode(false); go("bible"); }} onOpenCoop={(reference) => { setMissionMode(false); setCoopMissionMode(true); setBookSlug(reference.bookSlug); setChapter(reference.chapter); setSelectedVerse(1); go("bible"); }} onRestoreStreak={() => void restoreStreak()} onCoopChange={updateCoopMission} />}
 
       {screen === "bible" && (
         <section className="reader page-in" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd} onClick={(event) => { if (!(event.target as HTMLElement).closest("[data-verse], .verse-tools")) { setSelectedVerses([]); setVerseSelected(false); setHighlightPickerOpen(false); } }}>
-          {(missionMode || activeSecondaryMission) && <div className="mission-mode-banner"><div className="mission-disciple" aria-label="Seu Discípulo caminhando"><PixelDisciple level={progress.level} /><small>DISCÍPULO</small></div><div className="mission-reference"><b>{activeSecondaryMission ? replayingSecondaryMission ? "RELEITURA ATIVA" : "MISSÃO SECUNDÁRIA ATIVA" : "JORNADA PRINCIPAL ATIVA"}</b><strong>{activeSecondaryMission ? activeSecondaryMission.title : `${book?.name ?? "Carregando"} ${chapter}`}</strong><small>{activeSecondaryMission ? replayingSecondaryMission ? `Releia Mateus ${activeSecondaryMission.from}–${activeSecondaryMission.to}, sem recompensas adicionais.` : `${activeSecondaryMission.subtitle} · Mateus ${activeSecondaryMission.from}–${activeSecondaryMission.to}` : "Conclua este capítulo para liberar o próximo."}</small></div><button onClick={() => activeSecondaryMission ? go("studies") : (setMissionMode(false), notify("Você voltou à Bíblia livre"))}>{activeSecondaryMission ? "Ver missão" : "Sair da missão"}</button></div>}
+          {(missionMode || coopMissionMode || activeSecondaryMission) && <div className="mission-mode-banner"><div className="mission-disciple" aria-label="Seu Discípulo caminhando"><PixelDisciple level={progress.level} /><small>DISCÍPULO</small></div><div className="mission-reference"><b>{activeSecondaryMission ? replayingSecondaryMission ? "RELEITURA ATIVA" : "MISSÃO SECUNDÁRIA ATIVA" : coopMissionMode ? "JORNADA COOP ATIVA" : "JORNADA PRINCIPAL ATIVA"}</b><strong>{activeSecondaryMission ? activeSecondaryMission.title : `${book?.name ?? "Carregando"} ${chapter}`}</strong><small>{activeSecondaryMission ? replayingSecondaryMission ? `Releia Mateus ${activeSecondaryMission.from}–${activeSecondaryMission.to}, sem recompensas adicionais.` : `${activeSecondaryMission.subtitle} · Mateus ${activeSecondaryMission.from}–${activeSecondaryMission.to}` : coopMissionMode ? `Leiam este capítulo juntos para liberar o próximo com ${progress.coop?.partner?.displayName || "seu amigo"}.` : "Conclua este capítulo para liberar o próximo."}</small></div><button onClick={() => activeSecondaryMission ? go("studies") : (setMissionMode(false), setCoopMissionMode(false), notify("Você voltou à Bíblia livre"))}>{activeSecondaryMission ? "Ver missão" : "Sair da missão"}</button></div>}
           {missionMode && <MissionStoryPanel context={missionForChapter(bookSlug, chapter)} progress={progress} />}
           {activeSecondaryMission && <SecondaryMissionStoryPanel mission={activeSecondaryMission} progress={progress} status={activeSecondaryStatus} />}
           <div className="reference-row">
@@ -947,7 +951,7 @@ export default function VerboApp() {
             </div>
             <div className="reader-actions">
               <select className="translation" value={translation} onChange={(event) => changeTranslation(event.target.value as Translation)} aria-label="Tradução">
-                {(Object.keys(translations) as Translation[]).filter((code) => !personalTranslationCodes.has(code) || availablePersonalTranslations.includes(code)).map((code) => <option key={code} value={code} disabled={(missionMode || Boolean(activeSecondaryMission)) && !translations[code].missions}>{translations[code].label}</option>)}
+                {(Object.keys(translations) as Translation[]).filter((code) => !personalTranslationCodes.has(code) || availablePersonalTranslations.includes(code)).map((code) => <option key={code} value={code} disabled={(missionMode || coopMissionMode || Boolean(activeSecondaryMission)) && !translations[code].missions}>{translations[code].label}</option>)}
               </select>
               <button className="text-control" onClick={() => setReaderMenu(!readerMenu)} aria-label="Preferências de leitura">Aa</button>
             </div>
@@ -1006,7 +1010,7 @@ export default function VerboApp() {
           {primaryMissionScroll && primaryScrollUnlocked && <MissionInsights insights={[primaryMissionScroll]} chapter={chapter} source="primary" language={book?.testament === "old" ? "hebraico bíblico" : "grego bíblico"} />}
           {insightMission && discoveredSecondaryChapterInsights.length > 0 && <MissionInsights insights={discoveredSecondaryChapterInsights} chapter={chapter} source="secondary" language="grego bíblico" />}
 
-          {(missionMode || Boolean(activeSecondaryMission && activeSecondaryMission.bookSlug === bookSlug && chapter >= activeSecondaryMission.from && chapter <= activeSecondaryMission.to)) && <button className={`chapter-complete ${(replayingSecondaryMission ? replayChapterComplete : progress.completed.includes(`${bookSlug}:${chapter}`)) ? "done" : ""}`} onClick={completeChapter} disabled={savingChapter || (replayingSecondaryMission ? replayChapterComplete : progress.completed.includes(`${bookSlug}:${chapter}`))}>
+          {(missionMode || coopMissionMode || Boolean(activeSecondaryMission && activeSecondaryMission.bookSlug === bookSlug && chapter >= activeSecondaryMission.from && chapter <= activeSecondaryMission.to)) && <button className={`chapter-complete ${(replayingSecondaryMission ? replayChapterComplete : !coopMissionMode && progress.completed.includes(`${bookSlug}:${chapter}`)) ? "done" : ""}`} onClick={completeChapter} disabled={savingChapter || (replayingSecondaryMission ? replayChapterComplete : !coopMissionMode && progress.completed.includes(`${bookSlug}:${chapter}`))}>
             <span>{replayingSecondaryMission ? replayChapterComplete ? "✓" : "⚔" : progress.completed.includes(`${bookSlug}:${chapter}`) ? "✓" : "⚔"}</span>
             <div><b>{replayingSecondaryMission ? replayChapterComplete ? "Capítulo relido" : "Marcar capítulo como relido" : progress.completed.includes(`${bookSlug}:${chapter}`) ? "Capítulo concluído" : "Marcar capítulo como lido"}</b><small>{replayingSecondaryMission ? replayChapterComplete ? "Releitura registrada" : "Sem XP ou siclos adicionais" : progress.completed.includes(`${bookSlug}:${chapter}`) ? "Recompensa conquistada" : "+40 XP · +4 siclos de prata"}</small></div>
             <em>{savingChapter ? "…" : "›"}</em>
@@ -1084,10 +1088,14 @@ export default function VerboApp() {
   );
 }
 
-function CoopMissionPanel({ coop, onChange }: { coop: CoopMissionState; onChange: (coop: CoopMissionState) => void }) {
+function CoopMissionPanel({ coop, manifest, onOpen, onChange }: { coop: CoopMissionState; manifest: BibleManifest | null; onOpen: (reference: CoopReference) => void; onChange: (coop: CoopMissionState) => void }) {
   const [friends, setFriends] = useState<CoopContact[]>([]);
   const [friend, setFriend] = useState("");
-  const [goal, setGoal] = useState(3);
+  const [journeyMode, setJourneyMode] = useState<"whole" | "custom">("whole");
+  const [startBookSlug, setStartBookSlug] = useState("gen");
+  const [startChapter, setStartChapter] = useState(1);
+  const [endBookSlug, setEndBookSlug] = useState("apo");
+  const [endChapter, setEndChapter] = useState(22);
   const [working, setWorking] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -1110,12 +1118,12 @@ function CoopMissionPanel({ coop, onChange }: { coop: CoopMissionState; onChange
     setWorking(true);
     setMessage("");
     try {
-      const response = await fetch("/api/coop-mission", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action, publicHandle: friend, dailyGoal: goal, sessionId: coop.sessionId }) });
+      const response = await fetch("/api/coop-mission", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action, publicHandle: friend, journeyMode, startBookSlug, startChapter, endBookSlug, endChapter, sessionId: coop.sessionId }) });
       const data = await response.json() as { state?: CoopMissionState; error?: string };
       if (!response.ok) throw new Error(data.error || "Não foi possível atualizar a missão cooperativa.");
       if (data.state) onChange(data.state);
       if (action === "invite") setMessage("Convite enviado. A missão começa quando seu amigo aceitar.");
-      if (action === "accept") setMessage("Missão cooperativa iniciada. Leiam juntos para liberar cada rodada.");
+      if (action === "accept") setMessage("Missão cooperativa iniciada. Leiam juntos para liberar cada capítulo.");
       if (action === "leave") setMessage("Você saiu da missão cooperativa.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Não foi possível atualizar a missão cooperativa.");
@@ -1125,15 +1133,18 @@ function CoopMissionPanel({ coop, onChange }: { coop: CoopMissionState; onChange
   };
 
   const partnerName = coop.partner?.displayName || "seu amigo";
+  const bookFor = (slug?: string) => manifest?.books.find((book) => book.slug === slug);
+  const referenceLabel = (reference?: CoopReference) => reference ? `${bookFor(reference.bookSlug)?.name || reference.bookSlug} ${reference.chapter}` : "";
+  const startBook = bookFor(startBookSlug); const endBook = bookFor(endBookSlug);
   return <section className={`coop-mission-panel ${coop.status === "active" ? "active" : ""}`} aria-label="Missão principal cooperativa">
-    <div className="coop-mission-heading"><span>✦</span><div><p>MISSÃO PRINCIPAL · COOP</p><h2>Jornada em dupla</h2></div>{coop.status === "active" && <b>+5% XP</b>}</div>
+    <div className="coop-mission-heading"><span>✦</span><div><p>CAMINHO PARALELO · COOP</p><h2>Jornada em dupla</h2></div>{coop.status === "active" && <b>ATIVA</b>}</div>
     {coop.status === "none" && <>
-      <p className="coop-mission-copy">Convide um amigo para avançarem juntos. Cada rodada libera uma nova meta somente quando os dois concluírem.</p>
-      {friends.length ? <div className="coop-mission-form"><label>Com quem você quer caminhar?<select value={friend} onChange={(event) => setFriend(event.target.value)}><option value="">Escolha um amigo</option>{friends.map((item) => <option key={item.publicHandle} value={item.publicHandle}>{item.displayName}</option>)}</select></label><label>Capítulos por rodada<select value={goal} onChange={(event) => setGoal(Number(event.target.value))}>{Array.from({ length: 8 }, (_, index) => index + 3).map((value) => <option key={value} value={value}>{value} capítulos</option>)}</select></label><button disabled={!friend || working} onClick={() => void act("invite")}>{working ? "Enviando…" : "Convidar para coop"}</button></div> : <p className="coop-mission-empty">Adicione um amigo no Social para iniciar uma jornada cooperativa.</p>}
+      <p className="coop-mission-copy">A Grande Jornada solo continua como está. Aqui vocês criam uma jornada própria e avançam capítulo por capítulo juntos.</p>
+      {friends.length && manifest ? <div className="coop-mission-form coop-mission-path"><label>Com quem você quer caminhar?<select value={friend} onChange={(event) => setFriend(event.target.value)}><option value="">Escolha um amigo</option>{friends.map((item) => <option key={item.publicHandle} value={item.publicHandle}>{item.displayName}</option>)}</select></label><label>Tipo de jornada<select value={journeyMode} onChange={(event) => setJourneyMode(event.target.value as "whole" | "custom")}><option value="whole">Grande Jornada · Bíblia inteira</option><option value="custom">Custom · percurso livre</option></select></label>{journeyMode === "whole" ? <p className="coop-mission-path-note">Da criação em Gênesis 1 à esperança em Apocalipse 22.</p> : <><label>Começar em<select value={startBookSlug} onChange={(event) => { setStartBookSlug(event.target.value); setStartChapter(1); }}>{manifest.books.map((book) => <option key={book.slug} value={book.slug}>{book.name}</option>)}</select><select value={startChapter} onChange={(event) => setStartChapter(Number(event.target.value))}>{Array.from({ length: startBook?.chapterCount || 0 }, (_, index) => <option key={index + 1} value={index + 1}>Capítulo {index + 1}</option>)}</select></label><label>Terminar em<select value={endBookSlug} onChange={(event) => { setEndBookSlug(event.target.value); setEndChapter(1); }}>{manifest.books.map((book) => <option key={book.slug} value={book.slug}>{book.name}</option>)}</select><select value={endChapter} onChange={(event) => setEndChapter(Number(event.target.value))}>{Array.from({ length: endBook?.chapterCount || 0 }, (_, index) => <option key={index + 1} value={index + 1}>Capítulo {index + 1}</option>)}</select></label></>}<button disabled={!friend || working} onClick={() => void act("invite")}>{working ? "Enviando…" : "Convidar para coop"}</button></div> : <p className="coop-mission-empty">Adicione um amigo no Social para iniciar uma jornada cooperativa.</p>}
     </>}
-    {coop.status === "outgoing" && <div className="coop-mission-status"><b>Convite enviado para {partnerName}</b><span>Meta de {coop.dailyGoal} capítulos por rodada · aguardando a aceitação.</span><button disabled={working} onClick={() => void act("leave")}>Cancelar convite</button></div>}
-    {coop.status === "incoming" && <div className="coop-mission-status"><b>{partnerName} quer caminhar com você</b><span>Meta compartilhada: {coop.dailyGoal} capítulos por rodada. Cada capítulo concluído no coop concede +5% XP.</span><div><button className="coop-accept" disabled={working} onClick={() => void act("accept")}>Aceitar convite</button><button disabled={working} onClick={() => void act("decline")}>Recusar</button></div></div>}
-    {coop.status === "active" && <div className="coop-mission-status"><div className="coop-round-title"><b>Rodada {coop.round}</b><span>{coop.waitingForPartner ? `Aguardando ${partnerName}` : "Os próximos capítulos estão liberados"}</span></div><div className="coop-progress-grid"><div><small>VOCÊ</small><b>{coop.myProgress}/{coop.dailyGoal}</b><i><em style={{ width: `${Math.min(100, (coop.myProgress || 0) / (coop.dailyGoal || 1) * 100)}%` }} /></i></div><div><small>{partnerName.toUpperCase()}</small><b>{coop.partnerProgress}/{coop.dailyGoal}</b><i><em style={{ width: `${Math.min(100, (coop.partnerProgress || 0) / (coop.dailyGoal || 1) * 100)}%` }} /></i></div></div><p>{coop.waitingForPartner ? `Você concluiu sua parte. Quando ${partnerName} completar a dele, a próxima rodada será liberada.` : `Concluam ${coop.dailyGoal} capítulos cada um para abrir a próxima rodada.`}</p><button disabled={working} onClick={() => void act("leave")}>Sair do coop</button></div>}
+    {coop.status === "outgoing" && <div className="coop-mission-status"><b>Convite enviado para {partnerName}</b><span>{coop.journeyMode === "custom" ? `Percurso: ${referenceLabel(coop.start)} até ${referenceLabel(coop.end)}.` : "Grande Jornada: Gênesis 1 até Apocalipse 22."} Aguardando a aceitação.</span><button disabled={working} onClick={() => void act("leave")}>Cancelar convite</button></div>}
+    {coop.status === "incoming" && <div className="coop-mission-status"><b>{partnerName} quer caminhar com você</b><span>{coop.journeyMode === "custom" ? `Percurso escolhido: ${referenceLabel(coop.start)} até ${referenceLabel(coop.end)}.` : "Vamos ler a Bíblia inteira: Gênesis 1 até Apocalipse 22."}</span><div><button className="coop-accept" disabled={working} onClick={() => void act("accept")}>Aceitar convite</button><button disabled={working} onClick={() => void act("decline")}>Recusar</button></div></div>}
+    {coop.status === "active" && <div className="coop-mission-status"><div className="coop-round-title"><b>Capítulo atual</b><span>{coop.waitingForPartner ? `Aguardando ${partnerName}` : "Leitura liberada"}</span></div><b>{referenceLabel(coop.current)}</b><div className="coop-progress-grid"><div><small>VOCÊ</small><b>{coop.myProgress ? "Concluído" : "Pendente"}</b></div><div><small>{partnerName.toUpperCase()}</small><b>{coop.partnerProgress ? "Concluído" : "Pendente"}</b></div></div><p>{coop.waitingForPartner ? `Você concluiu sua parte. Quando ${partnerName} concluir, o próximo capítulo será liberado.` : "Concluam este capítulo para seguirem juntos."}</p><div><button className="coop-accept" onClick={() => coop.current && onOpen(coop.current)}>Abrir capítulo</button><button disabled={working} onClick={() => void act("leave")}>Sair do coop</button></div></div>}
     {message && <small className="coop-mission-message">{message}</small>}
   </section>;
 }
@@ -1172,7 +1183,7 @@ function isActComplete(act: (typeof campaignActs)[number], completed: string[]) 
   });
 }
 
-function JourneyPage({ manifest, progress, activeSecondaryMission, activeSecondaryStatus, replayingSecondaryMission, onContinue, onContinueSecondary, onOpenBible, onRestoreStreak, onCoopChange }: { manifest: BibleManifest | null; progress: PlayerProgress; activeSecondaryMission: SecondaryMission | null; activeSecondaryStatus: SecondaryMissionStatus | null; replayingSecondaryMission: boolean; onContinue: () => void; onContinueSecondary: (mission: SecondaryMission) => void; onOpenBible: () => void; onRestoreStreak: () => void; onCoopChange: (coop: CoopMissionState) => void }) {
+function JourneyPage({ manifest, progress, activeSecondaryMission, activeSecondaryStatus, replayingSecondaryMission, onContinue, onContinueSecondary, onOpenBible, onOpenCoop, onRestoreStreak, onCoopChange }: { manifest: BibleManifest | null; progress: PlayerProgress; activeSecondaryMission: SecondaryMission | null; activeSecondaryStatus: SecondaryMissionStatus | null; replayingSecondaryMission: boolean; onContinue: () => void; onContinueSecondary: (mission: SecondaryMission) => void; onOpenBible: () => void; onOpenCoop: (reference: CoopReference) => void; onRestoreStreak: () => void; onCoopChange: (coop: CoopMissionState) => void }) {
   const completedCount = progress.completed.length;
   const noteCompleted = Boolean(progress.dailyNoteCompleted);
   const xpProgress = getXpProgress(progress.xp);
@@ -1198,7 +1209,7 @@ function JourneyPage({ manifest, progress, activeSecondaryMission, activeSeconda
       <div><span>{activeSecondaryMission && secondaryProgress ? `${secondaryProgress.done}/${secondaryProgress.total} capítulos · ${activeSecondaryMission.bookSlug === "mat" ? "Mateus" : activeSecondaryMission.bookSlug} ${activeSecondaryMission.from}–${activeSecondaryMission.to}` : mission ? `${mission.name} ${mission.chapter} · próximo capítulo` : "Missão concluída"}</span><button onClick={() => activeSecondaryMission ? onContinueSecondary(activeSecondaryMission) : onContinue()} disabled={!activeSecondaryMission && !mission}>{activeSecondaryMission ? "Continuar missão" : mission ? "Continuar missão" : "Jornada concluída"} →</button></div>
     </article>
 
-    <CoopMissionPanel coop={progress.coop || { status: "none" }} onChange={onCoopChange} />
+    <CoopMissionPanel coop={progress.coop || { status: "none" }} manifest={manifest} onOpen={onOpenCoop} onChange={onCoopChange} />
 
     <div className="quest-heading"><div><p>TRILHA PRINCIPAL</p><h2>A Grande História</h2></div><span>{completedCount}/1.189</span></div>
     <div className="quest-map">

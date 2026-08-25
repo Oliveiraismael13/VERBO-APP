@@ -6,7 +6,7 @@ import { levelForXp } from "../../../lib/xp";
 import { campaignActs, missionForChapter as findCampaignMission, type CampaignAct } from "../../../lib/campaign";
 import { recordSocialActivity } from "../../../lib/social";
 import { secondaryMissionById } from "../../../lib/secondary-missions";
-import { CoopMissionLockedError, ensureCoopChapterCanBeCompleted, getCoopMissionState, recordCoopChapter } from "../../../lib/coop-mission";
+import { CoopMissionChapterError, CoopMissionLockedError, ensureCoopChapterCanBeCompleted, getCoopMissionState, recordCoopChapter } from "../../../lib/coop-mission";
 
 export const dynamic = "force-dynamic";
 
@@ -157,7 +157,7 @@ export async function GET() {
 export async function POST(request: Request) {
   const user = await currentUser();
   if (!user) return withCors(Response.json({ error: "Não autenticado" }, { status: 401 }));
-  const body = await request.json() as { action?: "note" | "restore-streak" | "scroll"; bookSlug?: string; chapter?: number; scrollKeys?: string[] };
+  const body = await request.json() as { action?: "note" | "restore-streak" | "scroll"; bookSlug?: string; chapter?: number; coop?: boolean; scrollKeys?: string[] };
 
   try {
     await ensureSchema();
@@ -233,6 +233,25 @@ export async function POST(request: Request) {
     if (!body.bookSlug || !/^[a-z0-9]+$/.test(body.bookSlug) || !Number.isInteger(body.chapter) || body.chapter! < 1 || body.chapter! > 150) {
       return withCors(Response.json({ error: "Capítulo inválido" }, { status: 400 }));
     }
+    if (body.coop) {
+      const current = await env.DB.prepare("SELECT xp, level, streak, last_read_date, streak_before_break, missed_streak_days FROM user_progress WHERE user_id = ?").bind(user.id).first<ProgressRow>();
+      const today = todayInBrazil();
+      const lastRead = current?.last_read_date;
+      let nextStreak = current?.streak ?? 0;
+      let streakBeforeBreak = current?.streak_before_break ?? 0;
+      let missedStreakDays = current?.missed_streak_days ?? 0;
+      if (lastRead !== today) {
+        if (!lastRead) nextStreak = 1;
+        else if (lastRead === previousDay(today)) nextStreak += 1;
+        else { missedStreakDays += daysBetween(lastRead, today) - 1; streakBeforeBreak = current?.missed_streak_days ? (current?.streak_before_break ?? 0) : nextStreak; nextStreak = 0; }
+      }
+      const coopRound = await recordCoopChapter(user.id, { bookSlug: body.bookSlug, chapter: body.chapter });
+      const xpGain = xpWithStreakBonus(40, nextStreak);
+      const nextXp = (current?.xp ?? 0) + xpGain;
+      const nextLevel = levelForXp(nextXp);
+      await env.DB.prepare("UPDATE user_progress SET xp = ?, level = ?, coins = coins + 4, streak = ?, streak_before_break = ?, missed_streak_days = ?, last_read_date = ?, updated_at = ? WHERE user_id = ?").bind(nextXp, nextLevel, nextStreak, streakBeforeBreak, missedStreakDays, today, Date.now(), user.id).run();
+      return withCors(Response.json({ ...(await loadProgress(user.id)), reward: { xp: xpGain, coins: 4, levelUp: nextLevel > (current?.level ?? 1), unlocked: [], coopBonus: true, coopRoundCompleted: coopRound.chapterAdvanced, coopJourneyCompleted: coopRound.journeyCompleted } }));
+    }
     const existing = await env.DB.prepare("SELECT 1 AS found FROM completed_chapters WHERE user_id = ? AND book_slug = ? AND chapter = ?")
       .bind(user.id, body.bookSlug, body.chapter).first<{ found: number }>();
     if (existing) return withCors(Response.json({ ...(await loadProgress(user.id)), reward: null }));
@@ -258,7 +277,7 @@ export async function POST(request: Request) {
     const missionCompleted = Boolean(mission && completedBefore === mission.to - mission.from);
     const activeSecondaryRow = await env.DB.prepare("SELECT mission_id FROM user_secondary_missions WHERE user_id = ? AND active = 1 AND completed_at IS NULL").bind(user.id).first<{ mission_id: string }>();
     const secondaryMission = activeSecondaryRow ? secondaryMissionById(activeSecondaryRow.mission_id) : null;
-    const coopBefore = secondaryMission ? null : await ensureCoopChapterCanBeCompleted(user.id);
+    const coopBefore = null;
     const secondaryCompletedBefore = secondaryMission ? (await env.DB.prepare("SELECT COUNT(*) AS total FROM completed_chapters WHERE user_id = ? AND book_slug = ? AND chapter BETWEEN ? AND ?").bind(user.id, secondaryMission.bookSlug, secondaryMission.from, secondaryMission.to).first<{ total: number }>())?.total ?? 0 : 0;
     const secondaryMissionCompleted = Boolean(secondaryMission && body.bookSlug === secondaryMission.bookSlug && body.chapter >= secondaryMission.from && body.chapter <= secondaryMission.to && secondaryCompletedBefore === secondaryMission.to - secondaryMission.from);
     const act = actForChapter(body.bookSlug, body.chapter);
@@ -277,7 +296,7 @@ export async function POST(request: Request) {
       ...(secondaryMissionCompleted && secondaryMission ? [env.DB.prepare("UPDATE user_secondary_missions SET active = 0, completed_at = ? WHERE user_id = ? AND mission_id = ?").bind(now, user.id, secondaryMission.id)] : []),
     ]);
 
-    const coopRound = coopBefore ? await recordCoopChapter(user.id) : null;
+    const coopRound = null;
 
     const count = await env.DB.prepare("SELECT COUNT(*) AS total FROM completed_chapters WHERE user_id = ?").bind(user.id).first<{ total: number }>();
     const unlocked: string[] = [];
@@ -307,7 +326,7 @@ export async function POST(request: Request) {
 
     return withCors(Response.json({ ...(await loadProgress(user.id)), reward: { xp: xpGain, coins: coinGain, levelUp: nextLevel > (current?.level ?? 1), unlocked, missionCompleted: Boolean(missionCompleted || secondaryMissionCompleted), missionTitle: missionCompleted ? mission?.title : secondaryMissionCompleted ? secondaryMission?.title : undefined, secondaryMissionCompleted, actCompleted, actTitle: actCompleted ? act?.title : undefined, coopBonus: Boolean(coopBefore), coopRoundCompleted: Boolean(coopRound?.roundCompleted) } }));
   } catch (error) {
-    if (error instanceof CoopMissionLockedError) return withCors(Response.json({ error: error.message, coopLocked: true }, { status: 423 }));
+    if (error instanceof CoopMissionLockedError || error instanceof CoopMissionChapterError) return withCors(Response.json({ error: error.message, coopLocked: true }, { status: 423 }));
     console.error("Falha ao concluir capítulo", error);
     return withCors(Response.json({ error: "Não foi possível salvar o progresso" }, { status: 500 }));
   }

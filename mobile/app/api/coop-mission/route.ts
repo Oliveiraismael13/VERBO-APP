@@ -21,8 +21,8 @@ export async function POST(request: Request) {
   const user = await currentUser();
   if (!user) return withCors(Response.json({ error: "Não autenticado" }, { status: 401 }));
   try {
-    const body = await request.json() as { action?: string; publicHandle?: unknown; dailyGoal?: unknown; sessionId?: unknown };
-    const result = body.action === "invite" ? await inviteToCoopMission(user.id, body.publicHandle, body.dailyGoal)
+    const body = await request.json() as { action?: string; publicHandle?: unknown; journeyMode?: unknown; startBookSlug?: unknown; startChapter?: unknown; endBookSlug?: unknown; endChapter?: unknown; sessionId?: unknown };
+    const result = body.action === "invite" ? await inviteToCoopMission(user.id, body.publicHandle, body)
       : body.action === "accept" ? await respondToCoopMission(user.id, body.sessionId, true)
         : body.action === "decline" ? await respondToCoopMission(user.id, body.sessionId, false)
           : body.action === "leave" ? await leaveCoopMission(user.id, body.sessionId)
