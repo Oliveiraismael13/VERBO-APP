@@ -306,8 +306,8 @@ test("keeps social privacy behind authenticated public identifiers", async () =>
   assert.match(privacy, /allowFriendRequests/);
   assert.match(privacy, /showFavorites/);
   assert.match(privacy, /showNotes/);
-  assert.match(social, /showActivities: true/);
-  assert.match(social, /show_activities, updated_at\) VALUES \(\?, 1, \?\)/);
+  assert.match(social, /showActivities: false/);
+  assert.match(social, /show_activities, updated_at\) VALUES \(\?, 0, \?\)/);
   assert.doesNotMatch(privacy, /email/);
   assert.match(social, /areFriends/);
   assert.match(social, /respondToFriendRequest/);

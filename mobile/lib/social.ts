@@ -94,7 +94,7 @@ const defaults = {
   showProgress: true,
   showFavorites: false,
   showNotes: false,
-  showActivities: true,
+  showActivities: false,
   showStats: true,
   allowFriendRequests: true,
 };
@@ -152,7 +152,7 @@ export async function ensureSocialUser(userId: string): Promise<string> {
   }
   if (!publicHandle) throw new Error("Não foi possível criar o identificador público");
 
-  await env.DB.prepare("INSERT OR IGNORE INTO social_privacy_settings (user_id, show_activities, updated_at) VALUES (?, 1, ?)").bind(userId, Date.now()).run();
+  await env.DB.prepare("INSERT OR IGNORE INTO social_privacy_settings (user_id, show_activities, updated_at) VALUES (?, 0, ?)").bind(userId, Date.now()).run();
   return publicHandle;
 }
 
