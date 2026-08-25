@@ -72,3 +72,6 @@
 
 /* Em celulares virados, o Verbo usa a largura inteira em vez do quadro vertical. */
 @media (orientation:landscape) and (max-height:600px) and (pointer:coarse){.mobile-site{min-height:100dvh}.app-shell.rpg-shell{width:100%;min-height:100dvh;margin:0;border-radius:0}.app-shell.rpg-shell .bottom-nav{right:0;left:0;width:auto;transform:none}.app-shell.rpg-shell .topbar{height:64px;padding-block:10px}.app-shell.rpg-shell .reader,.app-shell.rpg-shell .generic-page,.app-shell.rpg-shell .study-page{min-height:calc(100dvh - 64px);padding-bottom:96px}}
+
+/* A aba Missões compartilha a mesma paleta noturna azul-marinho das demais abas. */
+.rpg-shell.dark .missions-page{--ink:#edf0f7;--muted:#aeb5c8;--paper:#111522;--card:#181c2d;--line:#2c3246;--soft:#202536;background:var(--paper);color:var(--ink)}
