@@ -996,7 +996,7 @@ export default function VerboApp() {
                     <button onClick={() => void shareSelection()} aria-label="Compartilhar">↗</button>
                   </div>
                   {highlightPickerOpen && <div className="mobile-highlight-colors" aria-label="Cores da marcação">
-                    {[["yellow", "Amarelo"], ["green", "Verde"], ["blue", "Azul"], ["rose", "Rosa"]].map(([color, label]) => <button key={color} className={`mobile-color ${color} ${highlightColor === color && marked ? "active" : ""}`} onClick={() => chooseHighlight(color)} aria-label={`Marcar em ${label.toLowerCase()}`} />)}
+                    {[["yellow", "Amarelo"], ["green", "Verde"], ["blue", "Azul"], ["rose", "Rosa"], ["orange", "Laranja"], ["purple", "Roxo"], ["teal", "Turquesa"], ["red", "Vermelho"]].map(([color, label]) => <button key={color} className={`mobile-color ${color} ${highlightColor === color && marked ? "active" : ""}`} onClick={() => chooseHighlight(color)} aria-label={`Marcar em ${label.toLowerCase()}`} />)}
                     <button className="mobile-clear-highlight" onClick={clearHighlight}>Limpar</button>
                   </div>}
                 </div>}
