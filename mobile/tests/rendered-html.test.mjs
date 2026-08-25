@@ -82,6 +82,7 @@ test("contains the authenticated Verbo application routes", async () => {
   assert.match(app, /activityGlyph/);
   assert.match(app, /social-feed-card/);
   assert.match(app, /social-activity-glyph/);
+  assert.match(app, /window\.setInterval\(refreshFeed, 30_000\)/);
   assert.match(app, /socialView/);
   assert.match(app, /social-view-tabs/);
   assert.match(app, /notificationsOpen/);
@@ -223,8 +224,8 @@ assert.match(app, /A Edição Chama da Fé não é usada nas missões/);
   assert.match(progress, /const SCROLL_XP = 20/);
   assert.match(progress, /user_scroll_rewards/);
   assert.match(progress, /action === "scroll"/);
-  assert.match(progress, /recordSocialActivity\(user\.id, "chapter_completed", \{ title: "Concluiu um capítulo da Bíblia"/);
-  assert.match(progress, /recordSocialActivity\(user\.id, "chapter_completed", \{ title: "Avançou na jornada Coop"/);
+  assert.match(progress, /recordSocialActivity\(user\.id, "chapter_completed", \{ title: "Concluiu um capítulo da Bíblia"[\s\S]*?notifyFriends: true/);
+  assert.match(progress, /recordSocialActivity\(user\.id, "chapter_completed", \{ title: "Avançou na jornada Coop"[\s\S]*?notifyFriends: true/);
   assert.match(progress, /secondarySecretRequirement/);
   assert.match(progress, /user_library/);
   const libraryRoute = await text("app/api/library/route.ts");

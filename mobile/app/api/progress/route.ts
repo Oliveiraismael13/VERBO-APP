@@ -251,7 +251,7 @@ export async function POST(request: Request) {
       const nextLevel = levelForXp(nextXp);
       await env.DB.prepare("UPDATE user_progress SET xp = ?, level = ?, coins = coins + 4, streak = ?, streak_before_break = ?, missed_streak_days = ?, last_read_date = ?, updated_at = ? WHERE user_id = ?").bind(nextXp, nextLevel, nextStreak, streakBeforeBreak, missedStreakDays, today, Date.now(), user.id).run();
       try {
-        await recordSocialActivity(user.id, "chapter_completed", { title: "Avançou na jornada Coop", detail: "Concluiu um capítulo com seu parceiro de leitura.", reference: `${body.bookSlug}:${body.chapter}:1`, xp: xpGain, level: nextLevel });
+        await recordSocialActivity(user.id, "chapter_completed", { title: "Avançou na jornada Coop", detail: "Concluiu um capítulo com seu parceiro de leitura.", reference: `${body.bookSlug}:${body.chapter}:1`, xp: xpGain, level: nextLevel, notifyFriends: true });
       } catch (error) {
         console.error("Falha ao registrar atividade Coop", error);
       }
@@ -319,12 +319,12 @@ export async function POST(request: Request) {
     }
 
     try {
-      await recordSocialActivity(user.id, "chapter_completed", { title: "Concluiu um capítulo da Bíblia", detail: "Seguiu firme na leitura diária.", reference: `${body.bookSlug}:${body.chapter}:1`, xp: xpGain, level: nextLevel });
+      await recordSocialActivity(user.id, "chapter_completed", { title: "Concluiu um capítulo da Bíblia", detail: "Seguiu firme na leitura diária.", reference: `${body.bookSlug}:${body.chapter}:1`, xp: xpGain, level: nextLevel, notifyFriends: true });
       if (actCompleted && act) await recordSocialActivity(user.id, "mission_completed", { title: `Concluiu o Ato ${act.number}: ${act.title}`, detail: `Missão ${mission?.title || "da Jornada Principal"} concluída · +${xpGain} XP · nível ${nextLevel}.`, xp: xpGain, level: nextLevel, act: `Ato ${act.number} · ${act.title}`, mission: mission?.title, notifyFriends: true });
       if (nextLevel > (current?.level ?? 1)) await recordSocialActivity(user.id, "achievement_unlocked", { title: `Alcançou o nível ${nextLevel}`, detail: `A jornada alcançou ${nextXp.toLocaleString("pt-BR")} XP.`, xp: xpGain, level: nextLevel, notifyFriends: true });
       if (secondaryMissionCompleted && secondaryMission) await recordSocialActivity(user.id, "mission_completed", { title: `Concluiu a missão secundária ${secondaryMission.title}`, detail: `Completou uma jornada especial na Palavra · +${xpGain} XP.`, reference: `Mateus ${secondaryMission.from}–${secondaryMission.to}`, xp: xpGain, level: nextLevel, mission: secondaryMission.title, notifyFriends: true });
-      if (missionCompleted && mission) await recordSocialActivity(user.id, "mission_completed", { title: `Concluiu a missão ${mission.title}`, detail: `Avançou na Jornada Principal · +${xpGain} XP.`, reference: `${mission.slug} ${mission.from}${mission.from === mission.to ? "" : `–${mission.to}`}`, xp: xpGain, level: nextLevel, mission: mission.title });
-      if (nextStreak > 0 && nextStreak % 7 === 0) await recordSocialActivity(user.id, "streak_milestone", { title: `${nextStreak} dias de leitura`, detail: "Manteve a chama acesa na Palavra.", level: nextLevel });
+      if (missionCompleted && mission) await recordSocialActivity(user.id, "mission_completed", { title: `Concluiu a missão ${mission.title}`, detail: `Avançou na Jornada Principal · +${xpGain} XP.`, reference: `${mission.slug} ${mission.from}${mission.from === mission.to ? "" : `–${mission.to}`}`, xp: xpGain, level: nextLevel, mission: mission.title, notifyFriends: true });
+      if (nextStreak > 0 && nextStreak % 7 === 0) await recordSocialActivity(user.id, "streak_milestone", { title: `${nextStreak} dias de leitura`, detail: "Manteve a chama acesa na Palavra.", level: nextLevel, notifyFriends: true });
       if (unlocked.length) await recordSocialActivity(user.id, "achievement_unlocked", { title: unlocked.length === 1 ? "Nova conquista desbloqueada" : `${unlocked.length} novas conquistas desbloqueadas`, detail: unlocked.map((code) => code.replaceAll("_", " ")).join(" · "), level: nextLevel, notifyFriends: true });
     } catch (error) {
       console.error("Falha ao registrar atividade social", error);

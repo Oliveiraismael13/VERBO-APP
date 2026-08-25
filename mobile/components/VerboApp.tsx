@@ -1479,6 +1479,20 @@ function SocialPage({ notify, dark, setDark, progress, manifest, onOpenFavorite,
     void loadSocial().catch(() => undefined).finally(() => setLoading(false));
   }, [loadSocial]);
 
+  useEffect(() => {
+    const refreshFeed = () => {
+      if (document.visibilityState === "visible") void loadSocial().catch(() => undefined);
+    };
+    window.addEventListener("focus", refreshFeed);
+    document.addEventListener("visibilitychange", refreshFeed);
+    const refreshInterval = window.setInterval(refreshFeed, 30_000);
+    return () => {
+      window.removeEventListener("focus", refreshFeed);
+      document.removeEventListener("visibilitychange", refreshFeed);
+      window.clearInterval(refreshInterval);
+    };
+  }, [loadSocial]);
+
   const restoreSocialPosition = () => window.requestAnimationFrame(() => window.scrollTo({ top: socialScrollTop.current, behavior: "auto" }));
   const returnToSocial = () => {
     setSelectedProfile(null);
