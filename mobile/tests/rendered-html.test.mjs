@@ -177,6 +177,7 @@ assert.match(app, /A Edição Chama da Fé não é usada nas missões/);
   assert.match(rpgStyles, /\.rpg-shell\.journey-surface,\.rpg-shell\.social-surface\{background:#0b0e18\}/);
   assert.match(rpgStyles, /\.rpg-shell\.dark \.missions-page\{background:var\(--paper\);color:var\(--ink\)\}/);
   assert.match(rpgStyles, /\.rpg-shell\.dark \.missions-page\{--ink:#edf0f7;--muted:#aeb5c8;--paper:#111522;--card:#181c2d/);
+  assert.match(rpgStyles, /\.rpg-shell\.dark \.social-profile-page,\.rpg-shell\.dark \.social-account-page\{--ink:#edf0f7;--muted:#aeb5c8;--paper:#111522/);
   assert.match(rpgStyles, /\.rpg-shell\.dark \.social-home\{color:#eef0fa;background:linear-gradient/);
   assert.match(rpgStyles, /@media \(orientation:landscape\) and \(max-height:600px\) and \(pointer:coarse\)/);
   assert.match(rpgStyles, /\.app-shell\.rpg-shell\{width:100%;min-height:100dvh;margin:0;border-radius:0\}/);
