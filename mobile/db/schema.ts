@@ -150,11 +150,19 @@ export const socialSharedNotes = sqliteTable("social_shared_notes", {
   noteCreatedAt: integer("note_created_at", { mode: "timestamp" }).notNull().default(0),
 }, (t) => [uniqueIndex("idx_social_shared_notes_user_reference").on(t.userId, t.reference), index("idx_social_shared_notes_user_created").on(t.userId, t.createdAt)]);
 
+export const socialComments = sqliteTable("social_comments", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  activityId: integer("activity_id").notNull().references(() => socialActivities.id),
+  userId: text("user_id").notNull().references(() => users.id),
+  text: text("text").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+}, (t) => [index("idx_social_comments_activity_created").on(t.activityId, t.createdAt)]);
+
 export const socialNotifications = sqliteTable("social_notifications", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   userId: text("user_id").notNull().references(() => users.id),
   actorId: text("actor_id").notNull().references(() => users.id),
-  kind: text("kind", { enum: ["friend_request", "friend_accepted", "reaction", "social_activity"] }).notNull(),
+  kind: text("kind", { enum: ["friend_request", "friend_accepted", "reaction", "comment", "social_activity"] }).notNull(),
   activityId: integer("activity_id").references(() => socialActivities.id),
   readAt: integer("read_at", { mode: "timestamp" }),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),

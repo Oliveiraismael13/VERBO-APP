@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import { currentUser } from "../../../lib/auth";
 import { corsOptions, withCors } from "../../../lib/cors";
+import { recordSocialActivity } from "../../../lib/social";
 
 export const dynamic = "force-dynamic";
 type LastReading = { bookSlug: string; chapter: number };
@@ -21,6 +22,7 @@ function parseLastReading(value: unknown): LastReading | null {
   const reading = value as Partial<LastReading>;
   return typeof reading.bookSlug === "string" && /^[a-z0-9]+$/.test(reading.bookSlug) && Number.isInteger(reading.chapter) && reading.chapter! >= 1 && reading.chapter! <= 150 ? { bookSlug: reading.bookSlug, chapter: reading.chapter } : null;
 }
+function verseReference(value: string) { return /^[a-z0-9]+:\d{1,3}:\d{1,3}$/.test(value) ? value : undefined; }
 
 export function OPTIONS() { return corsOptions(); }
 
@@ -45,6 +47,20 @@ export async function PATCH(request: Request) {
   const foundScrolls = Array.isArray(body.foundScrolls) ? body.foundScrolls.filter((item): item is string => typeof item === "string").slice(0, 1500) : empty.foundScrolls;
   const lastReading = parseLastReading(body.lastReading);
   await ensureSchema();
+  const previous = await env.DB.prepare("SELECT favorites_json, highlights_json, found_scrolls_json FROM user_library WHERE user_id = ?").bind(user.id).first<Pick<LibraryRow, "favorites_json" | "highlights_json" | "found_scrolls_json">>();
+  const previousFavorites = parse(previous?.favorites_json, []) as string[];
+  const previousHighlights = parse(previous?.highlights_json, {}) as Record<string, string>;
+  const previousScrolls = parse(previous?.found_scrolls_json, []) as string[];
   await env.DB.prepare("INSERT INTO user_library (user_id, favorites_json, highlights_json, notes_json, note_dates_json, plans_json, shared_json, found_scrolls_json, last_reading_json, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET favorites_json = excluded.favorites_json, highlights_json = excluded.highlights_json, notes_json = excluded.notes_json, note_dates_json = excluded.note_dates_json, plans_json = excluded.plans_json, shared_json = excluded.shared_json, found_scrolls_json = excluded.found_scrolls_json, last_reading_json = excluded.last_reading_json, updated_at = excluded.updated_at").bind(user.id, JSON.stringify(favorites), JSON.stringify(highlights), JSON.stringify(notes), JSON.stringify(noteDates), JSON.stringify(plans), JSON.stringify(shared), JSON.stringify(foundScrolls), JSON.stringify(lastReading), Date.now()).run();
+  try {
+    const newlyFavorited = favorites.find((reference) => !previousFavorites.includes(reference));
+    const newlyMarked = Object.keys(highlights).find((reference) => !(reference in previousHighlights));
+    const newlyFoundScroll = foundScrolls.find((scroll) => !previousScrolls.includes(scroll));
+    if (newlyFavorited) await recordSocialActivity(user.id, "achievement_unlocked", { title: "Guardou um versículo no coração", detail: "Adicionou um versículo aos favoritos.", ...(verseReference(newlyFavorited) ? { reference: verseReference(newlyFavorited) } : {}), category: "verse_favorited", notifyFriends: true });
+    if (newlyMarked) await recordSocialActivity(user.id, "achievement_unlocked", { title: "Marcou um versículo", detail: "Destacou uma passagem para revisitar.", ...(verseReference(newlyMarked) ? { reference: verseReference(newlyMarked) } : {}), category: "verse_marked", notifyFriends: true });
+    if (newlyFoundScroll) await recordSocialActivity(user.id, "achievement_unlocked", { title: "Encontrou um pergaminho", detail: "Uma descoberta foi adicionada à jornada.", category: "scroll_found", notifyFriends: true });
+  } catch (error) {
+    console.error("Falha ao registrar atividade social da biblioteca", error);
+  }
   return withCors(Response.json({ favorites, highlights, notes, noteDates, plans, shared, foundScrolls, lastReading }));
 }
