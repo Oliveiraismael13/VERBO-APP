@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@tesseract.js-data/por':
+        specifier: 1.0.0
+        version: 1.0.0
       drizzle-orm:
         specifier: 0.45.2
         version: 0.45.2
@@ -1295,6 +1298,9 @@ packages:
 
   '@tailwindcss/postcss@4.2.1':
     resolution: {integrity: sha512-OEwGIBnXnj7zJeonOh6ZG9woofIjGrd2BORfvE5p9USYKDCZoQmfqLcfNiRWoJlRWLdNPn2IgVZuWAOM4iTYMw==}
+
+  '@tesseract.js-data/por@1.0.0':
+    resolution: {integrity: sha512-sQ7GqYUgKaMmV0vNujYoXLlXUp2e5RGGkJxQ3L59kUOaupIugLJeb1dqhrfgyb71XQw7ltdSuXdQIoaoS/rpsQ==}
 
   '@tybys/wasm-util@0.10.3':
     resolution: {integrity: sha512-F3fo1MYrRJYL3zER0OUOmkutjr1Vp23m7OsSgp7nq4SP6OqX6C/56XFIPAl5bt3zaBRjmW7SGz3u/6LwFpYcOg==}
@@ -4070,6 +4076,8 @@ snapshots:
       '@tailwindcss/oxide': 4.2.1
       postcss: 8.5.26
       tailwindcss: 4.2.1
+
+  '@tesseract.js-data/por@1.0.0': {}
 
   '@tybys/wasm-util@0.10.3':
     dependencies:

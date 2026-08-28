@@ -4,7 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { discipleTitle, getXpProgress } from "../lib/xp";
 import { campaignActs, missionForChapter, narrativeForMission } from "../lib/campaign";
 import { resizeProfilePhoto } from "../lib/profile-photo";
-import { findBiblePassages, parseBibleReference, recognizePortugueseText, type BibleOcrCandidate } from "../lib/bible-ocr";
+import { findBiblePassages, parseBibleReference, recognizeBibleTranslation, recognizePortugueseText, type BibleOcrCandidate, type OcrProgress } from "../lib/bible-ocr";
+import { downloadBibleForOffline, hasOfflineBible } from "../lib/offline-bible";
 import { secondaryMissionById, secondaryMissions, secondaryMissionProgress, type SecondaryMission } from "../lib/secondary-missions";
 import { mainMissionScrollForChapter } from "../lib/main-mission-scrolls";
 
@@ -13,10 +14,11 @@ type BibleVerse = { number: number; text: string };
 type BibleBook = { slug: string; name: string; longName: string; abbreviation: string; testament: "old" | "new"; isDeuterocanonical?: boolean; chapters: BibleVerse[][] };
 type ManifestBook = Omit<BibleBook, "chapters"> & { code: string; chapterCount: number; verseCount: number };
 type BibleManifest = { translation: string; code: string; canon: string; bookCount: number; verseCount: number; books: ManifestBook[] };
-type TranslationDefinition = { label: string; path: string; note: string; license: string; canon: "protestant-66" | "catholic-73"; missions: boolean; private?: boolean };
+type TranslationDefinition = { label: string; shortLabel: string; path: string; note: string; license: string; canon: "protestant-66" | "catholic-73"; missions: boolean; private?: boolean };
 
 const localPersonalTranslation = (code: string, label: string): TranslationDefinition => ({
   label,
+  shortLabel: code,
   path: `/api/private-bibles/${code.toLowerCase()}`,
   note: `${label} · disponível somente para a sua conta.`,
   license: "BIBLIOTECA PESSOAL",
@@ -49,6 +51,7 @@ const personalTranslationCodes = new Set(["ACF", "ALM1911", "ARA", "ARC", "AS21"
 const translations = {
   BLIVRE: {
     label: "BLIVRE",
+    shortLabel: "BLIVRE",
     path: "/bible",
     note: "Bíblia Livre (BLIVRE), edição Textus Receptus · CC BY 3.0 Brasil.",
     license: "CC BY 3.0 BR",
@@ -57,6 +60,7 @@ const translations = {
   },
   ALMEIDA1819: {
     label: "Almeida 1819",
+    shortLabel: "ALM 1819",
     path: "/bible/almeida1819",
     note: "Almeida 1819 (Bíblia Livre) · domínio público · fonte: Midvash Bible Data.",
     license: "DOMÍNIO PÚBLICO",
@@ -65,6 +69,7 @@ const translations = {
   },
   CHAMADAFE: {
     label: "Chama da Fé · 73",
+    shortLabel: "CHAMA 73",
     path: "/bible/chamadafe",
     note: "Edição Chama da Fé · cânon católico de 73 livros · CC BY 3.0 BR + domínio público.",
     license: "CC BY 3.0 BR + DOMÍNIO PÚBLICO",
@@ -75,6 +80,24 @@ const translations = {
 } as const;
 
 type Translation = keyof typeof translations;
+function isTranslation(value: unknown): value is Translation { return typeof value === "string" && Object.prototype.hasOwnProperty.call(translations, value); }
+const translationManifestCache = new Map<Translation, Promise<BibleManifest>>();
+
+function translationManifest(code: Translation) {
+  const cached = translationManifestCache.get(code);
+  if (cached) return cached;
+  const source = translations[code];
+  const resource = source.private ? "manifest" : "manifest.json";
+  const request = fetch(`${source.path}/${resource}`).then(async (response) => {
+    if (!response.ok) throw new Error("Não foi possível consultar a tradução identificada.");
+    return response.json() as Promise<BibleManifest>;
+  }).catch((error) => {
+    translationManifestCache.delete(code);
+    throw error;
+  });
+  translationManifestCache.set(code, request);
+  return request;
+}
 type LastReading = { bookSlug: string; chapter: number };
 type CoopContact = { publicHandle: string; displayName: string; profilePhoto: string };
 type CoopReference = { bookSlug: string; chapter: number };
@@ -143,7 +166,10 @@ export default function VerboApp() {
   const [bookPicker, setBookPicker] = useState(false);
   const [cameraState, setCameraState] = useState<"idle" | "live" | "scanning" | "found" | "uncertain" | "retry" | "denied">("idle");
   const [cameraError, setCameraError] = useState("");
+  const [cameraReady, setCameraReady] = useState(false);
+  const [scanStatus, setScanStatus] = useState("Preparando imagem...");
   const [recognizedPassage, setRecognizedPassage] = useState<BibleOcrCandidate | null>(null);
+  const [detectedTranslation, setDetectedTranslation] = useState<Translation | null>(null);
   const [recognitionOptions, setRecognitionOptions] = useState<BibleOcrCandidate[]>([]);
   const [ocrPreview, setOcrPreview] = useState("");
   const [manualReference, setManualReference] = useState("");
@@ -159,17 +185,33 @@ export default function VerboApp() {
   const [scrollDiscovery, setScrollDiscovery] = useState<ScrollDiscovery | null>(null);
   const [developerGift, setDeveloperGift] = useState<DeveloperGift | null>(null);
   const [availablePersonalTranslations, setAvailablePersonalTranslations] = useState<string[]>([]);
+  const [offlineTranslations, setOfflineTranslations] = useState<Partial<Record<Translation, boolean>>>({});
+  const [offlineDownload, setOfflineDownload] = useState<{ code: Translation; current: number; total: number } | null>(null);
   const [savingChapter, setSavingChapter] = useState(false);
   const [lastReadingReady, setLastReadingReady] = useState(false);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const lastReadingRef = useRef<LastReading | null>(null);
+  const selectedTranslationRef = useRef<Translation>("BLIVRE");
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+
+  const refreshOfflineTranslations = useCallback(async () => {
+    try {
+      const publicCodes = (Object.keys(translations) as Translation[]).filter((code) => !translations[code].private);
+      const statuses = await Promise.all(publicCodes.map(async (code) => [code, await hasOfflineBible(translations[code])] as const));
+      setOfflineTranslations(Object.fromEntries(statuses) as Partial<Record<Translation, boolean>>);
+    } catch {
+      // Navegadores sem Cache Storage simplesmente mantêm o leitor online.
+    }
+  }, []);
+
+  useEffect(() => { void refreshOfflineTranslations(); }, [refreshOfflineTranslations]);
 
   const stopCamera = useCallback(() => {
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
     if (videoRef.current) videoRef.current.srcObject = null;
+    setCameraReady(false);
   }, []);
 
   const connectCameraPreview = useCallback((video: HTMLVideoElement | null) => {
@@ -178,7 +220,9 @@ export default function VerboApp() {
     if (!video || !stream) return;
 
     video.srcObject = stream;
-    void video.play().catch(() => {
+    const markReady = () => setCameraReady(video.videoWidth > 0 && video.videoHeight > 0);
+    video.addEventListener("loadedmetadata", markReady, { once: true });
+    void video.play().then(markReady).catch(() => {
       stopCamera();
       setCameraError("Não foi possível iniciar a prévia da câmera. Tente novamente.");
       setCameraState("denied");
@@ -259,6 +303,10 @@ export default function VerboApp() {
       const gifts = giftsResponse.ok ? await giftsResponse.json() as { gift?: DeveloperGift | null } : {};
       if (!data.error) {
         setProgress({ ...data, ...profile, ...library });
+        if (isTranslation(library.selectedTranslation)) {
+          selectedTranslationRef.current = library.selectedTranslation;
+          setTranslation(library.selectedTranslation);
+        }
         const reading = library.lastReading as LastReading | null | undefined;
         if (reading && typeof reading.bookSlug === "string" && /^[a-z0-9]+$/.test(reading.bookSlug) && Number.isInteger(reading.chapter) && reading.chapter >= 1) {
           lastReadingRef.current = reading;
@@ -305,7 +353,7 @@ export default function VerboApp() {
   };
 
   const saveRemoteLibrary = async (next: Partial<Pick<PlayerProgress, "favorites" | "highlights" | "notes" | "noteDates" | "plans" | "shared" | "foundScrolls">>, base = progress) => {
-    await fetch("/api/library", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ favorites: base.favorites || [], highlights: base.highlights || {}, notes: base.notes || {}, noteDates: base.noteDates || {}, plans: base.plans || [], shared: base.shared || [], foundScrolls: base.foundScrolls || [], lastReading: lastReadingRef.current, ...next }) }).catch(() => undefined);
+    await fetch("/api/library", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ favorites: base.favorites || [], highlights: base.highlights || {}, notes: base.notes || {}, noteDates: base.noteDates || {}, plans: base.plans || [], shared: base.shared || [], foundScrolls: base.foundScrolls || [], lastReading: lastReadingRef.current, selectedTranslation: selectedTranslationRef.current, ...next }) }).catch(() => undefined);
   };
 
   const claimDeveloperGift = async () => {
@@ -426,9 +474,10 @@ export default function VerboApp() {
   const openCamera = async () => {
     try {
       stopCamera();
+      setCameraReady(false);
       if (!window.isSecureContext) throw new Error("A câmera só funciona em uma conexão segura (HTTPS).");
       if (!navigator.mediaDevices?.getUserMedia) throw new Error("Este navegador não oferece acesso à câmera.");
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: "environment" } } });
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } } });
       streamRef.current = stream;
       setCameraError("");
       setCameraState("live");
@@ -449,13 +498,11 @@ export default function VerboApp() {
     const video = videoRef.current;
     if (!video || !video.videoWidth) return reject(new Error("A câmera ainda está sendo preparada."));
     const canvas = document.createElement("canvas");
-    const cropTop = Math.round(video.videoHeight * 0.2);
-    const cropHeight = Math.round(video.videoHeight * 0.56);
     canvas.width = video.videoWidth;
-    canvas.height = cropHeight;
+    canvas.height = video.videoHeight;
     const context = canvas.getContext("2d");
     if (!context) return reject(new Error("Não foi possível preparar a imagem da câmera."));
-    context.drawImage(video, 0, cropTop, video.videoWidth, cropHeight, 0, 0, canvas.width, canvas.height);
+    context.drawImage(video, 0, 0, video.videoWidth, video.videoHeight, 0, 0, canvas.width, canvas.height);
     canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("Não foi possível capturar a imagem.")), "image/jpeg", 0.92);
   });
 
@@ -465,17 +512,39 @@ export default function VerboApp() {
       return;
     }
     setCameraState("scanning");
+    setScanStatus("Preparando imagem...");
     setRecognizedPassage(null);
+    setDetectedTranslation(null);
     setRecognitionOptions([]);
     try {
       const source = file || await captureCameraFrame();
-      const ocr = await recognizePortugueseText(source);
+      const updateScanStatus = (progress: OcrProgress) => {
+        const labels = { preparing: "Preparando imagem...", loading: "Carregando leitor de português...", reading: "Lendo o texto...", matching: "Comparando com a Bíblia..." };
+        const percentage = typeof progress.progress === "number" ? ` ${Math.round(progress.progress * 100)}%` : "";
+        setScanStatus(`${labels[progress.stage]}${percentage}`);
+      };
+      const ocr = await recognizePortugueseText(source, updateScanStatus);
       setOcrPreview(ocr.text);
       if (ocr.text.trim().length < 12) {
         setCameraState("retry");
         return;
       }
-      const candidates = await findBiblePassages(ocr.text, translations[translation].path, manifest.books, Boolean(translations[translation].private));
+      const hintedCode = recognizeBibleTranslation(ocr.text, (Object.keys(translations) as Translation[])
+        .filter((code) => !translations[code].private || availablePersonalTranslations.includes(code))
+        .map((code) => ({ code, label: translations[code].label, aliases: [translations[code].shortLabel, translations[code].label, code] })));
+      const detectedCode = isTranslation(hintedCode) ? hintedCode : null;
+      setDetectedTranslation(detectedCode);
+      let matchingTranslation = detectedCode || translation;
+      let matchingManifest = manifest;
+      if (matchingTranslation !== translation) {
+        try {
+          matchingManifest = await translationManifest(matchingTranslation);
+        } catch {
+          matchingTranslation = translation;
+          setDetectedTranslation(null);
+        }
+      }
+      const candidates = await findBiblePassages(ocr.text, translations[matchingTranslation].path, matchingManifest.books, Boolean(translations[matchingTranslation].private), updateScanStatus);
       if (!candidates.length) {
         setCameraState("retry");
         return;
@@ -495,6 +564,13 @@ export default function VerboApp() {
     if (!candidate) return;
     stopCamera();
     setCameraState("idle");
+    if (detectedTranslation && detectedTranslation !== translation) {
+      selectedTranslationRef.current = detectedTranslation;
+      setTranslation(detectedTranslation);
+      setBook(null);
+      setManifest(null);
+      void saveRemoteLibrary({});
+    }
     setMissionMode(false);
     setBookSlug(candidate.bookSlug);
     setChapter(candidate.chapter);
@@ -505,7 +581,7 @@ export default function VerboApp() {
     setScreen("bible");
     setSearchOpen(false);
     window.scrollTo({ top: 0, behavior: "smooth" });
-  }, [recognizedPassage, stopCamera]);
+  }, [recognizedPassage, stopCamera, detectedTranslation, translation]);
 
   const confirmManualReference = () => {
     if (!manifest) return;
@@ -861,7 +937,27 @@ export default function VerboApp() {
     setSelectedVerses([]);
     setVerseSelected(false);
     setHighlightPickerOpen(false);
+    selectedTranslationRef.current = next;
     setTranslation(next);
+    void saveRemoteLibrary({});
+  };
+
+  const downloadCurrentTranslation = async () => {
+    const source = translations[translation];
+    if (source.private) {
+      notify("Por segurança, traduções da biblioteca pessoal precisam de conexão para validar sua conta.");
+      return;
+    }
+    setOfflineDownload({ code: translation, current: 0, total: 1 });
+    try {
+      await downloadBibleForOffline(source, (current, total) => setOfflineDownload({ code: translation, current, total }));
+      setOfflineTranslations((current) => ({ ...current, [translation]: true }));
+      notify(`${source.shortLabel} está disponível offline`);
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Não foi possível baixar esta tradução.");
+    } finally {
+      setOfflineDownload(null);
+    }
   };
 
   const moveChapter = (direction: -1 | 1) => {
@@ -916,6 +1012,7 @@ export default function VerboApp() {
   };
 
   const currentVerses = book?.chapters[chapter - 1] ?? [];
+  const currentLevel = getXpProgress(progress.xp).level;
   const catholicEdition = translations[translation].canon === "catholic-73";
   const oldTestamentBookCount = catholicEdition ? 46 : 39;
   const updateCoopMission = useCallback((coop: CoopMissionState) => setProgress((current) => ({ ...current, coop })), []);
@@ -932,7 +1029,7 @@ export default function VerboApp() {
           <div className="top-actions">
             <button className="hud-search" onClick={() => setSearchOpen(true)} aria-label="Buscar na Bíblia">⌕</button>
             <div className="hud-resource"><span>◆</span>{progress.coins}</div>
-            <button className="avatar level-avatar" onClick={() => go("social")} aria-label={`Abrir Social, nível ${progress.level}`}><b>{progress.level}</b></button>
+            <button className="avatar level-avatar" onClick={() => go("social")} aria-label={`Abrir Social, nível ${currentLevel}`}><b>{currentLevel}</b></button>
           </div>
         </header>
       )}
@@ -941,7 +1038,7 @@ export default function VerboApp() {
 
       {screen === "bible" && (
         <section className="reader page-in" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd} onClick={(event) => { if (!(event.target as HTMLElement).closest("[data-verse], .verse-tools")) { setSelectedVerses([]); setVerseSelected(false); setHighlightPickerOpen(false); } }}>
-          {(missionMode || coopMissionMode || activeSecondaryMission) && <div className="mission-mode-banner"><div className="mission-disciple" aria-label="Seu Discípulo caminhando"><PixelDisciple level={progress.level} /><small>DISCÍPULO</small></div><div className="mission-reference"><b>{activeSecondaryMission ? replayingSecondaryMission ? "RELEITURA ATIVA" : "MISSÃO SECUNDÁRIA ATIVA" : coopMissionMode ? "JORNADA COOP ATIVA" : "JORNADA PRINCIPAL ATIVA"}</b><strong>{activeSecondaryMission ? activeSecondaryMission.title : `${book?.name ?? "Carregando"} ${chapter}`}</strong><small>{activeSecondaryMission ? replayingSecondaryMission ? `Releia Mateus ${activeSecondaryMission.from}–${activeSecondaryMission.to}, sem recompensas adicionais.` : `${activeSecondaryMission.subtitle} · Mateus ${activeSecondaryMission.from}–${activeSecondaryMission.to}` : coopMissionMode ? `Leiam este capítulo juntos para liberar o próximo com ${progress.coop?.partner?.displayName || "seu amigo"}.` : "Conclua este capítulo para liberar o próximo."}</small></div><button onClick={() => activeSecondaryMission ? go("studies") : (setMissionMode(false), setCoopMissionMode(false), notify("Você voltou à Bíblia livre"))}>{activeSecondaryMission ? "Ver missão" : "Sair da missão"}</button></div>}
+          {(missionMode || coopMissionMode || activeSecondaryMission) && <div className="mission-mode-banner"><div className="mission-disciple" aria-label="Seu Discípulo caminhando"><PixelDisciple level={currentLevel} /><small>DISCÍPULO</small></div><div className="mission-reference"><b>{activeSecondaryMission ? replayingSecondaryMission ? "RELEITURA ATIVA" : "MISSÃO SECUNDÁRIA ATIVA" : coopMissionMode ? "JORNADA COOP ATIVA" : "JORNADA PRINCIPAL ATIVA"}</b><strong>{activeSecondaryMission ? activeSecondaryMission.title : `${book?.name ?? "Carregando"} ${chapter}`}</strong><small>{activeSecondaryMission ? replayingSecondaryMission ? `Releia Mateus ${activeSecondaryMission.from}–${activeSecondaryMission.to}, sem recompensas adicionais.` : `${activeSecondaryMission.subtitle} · Mateus ${activeSecondaryMission.from}–${activeSecondaryMission.to}` : coopMissionMode ? `Leiam este capítulo juntos para liberar o próximo com ${progress.coop?.partner?.displayName || "seu amigo"}.` : "Conclua este capítulo para liberar o próximo."}</small></div><button onClick={() => activeSecondaryMission ? go("studies") : (setMissionMode(false), setCoopMissionMode(false), notify("Você voltou à Bíblia livre"))}>{activeSecondaryMission ? "Ver missão" : "Sair da missão"}</button></div>}
           {missionMode && <MissionStoryPanel context={missionForChapter(bookSlug, chapter)} progress={progress} />}
           {activeSecondaryMission && <SecondaryMissionStoryPanel mission={activeSecondaryMission} progress={progress} status={activeSecondaryStatus} />}
           <div className="reference-row">
@@ -951,7 +1048,7 @@ export default function VerboApp() {
             </div>
             <div className="reader-actions">
               <select className="translation" value={translation} onChange={(event) => changeTranslation(event.target.value as Translation)} aria-label="Tradução">
-                {(Object.keys(translations) as Translation[]).filter((code) => !personalTranslationCodes.has(code) || availablePersonalTranslations.includes(code)).map((code) => <option key={code} value={code} disabled={(missionMode || coopMissionMode || Boolean(activeSecondaryMission)) && !translations[code].missions}>{translations[code].label}</option>)}
+                {(Object.keys(translations) as Translation[]).filter((code) => !personalTranslationCodes.has(code) || availablePersonalTranslations.includes(code)).map((code) => <option key={code} value={code} disabled={(missionMode || coopMissionMode || Boolean(activeSecondaryMission)) && !translations[code].missions} title={translations[code].label}>{translations[code].shortLabel}</option>)}
               </select>
               <button className="text-control" onClick={() => setReaderMenu(!readerMenu)} aria-label="Preferências de leitura">Aa</button>
             </div>
@@ -964,6 +1061,7 @@ export default function VerboApp() {
               <b>{fontSize}</b>
               <button onClick={() => setFontSize(Math.min(24, fontSize + 1))}>A+</button>
               <button className="theme-toggle" onClick={() => setDark(!dark)}>{dark ? "☀ Claro" : "☾ Escuro"}</button>
+              <button className="offline-download" disabled={Boolean(offlineDownload) || Boolean(offlineTranslations[translation])} onClick={() => void downloadCurrentTranslation()}>{translations[translation].private ? "☁ Biblioteca pessoal: online" : offlineTranslations[translation] ? `✓ ${translations[translation].shortLabel} offline` : offlineDownload?.code === translation ? `⇩ Baixando ${Math.round(offlineDownload.current / offlineDownload.total * 100)}%` : `⇩ Baixar ${translations[translation].shortLabel} offline`}</button>
             </div>
           )}
 
@@ -1037,10 +1135,10 @@ export default function VerboApp() {
             {(cameraState === "idle" || cameraState === "denied") && (
               <div className="camera-empty"><span>⌁</span><b>{cameraState === "denied" ? "Não foi possível abrir a câmera" : "Encontre a referência em segundos"}</b><p>{cameraState === "denied" ? cameraError || "Envie uma foto da página ou permita o uso da câmera nas configurações." : "Aponte para um trecho bíblico impresso ou em outra tela."}</p><button onClick={openCamera}>Ativar câmera</button></div>
             )}
-            {cameraState === "scanning" && <div className="scanning"><i /><b>Lendo o texto...</b><span>Comparando com a base bíblica</span></div>}
+            {cameraState === "scanning" && <div className="scanning"><i /><b>{scanStatus}</b><span>O texto é comparado com a Bíblia no próprio app.</span></div>}
             {(cameraState === "found" || cameraState === "uncertain") && recognizedPassage && (
               <div className="found-card">
-                <span className="check">✓</span><p>{cameraState === "found" ? "PASSAGEM IDENTIFICADA" : "CONFIRME A PASSAGEM"}</p><h2>{recognizedPassage.bookName} {recognizedPassage.chapter}:{recognizedPassage.startVerse}{recognizedPassage.endVerse > recognizedPassage.startVerse ? `-${recognizedPassage.endVerse}` : ""}</h2><blockquote>“{recognizedPassage.excerpt}”</blockquote><div className="confidence"><span>Correspondência</span><b>{recognizedPassage.confidence}%</b></div>
+                <span className="check">✓</span><p>{cameraState === "found" ? "PASSAGEM IDENTIFICADA" : "CONFIRME A PASSAGEM"}</p><h2>{recognizedPassage.bookName} {recognizedPassage.chapter}:{recognizedPassage.startVerse}{recognizedPassage.endVerse > recognizedPassage.startVerse ? `-${recognizedPassage.endVerse}` : ""}</h2>{detectedTranslation && <small className="ocr-translation">Tradução identificada: <b>{translations[detectedTranslation].shortLabel}</b></small>}<blockquote>“{recognizedPassage.excerpt}”</blockquote><div className="confidence"><span>Correspondência</span><b>{recognizedPassage.confidence}%</b></div>
                 {cameraState === "found" ? <><button onClick={() => openRecognizedPassage()}>Abrir na Bíblia</button><small>Abrindo automaticamente… toque para continuar agora</small></> : <><label className="manual-reference"><span>Referência correta</span><input value={manualReference} onChange={(event) => setManualReference(event.target.value)} placeholder="Ex.: João 3:16" /></label><button onClick={confirmManualReference}>Confirmar passagem</button>{recognitionOptions.length > 0 && <div className="ocr-options">{recognitionOptions.map((candidate) => <button key={`${candidate.bookSlug}:${candidate.chapter}:${candidate.startVerse}`} className="secondary" onClick={() => openRecognizedPassage(candidate)}>{candidate.bookName} {candidate.chapter}:{candidate.startVerse}</button>)}</div>}</>}
               </div>
             )}
@@ -1052,8 +1150,8 @@ export default function VerboApp() {
             {cameraState === "live" && <div className="scan-hint">Enquadre apenas o trecho principal</div>}
           </div>
           <div className="camera-controls">
-            <label className="upload">▧<input type="file" accept="image/*" onChange={(event) => { const file = event.target.files?.[0]; if (file) void scan(file); }} /><span>Galeria</span></label>
-            <button className="shutter" onClick={() => void scan()} disabled={cameraState !== "live"}><i /></button>
+            <label className="upload">▧<input type="file" accept="image/*" disabled={cameraState === "scanning"} onChange={(event) => { const file = event.target.files?.[0]; if (file) void scan(file); }} /><span>Galeria</span></label>
+            <button className="shutter" onClick={() => void scan()} disabled={cameraState !== "live" || !cameraReady} aria-label="Capturar texto"><i /></button>
           </div>
           <p className="prototype-note">O texto é processado no seu dispositivo e comparado com a Bíblia disponível no app.</p>
         </section>
@@ -1781,7 +1879,7 @@ function SocialPage({ notify, dark, setDark, progress, manifest, onOpenFavorite,
       <section className="generic-page social-page social-account-page page-in">
         <button className="social-back" onClick={returnToSocial}>‹ Voltar ao {profileOrigin === "feed" ? "Feed" : "Social"}</button>
         <section className="social-handle"><p>SEU IDENTIFICADOR PÚBLICO</p><b>{publicHandle ? `@${publicHandle}` : "Preparando seu identificador…"}</b><button onClick={() => void copyHandle()} disabled={!publicHandle}>Copiar</button><small>Compartilhe somente este código para receber pedidos. Seu e-mail nunca aparece.</small></section>
-        {privacy && <section className="social-detail social-privacy"><p className="eyebrow">PRIVACIDADE DAS ATIVIDADES</p><label><span><b>Compartilhar conquistas</b><small>Missões e marcos de leitura aparecem para seus amigos.</small></span><input type="checkbox" checked={privacy.showActivities} disabled={working} onChange={(event) => void updateActivityPrivacy(event.target.checked)} /></label></section>}
+        {privacy && <section className="social-detail social-privacy"><p className="eyebrow">PRIVACIDADE DAS ATIVIDADES</p><label><span><b>Compartilhar conquistas</b><small>Ativo por padrão. Desative se preferir manter novas leituras e missões privadas.</small></span><input type="checkbox" checked={privacy.showActivities} disabled={working} onChange={(event) => void updateActivityPrivacy(event.target.checked)} /></label></section>}
         {privacy && <section className="social-detail social-privacy social-profile-privacy"><p className="eyebrow">O QUE AMIGOS VEEM</p><label><span><b>Jornada e missões</b><small>Nível, XP, chama acesa, missão principal e missões secundárias.</small></span><input type="checkbox" checked={privacy.showProgress} disabled={working} onChange={(event) => void updateProfilePrivacy({ showProgress: event.target.checked }, event.target.checked ? "Sua jornada ficará visível para amigos" : "Sua jornada ficará privada")} /></label><label><span><b>Estatísticas do acervo</b><small>Capítulos lidos, favoritos e quantidade de anotações.</small></span><input type="checkbox" checked={privacy.showStats} disabled={working} onChange={(event) => void updateProfilePrivacy({ showStats: event.target.checked }, event.target.checked ? "Estatísticas compartilhadas" : "Estatísticas privadas")} /></label><label><span><b>Versículos favoritos</b><small>Lista de referências salvas na sua biblioteca.</small></span><input type="checkbox" checked={privacy.showFavorites} disabled={working} onChange={(event) => void updateProfilePrivacy({ showFavorites: event.target.checked }, event.target.checked ? "Favoritos compartilhados" : "Favoritos privados")} /></label></section>}
         {privacy && <section className="social-detail social-privacy"><p className="eyebrow">PRIVACIDADE DAS ANOTAÇÕES</p><label><span><b>Permitir anotações compartilhadas</b><small>Você escolhe cada anotação; só as selecionadas aparecem para seus amigos.</small></span><input type="checkbox" checked={privacy.showNotes} disabled={working} onChange={(event) => void updateNotesPrivacy(event.target.checked)} /></label></section>}
         <SharedNotesManager notes={personalNotes} sharedNotes={sharedNotes} manifest={manifest} working={working} onShare={(reference, action) => void shareNote(reference, action)} onOpen={onOpenFavorite} />
@@ -1811,7 +1909,7 @@ function SocialPage({ notify, dark, setDark, progress, manifest, onOpenFavorite,
         {selectedProfile.secondaryMissions && <section className="social-detail social-secondary-summary"><p className="eyebrow">MISSÕES SECUNDÁRIAS</p><div><span>✦ Missões concluídas</span><b>{selectedProfile.secondaryMissions.completed} de {selectedProfile.secondaryMissions.total}</b></div><div><span>◆ XP obtido nas missões</span><b>{selectedProfile.secondaryMissions.xp.toLocaleString("pt-BR")}</b></div>{selectedProfile.secondaryMissions.missions.length > 0 && <ul>{selectedProfile.secondaryMissions.missions.map((mission) => <li key={mission.id}><span>{mission.title}</span><small>{new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(mission.completedAt))}</small></li>)}</ul>}</section>}
         {selectedProfile.notes && <section className="social-detail social-profile-notes"><p className="eyebrow">ANOTAÇÕES COMPARTILHADAS · {selectedProfile.notes.length}</p>{selectedProfile.notes.length ? <div>{selectedProfile.notes.map((note) => <article key={note.id}><button className="social-shared-note-copy" onClick={() => onOpenFavorite(note.reference)}><small>{profileContact.displayName} · {new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(note.noteCreatedAt))}</small><b>{note.text}</b><span>{socialReference(note.reference, manifest)} · Abrir trecho ›</span></button><div className="social-reactions"><button className={note.reactions.viewer === "amen" ? "active" : ""} disabled={working} onClick={() => void reactToSharedNote(note, "amen")}>🙏 <span>{note.reactions.amen || "Amém"}</span></button><button className={note.reactions.viewer === "celebrate" ? "active" : ""} disabled={working} onClick={() => void reactToSharedNote(note, "celebrate")}>✦ <span>{note.reactions.celebrate || "Celebrar"}</span></button></div></article>)}</div> : <small>Este amigo ainda não compartilhou anotações.</small>}</section>}
         {recentProfileActivities.length > 0 && <section className="social-detail social-profile-activities"><p className="eyebrow">ÚLTIMAS CONQUISTAS</p>{recentProfileActivities.map((activity) => <div key={activity.id}><b>{activity.title}</b>{activity.detail && <small>{activity.detail}</small>}</div>)}</section>}
-        {selectedProfile.relationship === "self" && privacy && <section className="social-detail social-privacy"><p className="eyebrow">PRIVACIDADE DAS ATIVIDADES</p><label><span><b>Compartilhar conquistas</b><small>Missões e marcos de leitura aparecem para seus amigos.</small></span><input type="checkbox" checked={privacy.showActivities} disabled={working} onChange={(event) => void updateActivityPrivacy(event.target.checked)} /></label></section>}
+        {selectedProfile.relationship === "self" && privacy && <section className="social-detail social-privacy"><p className="eyebrow">PRIVACIDADE DAS ATIVIDADES</p><label><span><b>Compartilhar conquistas</b><small>Ativo por padrão. Desative se preferir manter novas leituras e missões privadas.</small></span><input type="checkbox" checked={privacy.showActivities} disabled={working} onChange={(event) => void updateActivityPrivacy(event.target.checked)} /></label></section>}
         {selectedProfile.relationship === "self" && blockedUsers.length > 0 && <section className="social-detail social-blocked"><p className="eyebrow">PERFIS BLOQUEADOS</p>{blockedUsers.map((contact) => <div key={contact.publicHandle}><span><b>{contact.displayName}</b><small>@{contact.publicHandle}</small></span><button disabled={working} onClick={() => void unblockProfile(contact.publicHandle)}>Desbloquear</button></div>)}</section>}
       </>}
     </section>;
@@ -1878,7 +1976,7 @@ function ProfilePhoto({ src }: { src: string }) {
 
 function PixelDisciple({ level = 1, turning = false }: { level?: number; turning?: boolean }) {
   // Sprites fornecidos para o personagem da campanha; mantém os pixels nítidos em qualquer tela.
-  const tier = level >= 50 ? 50 : level >= 40 ? 40 : 30;
+  const tier = level >= 50 ? 50 : level >= 40 ? 40 : level >= 30 ? 30 : level >= 20 ? 20 : 30;
   if (turning) {
     const directions = ["south", "south-west", "west", "north-west", "north", "north-east", "east", "south-east"];
     return <span className="pixel-disciple-turn">{directions.map((direction, index) => <img key={direction} src={`/characters/homem-${tier}lvl-idle-${direction}.png`} alt="" aria-hidden="true" style={{ animationDelay: `${-index * 0.4}s` }} />)}</span>;

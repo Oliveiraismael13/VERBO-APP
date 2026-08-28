@@ -6,3 +6,6 @@ dist/
 .pnpm-store/
 *.log
 /mobile/.private/
+/mobile/public/ocr/
+/mobile/public/bible/ocr-index.json
+/mobile/public/bible/**/ocr-index.json
