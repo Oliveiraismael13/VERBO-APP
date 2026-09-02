@@ -19,6 +19,11 @@ export type SocialContact = {
   profilePhoto: string;
 };
 
+export type SocialDiscoveryProfile = SocialContact & {
+  relationship: "friend" | "incoming" | "outgoing" | "none";
+  canSendFriendRequest: boolean;
+};
+
 export type SocialProfile = {
   publicHandle: string;
   relationship: "self" | "friend" | "none";
@@ -38,13 +43,14 @@ export type SocialSharedNote = { id: number; activityId: number; reference: stri
 export type SocialComment = { id: number; text: string; createdAt: number; author: SocialContact };
 
 export type SocialActivityKind = "mission_completed" | "chapter_completed" | "streak_milestone" | "achievement_unlocked";
+type SocialActivityCategory = "note_shared" | "verse_favorited" | "verse_marked" | "scroll_found" | "reflection_shared" | "testimony_shared";
 export type SocialActivity = {
   id: number;
   kind: SocialActivityKind;
   title: string;
   detail: string;
   reference?: string;
-  category?: "note_shared" | "verse_favorited" | "verse_marked" | "scroll_found";
+  category?: SocialActivityCategory;
   xp?: number;
   level?: number;
   act?: string;
@@ -232,6 +238,26 @@ export async function findSocialUser(publicHandle: string) {
     .first<SocialUserRow>();
 }
 
+export async function listSocialPeople(viewerId: string, query: unknown): Promise<SocialDiscoveryProfile[]> {
+  await ensureSocialUser(viewerId);
+  const search = typeof query === "string" ? query.trim().toLowerCase().replace(/[%_]/g, "").slice(0, 48) : "";
+  const like = `%${search}%`;
+  const people = await env.DB.prepare("SELECT users.id, users.public_handle, users.display_name, users.profile_photo, social_privacy_settings.allow_friend_requests FROM users LEFT JOIN social_privacy_settings ON social_privacy_settings.user_id = users.id WHERE users.id <> ? AND users.public_handle IS NOT NULL AND COALESCE(social_privacy_settings.profile_visibility, 'friends') <> 'private' AND NOT EXISTS (SELECT 1 FROM user_blocks WHERE (blocker_id = ? AND blocked_id = users.id) OR (blocker_id = users.id AND blocked_id = ?)) AND (? = '' OR lower(users.public_handle) LIKE ? OR lower(COALESCE(users.display_name, '')) LIKE ?) ORDER BY CASE WHEN lower(users.public_handle) = ? THEN 0 ELSE 1 END, users.created_at DESC LIMIT 24")
+    .bind(viewerId, viewerId, viewerId, search, like, like, search)
+    .all<Pick<SocialUserRow, "id" | "public_handle" | "display_name" | "profile_photo" | "allow_friend_requests">>();
+  const [friendships, requests] = await Promise.all([
+    env.DB.prepare("SELECT user_a_id, user_b_id FROM friendships WHERE user_a_id = ? OR user_b_id = ?").bind(viewerId, viewerId).all<{ user_a_id: string; user_b_id: string }>(),
+    env.DB.prepare("SELECT sender_id, recipient_id FROM friend_requests WHERE status = 'pending' AND (sender_id = ? OR recipient_id = ?)").bind(viewerId, viewerId).all<{ sender_id: string; recipient_id: string }>(),
+  ]);
+  const friendIds = new Set(friendships.results.map((row) => row.user_a_id === viewerId ? row.user_b_id : row.user_a_id));
+  const incomingIds = new Set(requests.results.filter((row) => row.recipient_id === viewerId).map((row) => row.sender_id));
+  const outgoingIds = new Set(requests.results.filter((row) => row.sender_id === viewerId).map((row) => row.recipient_id));
+  return people.results.map((person) => {
+    const relationship = friendIds.has(person.id) ? "friend" as const : incomingIds.has(person.id) ? "incoming" as const : outgoingIds.has(person.id) ? "outgoing" as const : "none" as const;
+    return { ...contactFromRow(person), relationship, canSendFriendRequest: relationship === "none" && Boolean(person.allow_friend_requests ?? defaults.allowFriendRequests) };
+  });
+}
+
 function favoriteVerses(value: string | null | undefined) {
   try {
     const favorites = JSON.parse(value || "[]");
@@ -292,7 +318,7 @@ async function profileData(userId: string, viewerId: string, includeProgress: bo
     ...(includeProgress && progress ? { progress, campaign: campaignProgress(campaignChapters?.results || []) } : {}),
     ...(includeStats ? { stats: { completedChapters: completed?.count ?? 0, favoriteVerses: favorites.length, notes: notes.length } } : {}),
     ...(includeFavorites ? { favorites } : {}),
-    ...(includeProgress ? { secondaryMissions: { completed: completedSecondary.length, total: secondaryMissions.length, xp: completedSecondary.reduce((total, mission) => total + mission.xp, 0), missions: completedSecondary.map(({ xp: _xp, ...mission }) => mission) } } : {}),
+    ...(includeProgress ? { secondaryMissions: { completed: completedSecondary.length, total: secondaryMissions.length, xp: completedSecondary.reduce((total, mission) => total + mission.xp, 0), missions: completedSecondary.map((mission) => ({ id: mission.id, title: mission.title, completedAt: mission.completedAt })) } } : {}),
     ...(includeNotes ? { notes: await sharedNotesForProfile(userId, viewerId) } : {}),
   };
 }
@@ -437,7 +463,7 @@ export async function listFriendRequests(userId: string) {
 export async function createFriendRequest(senderId: string, recipientHandle: string) {
   await ensureSocialUser(senderId);
   const recipient = await findSocialUser(recipientHandle);
-  if (!recipient || recipient.id === senderId || !Boolean(recipient.allow_friend_requests ?? defaults.allowFriendRequests)) return { ok: false as const, status: 404, error: "Este perfil não está disponível para pedidos de amizade" };
+  if (!recipient || recipient.id === senderId || !(recipient.allow_friend_requests ?? defaults.allowFriendRequests)) return { ok: false as const, status: 404, error: "Este perfil não está disponível para pedidos de amizade" };
   if (await areUsersBlocked(senderId, recipient.id)) return { ok: false as const, status: 404, error: "Este perfil não está disponível para pedidos de amizade" };
   if (await areFriends(senderId, recipient.id)) return { ok: false as const, status: 409, error: "Vocês já são amigos" };
 
@@ -498,27 +524,27 @@ function parseActivityPayload(value: string) {
   try {
     const payload = JSON.parse(value) as { title?: unknown; detail?: unknown; reference?: unknown; category?: unknown; xp?: unknown; level?: unknown; act?: unknown; mission?: unknown };
     return {
-      title: validActivityText(payload.title, 100) || "Avançou na jornada",
+      title: validActivityText(payload.title, 600) || "Avançou na jornada",
       detail: validActivityText(payload.detail, 180),
       reference: validActivityText(payload.reference, 60) || undefined,
       ...(typeof payload.xp === "number" && Number.isFinite(payload.xp) && payload.xp >= 0 ? { xp: Math.round(payload.xp) } : {}),
       ...(typeof payload.level === "number" && Number.isInteger(payload.level) && payload.level > 0 ? { level: payload.level } : {}),
       ...(validActivityText(payload.act, 80) ? { act: validActivityText(payload.act, 80) } : {}),
       ...(validActivityText(payload.mission, 100) ? { mission: validActivityText(payload.mission, 100) } : {}),
-      ...(payload.category === "note_shared" || payload.category === "verse_favorited" || payload.category === "verse_marked" || payload.category === "scroll_found" ? { category: payload.category } : {}),
+      ...(payload.category === "note_shared" || payload.category === "verse_favorited" || payload.category === "verse_marked" || payload.category === "scroll_found" || payload.category === "reflection_shared" || payload.category === "testimony_shared" ? { category: payload.category } : {}),
     };
   } catch {
     return { title: "Avançou na jornada", detail: "" };
   }
 }
 
-export async function recordSocialActivity(userId: string, kind: SocialActivityKind, payload: { title: string; detail?: string; reference?: string; category?: "note_shared" | "verse_favorited" | "verse_marked" | "scroll_found"; xp?: number; level?: number; act?: string; mission?: string; notifyFriends?: boolean }) {
+export async function recordSocialActivity(userId: string, kind: SocialActivityKind, payload: { title: string; detail?: string; reference?: string; category?: SocialActivityCategory; xp?: number; level?: number; act?: string; mission?: string; notifyFriends?: boolean }) {
   const privacy = await getSocialPrivacy(userId);
   const safePayload = {
-    title: validActivityText(payload.title, 100),
+    title: validActivityText(payload.title, 600),
     detail: validActivityText(payload.detail, 180),
     reference: validActivityText(payload.reference, 60),
-    ...(payload.category === "note_shared" || payload.category === "verse_favorited" || payload.category === "verse_marked" || payload.category === "scroll_found" ? { category: payload.category } : {}),
+    ...(payload.category === "note_shared" || payload.category === "verse_favorited" || payload.category === "verse_marked" || payload.category === "scroll_found" || payload.category === "reflection_shared" || payload.category === "testimony_shared" ? { category: payload.category } : {}),
     ...(typeof payload.xp === "number" && Number.isFinite(payload.xp) && payload.xp >= 0 ? { xp: Math.round(payload.xp) } : {}),
     ...(typeof payload.level === "number" && Number.isInteger(payload.level) && payload.level > 0 ? { level: payload.level } : {}),
     ...(validActivityText(payload.act, 80) ? { act: validActivityText(payload.act, 80) } : {}),
@@ -535,6 +561,25 @@ export async function recordSocialActivity(userId: string, kind: SocialActivityK
       .run();
   }
   return activityId;
+}
+
+export async function createSocialPost(userId: string, input: { kind?: unknown; text?: unknown; reference?: unknown }) {
+  await ensureSocialUser(userId);
+  const privacy = await getSocialPrivacy(userId);
+  if (!privacy.showActivities) return { ok: false as const, status: 403, error: "Ative o compartilhamento de atividades nas preferências para publicar para seus amigos" };
+  const kind = input.kind === "testimony" ? "testimony" : input.kind === "reflection" ? "reflection" : null;
+  const text = validActivityText(input.text, 600);
+  if (!kind || !text) return { ok: false as const, status: 400, error: "Escreva uma reflexão ou testemunho antes de publicar" };
+  const recent = await env.DB.prepare("SELECT COUNT(*) AS count FROM social_activities WHERE actor_id = ? AND created_at > ? AND (payload_json LIKE ? OR payload_json LIKE ?)")
+    .bind(userId, Date.now() - 10 * 60 * 1000, '%"category":"reflection_shared"%', '%"category":"testimony_shared"%')
+    .first<{ count: number }>();
+  if ((recent?.count || 0) >= 3) return { ok: false as const, status: 429, error: "Espere alguns minutos antes de publicar novamente" };
+  const activityId = await recordSocialActivity(userId, "achievement_unlocked", {
+    title: text,
+    reference: validActivityText(input.reference, 60),
+    category: kind === "reflection" ? "reflection_shared" : "testimony_shared",
+  });
+  return { ok: true as const, activityId };
 }
 
 export async function listSocialFeed(viewerId: string): Promise<SocialActivity[]> {

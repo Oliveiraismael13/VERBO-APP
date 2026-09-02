@@ -1,4 +1,4 @@
-import { createAccount, startSession } from "../../../../lib/auth";
+import { consumeAuthAttempt, createAccount, startSession } from "../../../../lib/auth";
 import { corsOptions, withCors } from "../../../../lib/cors";
 
 export const dynamic = "force-dynamic";
@@ -21,6 +21,8 @@ export async function POST(request: Request) {
     return withCors(Response.json({ error: "Informe nome, e-mail válido e senha com pelo menos 8 caracteres." }, { status: 400 }));
   }
   if (profilePhoto && (!profilePhoto.startsWith("data:image/") || profilePhoto.length > 3_000_000)) return withCors(Response.json({ error: "A foto é inválida ou muito grande." }, { status: 400 }));
+  const attempt = await consumeAuthAttempt(request, "register", email);
+  if (!attempt.allowed) return withCors(Response.json({ error: `Muitas tentativas de cadastro. Tente novamente em cerca de ${Math.ceil(attempt.retryAfterSeconds / 60)} minuto(s).` }, { status: 429, headers: { "Retry-After": String(attempt.retryAfterSeconds) } }));
 
   try {
     const user = await createAccount(email, displayName, password, profilePhoto);

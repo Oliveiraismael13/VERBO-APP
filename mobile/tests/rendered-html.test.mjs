@@ -85,6 +85,10 @@ test("contains the authenticated Verbo application routes", async () => {
   assert.match(app, /window\.setInterval\(refreshFeed, 30_000\)/);
   assert.match(app, /socialView/);
   assert.match(app, /social-view-tabs/);
+  assert.match(app, /Descobrir no Verbo/);
+  assert.match(app, /\/api\/social\/people/);
+  assert.match(app, /SocialPostComposer/);
+  assert.match(app, /\/api\/social\/posts/);
   assert.match(app, /notificationsOpen/);
   assert.match(app, /openNotification/);
   assert.match(app, /social-activity-reward/);
@@ -190,6 +194,9 @@ assert.match(app, /A Edição Chama da Fé não é usada nas missões/);
   assert.match(rpgStyles, /\.rpg-shell\.dark \.social-home\{color:#eef0fa;background:linear-gradient/);
   assert.match(rpgStyles, /@media \(orientation:landscape\) and \(max-height:600px\) and \(pointer:coarse\)/);
   assert.match(rpgStyles, /\.app-shell\.rpg-shell\{width:100%;min-height:100dvh;margin:0;border-radius:0\}/);
+  assert.match(rpgStyles, /@media \(min-width:650px\) and \(max-width:899px\), \(min-width:650px\) and \(pointer:coarse\)/);
+  assert.match(rpgStyles, /\.app-shell\.rpg-shell\{width:100%;max-width:1180px;min-height:100dvh/);
+  assert.match(rpgStyles, /@media \(min-width:900px\) and \(pointer:fine\)/);
   assert.match(rpgStyles, /\.social-profile-page\{min-height:calc\(100dvh - 148px\)/);
   assert.match(rpgStyles, /\.social-topbar\{display:flex/);
   assert.match(rpgStyles, /\.social-stories-rail\{display:flex/);
@@ -265,9 +272,16 @@ test("contains the account and session implementation", async () => {
   assert.match(auth, /HttpOnly/);
   assert.match(auth, /InvalidCredentialsError/);
   assert.match(auth, /sessions/);
+  assert.match(auth, /MAX_ACTIVE_SESSIONS = 5/);
+  assert.match(auth, /auth_rate_limits/);
+  assert.match(auth, /consumeAuthAttempt/);
+  assert.match(auth, /endCurrentSession/);
   assert.match(migration, /password_hash/);
   assert.match(migration, /CREATE TABLE `sessions`/);
   for (const route of routes) assert.match(route, /withCors|clearSessionCookie|startSession|currentUser/);
+  assert.match(await text("app/api/auth/login/route.ts"), /consumeAuthAttempt/);
+  assert.match(await text("app/api/auth/register/route.ts"), /consumeAuthAttempt/);
+  assert.match(await text("app/api/auth/logout/route.ts"), /endCurrentSession/);
 });
 
 test("keeps the web profile and deep-link behavior available", async () => {
@@ -290,6 +304,8 @@ test("keeps social privacy behind authenticated public identifiers", async () =>
   const social = await text("lib/social.ts");
   const privacy = await text("app/api/social/privacy/route.ts");
   const friends = await text("app/api/social/friends/route.ts");
+  const people = await text("app/api/social/people/route.ts");
+  const posts = await text("app/api/social/posts/route.ts");
   const requests = await text("app/api/social/friends/requests/[id]/route.ts");
   const profile = await text("app/api/social/profiles/[handle]/route.ts");
   const feed = await text("app/api/social/feed/route.ts");
@@ -313,6 +329,13 @@ test("keeps social privacy behind authenticated public identifiers", async () =>
   assert.match(social, /social_privacy_settings/);
   assert.match(social, /CREATE UNIQUE INDEX IF NOT EXISTS idx_users_public_handle/);
   assert.match(social, /friend_requests/);
+  assert.match(social, /listSocialPeople/);
+  assert.match(social, /createSocialPost/);
+  assert.match(social, /reflection_shared/);
+  assert.match(social, /testimony_shared/);
+  assert.match(social, /10 \* 60 \* 1000/);
+  assert.match(social, /COALESCE\(social_privacy_settings\.profile_visibility, 'friends'\) <> 'private'/);
+  assert.match(social, /NOT EXISTS \(SELECT 1 FROM user_blocks/);
   assert.match(social, /social_activities/);
   assert.match(privacy, /currentUser\(\)/);
   assert.match(privacy, /allowFriendRequests/);
@@ -336,6 +359,11 @@ test("keeps social privacy behind authenticated public identifiers", async () =>
   assert.match(social, /shareSocialNote/);
   assert.match(social, /unshareSocialNote/);
   assert.match(friends, /createFriendRequest/);
+  assert.match(people, /currentUser\(\)/);
+  assert.match(people, /listSocialPeople/);
+  assert.doesNotMatch(people, /email/);
+  assert.match(posts, /currentUser\(\)/);
+  assert.match(posts, /createSocialPost/);
   assert.match(requests, /body\.action !== "accept"/);
   assert.match(profile, /getSocialProfile/);
   assert.match(feed, /listSocialFeed/);
@@ -396,6 +424,9 @@ test("is installable as a mobile application", async () => {
   assert.match(worker, /if \(isNavigation\) \{/);
   assert.match(worker, /fetch\(request\)\.then/);
   assert.match(worker, /url\.pathname\.startsWith\("\/ocr\/"\)/);
+  assert.match(worker, /caches\.keys\(\)/);
+  assert.match(worker, /caches\.delete/);
+  assert.match(worker, /verbo-assets-/);
   const catholicManifest = await text("public/bible/chamadafe/manifest.json");
   const tobit = await text("public/bible/chamadafe/tobias.json");
   assert.match(catholicManifest, /"bookCount":73/);
@@ -462,4 +493,5 @@ test("deploys Google credentials as Worker secrets", async () => {
 
   assert.match(workflow, /wrangler secret put GOOGLE_CLIENT_ID/);
   assert.match(workflow, /wrangler secret put GOOGLE_CLIENT_SECRET/);
+  assert.match(workflow, /pnpm check/);
 });

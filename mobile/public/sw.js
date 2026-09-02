@@ -1,6 +1,6 @@
 /* global self, caches, fetch, URL */
 
-const CACHE_NAME = "verbo-assets-v3";
+const CACHE_NAME = "verbo-assets-v4";
 const CORE_ASSETS = ["/", "/manifest.webmanifest", "/favicon.svg", "/icons/verbo-180.png", "/icons/verbo-192.png", "/icons/verbo-512.png"];
 
 self.addEventListener("install", (event) => {
@@ -8,7 +8,9 @@ self.addEventListener("install", (event) => {
 });
 
 self.addEventListener("activate", (event) => {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil(caches.keys()
+    .then((names) => Promise.all(names.filter((name) => name.startsWith("verbo-assets-") && name !== CACHE_NAME).map((name) => caches.delete(name))))
+    .then(() => self.clients.claim()));
 });
 
 self.addEventListener("fetch", (event) => {

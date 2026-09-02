@@ -205,7 +205,10 @@ export default function VerboApp() {
     }
   }, []);
 
-  useEffect(() => { void refreshOfflineTranslations(); }, [refreshOfflineTranslations]);
+  useEffect(() => {
+    const task = window.setTimeout(() => void refreshOfflineTranslations(), 0);
+    return () => window.clearTimeout(task);
+  }, [refreshOfflineTranslations]);
 
   const stopCamera = useCallback(() => {
     streamRef.current?.getTracks().forEach((track) => track.stop());
@@ -268,7 +271,10 @@ export default function VerboApp() {
     setProgress((current) => ({ ...current, coins: data.coins }));
   }, []);
 
-  useEffect(() => { void loadSecondaryMissions(); }, [loadSecondaryMissions]);
+  useEffect(() => {
+    const task = window.setTimeout(() => void loadSecondaryMissions(), 0);
+    return () => window.clearTimeout(task);
+  }, [loadSecondaryMissions]);
 
   const activeSecondaryStatus = secondaryMissionStates.find((mission) => mission.active) || null;
   const activeSecondaryMission = activeSecondaryStatus ? secondaryMissionById(activeSecondaryStatus.id) : null;
@@ -279,7 +285,7 @@ export default function VerboApp() {
   const primaryMissionScroll = book && missionForChapter(bookSlug, chapter) ? mainMissionScrollForChapter(bookSlug, chapter, book.testament) : null;
   const secondaryScrollKeys = insightMission ? secondaryChapterInsights.map((_, index) => `secondary:${insightMission.id}:${chapter}:${index}`) : [];
   const discoveredSecondaryChapterInsights = secondaryChapterInsights.filter((_, index) => progress.foundScrolls?.includes(secondaryScrollKeys[index]));
-  const activeSecondaryHiddenInsight = Boolean(activeSecondaryMission && !replayingSecondaryMission && activeSecondaryMission.bookSlug === bookSlug && activeSecondaryMission.hiddenInsight?.chapter === chapter) ? activeSecondaryMission.hiddenInsight : null;
+  const activeSecondaryHiddenInsight = activeSecondaryMission && !replayingSecondaryMission && activeSecondaryMission.bookSlug === bookSlug && activeSecondaryMission.hiddenInsight?.chapter === chapter ? activeSecondaryMission.hiddenInsight : null;
   const secondaryHiddenScrollKey = activeSecondaryMission && activeSecondaryHiddenInsight ? `secondary:${activeSecondaryMission.id}:${chapter}:${activeSecondaryMission.insights[chapter].length}` : null;
   const primaryScrollKey = `primary:${bookSlug}:${chapter}`;
   const primaryScrollUnlocked = Boolean(primaryMissionScroll && progress.foundScrolls?.includes(primaryScrollKey));
@@ -352,9 +358,9 @@ export default function VerboApp() {
     window.setTimeout(() => setToast(""), 1800);
   };
 
-  const saveRemoteLibrary = async (next: Partial<Pick<PlayerProgress, "favorites" | "highlights" | "notes" | "noteDates" | "plans" | "shared" | "foundScrolls">>, base = progress) => {
+  const saveRemoteLibrary = useCallback(async (next: Partial<Pick<PlayerProgress, "favorites" | "highlights" | "notes" | "noteDates" | "plans" | "shared" | "foundScrolls">>, base = progress) => {
     await fetch("/api/library", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ favorites: base.favorites || [], highlights: base.highlights || {}, notes: base.notes || {}, noteDates: base.noteDates || {}, plans: base.plans || [], shared: base.shared || [], foundScrolls: base.foundScrolls || [], lastReading: lastReadingRef.current, selectedTranslation: selectedTranslationRef.current, ...next }) }).catch(() => undefined);
-  };
+  }, [progress]);
 
   const claimDeveloperGift = async () => {
     if (!developerGift) return;
@@ -581,7 +587,7 @@ export default function VerboApp() {
     setScreen("bible");
     setSearchOpen(false);
     window.scrollTo({ top: 0, behavior: "smooth" });
-  }, [recognizedPassage, stopCamera, detectedTranslation, translation]);
+  }, [recognizedPassage, stopCamera, detectedTranslation, translation, saveRemoteLibrary]);
 
   const confirmManualReference = () => {
     if (!manifest) return;
@@ -1205,7 +1211,10 @@ function CoopMissionPanel({ coop, manifest, onOpen, onChange }: { coop: CoopMiss
     setFriends(data.friends || []);
   }, [onChange]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    const task = window.setTimeout(() => void load(), 0);
+    return () => window.clearTimeout(task);
+  }, [load]);
   useEffect(() => {
     if (coop.status === "none") return;
     const timer = window.setInterval(() => void load(), 12_000);
@@ -1498,6 +1507,7 @@ function PlansPage() {
 
 type SocialContact = { publicHandle: string; displayName: string; profilePhoto: string };
 type FriendRequest = SocialContact & { id: number; createdAt: number };
+type SocialDiscoveryProfile = SocialContact & { relationship: "friend" | "incoming" | "outgoing" | "none"; canSendFriendRequest: boolean };
 type SharedSocialNote = { id: number; activityId: number; reference: string; text: string; createdAt: number; noteCreatedAt: number; reactions: { amen: number; celebrate: number; viewer?: "amen" | "celebrate" } };
 type SocialComment = { id: number; text: string; createdAt: number; author: SocialContact };
 type SocialProfile = {
@@ -1515,7 +1525,7 @@ type SocialProfile = {
   notes?: SharedSocialNote[];
 };
 type SocialData = { friends: SocialContact[]; requests: { incoming: FriendRequest[]; outgoing: FriendRequest[] } };
-type FeedActivity = { id: number; kind: "mission_completed" | "chapter_completed" | "streak_milestone" | "achievement_unlocked"; category?: "note_shared" | "verse_favorited" | "verse_marked" | "scroll_found"; title: string; detail: string; reference?: string; createdAt: number; actor: SocialContact; reactions: { amen: number; celebrate: number; viewer?: "amen" | "celebrate" }; comments: { total: number; items: SocialComment[] } };
+type FeedActivity = { id: number; kind: "mission_completed" | "chapter_completed" | "streak_milestone" | "achievement_unlocked"; category?: "note_shared" | "verse_favorited" | "verse_marked" | "scroll_found" | "reflection_shared" | "testimony_shared"; title: string; detail: string; reference?: string; createdAt: number; actor: SocialContact; reactions: { amen: number; celebrate: number; viewer?: "amen" | "celebrate" }; comments: { total: number; items: SocialComment[] } };
 type SocialPrivacy = { publicHandle: string; showActivities: boolean; profileVisibility: "friends" | "private"; showProgress: boolean; showFavorites: boolean; showNotes: boolean; showStats: boolean; allowFriendRequests: boolean };
 type SocialNotification = { id: number; kind: "friend_request" | "friend_accepted" | "reaction" | "comment" | "social_activity"; createdAt: number; read: boolean; actor: SocialContact; activityId?: number; activityTitle?: string };
 
@@ -1535,6 +1545,22 @@ function SharedNotesManager({ notes, sharedNotes, manifest, working, onShare, on
   return <section className="social-note-manager"><div className="social-section-title"><div><p className="eyebrow">ANOTAÇÕES COMPARTILHADAS</p><h2>Palavras que edificam</h2></div><span>{shared.size}</span></div><p>Escolha reflexões da sua biblioteca para que seus amigos possam ler, abrir o trecho bíblico e reagir.</p>{notes.length ? <div>{notes.map(([reference, text]) => <article key={reference}><button className="social-shared-note-copy" onClick={() => onOpen(reference)}><small>{socialReference(reference, manifest)}</small><b>{text}</b><span>Abrir na Bíblia ›</span></button><button className={shared.has(reference) ? "shared" : ""} disabled={working} onClick={() => onShare(reference, shared.has(reference) ? "unshare" : "share")}>{shared.has(reference) ? "Remover" : "Compartilhar"}</button></article>)}</div> : <div className="social-notes-empty">Suas anotações pessoais aparecerão aqui quando você as criar na Bíblia.</div>}</section>;
 }
 
+function PeopleDiscoveryPanel({ people, search, loading, working, onSearch, onOpen, onAdd }: { people: SocialDiscoveryProfile[]; search: string; loading: boolean; working: boolean; onSearch: (value: string) => void; onOpen: (handle: string) => void; onAdd: (handle: string) => void }) {
+  return <section className="social-section social-discover">
+    <div className="social-section-title">
+      <div><p className="eyebrow">ENCONTRE PESSOAS</p><h2>Descobrir no Verbo</h2></div>
+      <span>{people.length}</span>
+    </div>
+    <p className="social-discover-lead">Encontre irmãos que também estão caminhando na Palavra. E-mails e perfis privados continuam protegidos.</p>
+    <label className="social-discover-search"><span>BUSCAR POR NOME OU @</span><input value={search} onChange={(event) => onSearch(event.target.value)} placeholder="Ex.: Maria ou @verbo-maria" autoCapitalize="none" autoCorrect="off" /></label>
+    {loading ? <p className="social-discover-loading">Procurando pessoas…</p> : people.length ? <div className="social-people-list">{people.map((person) => <article key={person.publicHandle} className="social-person"><button className="social-person-profile" onClick={() => onOpen(person.publicHandle)}><SocialAvatar contact={person} small /><span><b>{person.displayName}</b><small>@{person.publicHandle}</small></span></button>{person.relationship === "friend" ? <button className="social-person-state" onClick={() => onOpen(person.publicHandle)}>Amigo</button> : person.relationship === "outgoing" ? <span className="social-person-state pending">Pedido enviado</span> : person.relationship === "incoming" ? <button className="social-person-state incoming" onClick={() => onOpen(person.publicHandle)}>Ver pedido</button> : person.canSendFriendRequest ? <button className="social-person-add" disabled={working} onClick={() => onAdd(person.publicHandle)}>Adicionar</button> : <span className="social-person-state">Perfil protegido</span>}</article>)}</div> : <div className="social-discover-empty"><span>⌕</span><b>Nenhuma pessoa encontrada</b><p>Tente outro nome ou identificador público.</p></div>}
+  </section>;
+}
+
+function SocialPostComposer({ kind, text, reference, favorites, manifest, working, onKind, onText, onReference, onClose, onPublish }: { kind: "reflection" | "testimony"; text: string; reference: string; favorites: string[]; manifest: BibleManifest | null; working: boolean; onKind: (kind: "reflection" | "testimony") => void; onText: (text: string) => void; onReference: (reference: string) => void; onClose: () => void; onPublish: () => void }) {
+  return <div className="social-composer-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><section className="social-composer" role="dialog" aria-modal="true" aria-label="Compartilhar no Social"><div className="social-composer-head"><div><p className="eyebrow">COMPARTILHE COM PROPÓSITO</p><h2>Sua jornada hoje</h2></div><button onClick={onClose} aria-label="Fechar publicação">×</button></div><div className="social-composer-kinds"><button className={kind === "reflection" ? "active" : ""} onClick={() => onKind("reflection")}>Reflexão</button><button className={kind === "testimony" ? "active" : ""} onClick={() => onKind("testimony")}>Testemunho</button></div><form onSubmit={(event) => { event.preventDefault(); onPublish(); }}><label><span>{kind === "reflection" ? "O QUE A PALAVRA TE MOSTROU?" : "O QUE VOCÊ QUER TESTEMUNHAR?"}</span><textarea value={text} maxLength={600} onChange={(event) => onText(event.target.value)} placeholder={kind === "reflection" ? "Escreva uma reflexão que possa edificar um amigo…" : "Compartilhe algo que Deus fez em sua caminhada…"} autoFocus /></label><div className="social-composer-meta"><small>{text.trim().length}/600</small><label><span>VERSÍCULO OPCIONAL</span><select value={reference} onChange={(event) => onReference(event.target.value)}><option value="">Sem versículo vinculado</option>{favorites.map((item) => <option key={item} value={item}>{socialReference(item, manifest)}</option>)}</select></label></div><p>Será visível apenas para seus amigos e poderá receber Amém, celebrações e comentários.</p><button className="social-composer-submit" disabled={working || !text.trim()}>{working ? "Publicando…" : "Compartilhar"}</button></form></section></div>;
+}
+
 function SocialPage({ notify, dark, setDark, progress, manifest, onOpenFavorite, onProfilePhotoChange, onDisplayNameChange }: { notify: (message: string) => void; dark: boolean; setDark: (value: boolean) => void; progress: PlayerProgress; manifest: BibleManifest | null; onOpenFavorite: (reference: string) => void; onProfilePhotoChange: (file: File) => void; onDisplayNameChange: (displayName: string) => Promise<boolean> }) {
   const [data, setData] = useState<SocialData>(emptySocial);
   const [activities, setActivities] = useState<FeedActivity[]>([]);
@@ -1544,11 +1570,18 @@ function SocialPage({ notify, dark, setDark, progress, manifest, onOpenFavorite,
   const [privacy, setPrivacy] = useState<SocialPrivacy | null>(null);
   const [publicHandle, setPublicHandle] = useState("");
   const [query, setQuery] = useState("");
+  const [peopleSearch, setPeopleSearch] = useState("");
+  const [people, setPeople] = useState<SocialDiscoveryProfile[]>([]);
+  const [peopleLoading, setPeopleLoading] = useState(false);
+  const [composerOpen, setComposerOpen] = useState(false);
+  const [postKind, setPostKind] = useState<"reflection" | "testimony">("reflection");
+  const [postText, setPostText] = useState("");
+  const [postReference, setPostReference] = useState("");
   const [friendFinderOpen, setFriendFinderOpen] = useState(false);
   const [selectedProfile, setSelectedProfile] = useState<SocialProfile | null>(null);
   const [accountView, setAccountView] = useState(false);
-  const [socialView, setSocialView] = useState<"feed" | "community">("feed");
-  const [profileOrigin, setProfileOrigin] = useState<"feed" | "community">("feed");
+  const [socialView, setSocialView] = useState<"feed" | "discover" | "community">("feed");
+  const [profileOrigin, setProfileOrigin] = useState<"feed" | "discover" | "community">("feed");
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [focusedActivityId, setFocusedActivityId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
@@ -1574,7 +1607,8 @@ function SocialPage({ notify, dark, setDark, progress, manifest, onOpenFavorite,
   }, []);
 
   useEffect(() => {
-    void loadSocial().catch(() => undefined).finally(() => setLoading(false));
+    const task = window.setTimeout(() => void loadSocial().catch(() => undefined).finally(() => setLoading(false)), 0);
+    return () => window.clearTimeout(task);
   }, [loadSocial]);
 
   useEffect(() => {
@@ -1591,6 +1625,26 @@ function SocialPage({ notify, dark, setDark, progress, manifest, onOpenFavorite,
     };
   }, [loadSocial]);
 
+  const loadPeople = useCallback(async (search: string) => {
+    setPeopleLoading(true);
+    try {
+      const response = await fetch(`/api/social/people?q=${encodeURIComponent(search)}`);
+      if (!response.ok) throw new Error("Não foi possível carregar pessoas");
+      const next = await response.json() as { people?: SocialDiscoveryProfile[] };
+      setPeople(next.people || []);
+    } catch {
+      setPeople([]);
+    } finally {
+      setPeopleLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (socialView !== "discover") return;
+    const task = window.setTimeout(() => void loadPeople(peopleSearch), 220);
+    return () => window.clearTimeout(task);
+  }, [socialView, peopleSearch, loadPeople]);
+
   const restoreSocialPosition = () => window.requestAnimationFrame(() => window.scrollTo({ top: socialScrollTop.current, behavior: "auto" }));
   const returnToSocial = () => {
     setSelectedProfile(null);
@@ -1605,7 +1659,7 @@ function SocialPage({ notify, dark, setDark, progress, manifest, onOpenFavorite,
     setAccountView(true);
   };
 
-  const openProfile = async (handle: string, origin: "feed" | "community" = socialView) => {
+  const openProfile = async (handle: string, origin: "feed" | "discover" | "community" = socialView) => {
     const normalized = handle.trim().toLowerCase();
     if (!normalized) return;
     if (normalized === publicHandle) {
@@ -1639,6 +1693,7 @@ function SocialPage({ notify, dark, setDark, progress, manifest, onOpenFavorite,
       if (!response.ok) throw new Error(result.error || "Não foi possível enviar o pedido");
       notify("Pedido de amizade enviado");
       await loadSocial();
+      setPeople((current) => current.map((person) => person.publicHandle === handle ? { ...person, relationship: "outgoing", canSendFriendRequest: false } : person));
       if (selectedProfile) await openProfile(selectedProfile.publicHandle);
     } catch (error) {
       notify(error instanceof Error ? error.message : "Não foi possível enviar o pedido");
@@ -1730,6 +1785,26 @@ function SocialPage({ notify, dark, setDark, progress, manifest, onOpenFavorite,
       setCommentActivityId(activity.id);
     } catch (error) {
       notify(error instanceof Error ? error.message : "Não foi possível publicar o comentário");
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const publishPost = async () => {
+    const text = postText.trim();
+    if (!text) return;
+    setWorking(true);
+    try {
+      const response = await fetch("/api/social/posts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ kind: postKind, text, reference: postReference }) });
+      const result = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(result.error || "Não foi possível publicar agora");
+      setComposerOpen(false);
+      setPostText("");
+      setPostReference("");
+      notify(postKind === "reflection" ? "Reflexão compartilhada com seus amigos" : "Testemunho compartilhado com seus amigos");
+      await loadSocial();
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Não foi possível publicar agora");
     } finally {
       setWorking(false);
     }
@@ -1869,17 +1944,17 @@ function SocialPage({ notify, dark, setDark, progress, manifest, onOpenFavorite,
   const orderedActivities = useMemo(() => [...activities].sort((first, second) => feedOrder === "recent"
     ? second.createdAt - first.createdAt
     : (second.reactions.amen + second.reactions.celebrate) - (first.reactions.amen + first.reactions.celebrate)), [activities, feedOrder]);
-  const activityLabel = (activity: FeedActivity) => activity.category === "note_shared" ? "ANOTAÇÃO" : activity.category === "verse_favorited" ? "VERSÍCULO FAVORITO" : activity.category === "verse_marked" ? "VERSÍCULO MARCADO" : activity.category === "scroll_found" ? "PERGAMINHO ENCONTRADO" : activity.kind === "mission_completed" ? "MISSÃO" : activity.kind === "chapter_completed" ? "LEITURA" : activity.kind === "streak_milestone" ? "CHAMA ACESA" : "CONQUISTA";
-  const activityGlyph = (activity: FeedActivity) => activity.category === "note_shared" ? "✎" : activity.category === "verse_favorited" ? "♡" : activity.category === "verse_marked" ? "▰" : activity.category === "scroll_found" ? "▥" : activity.kind === "mission_completed" ? "✦" : activity.kind === "chapter_completed" ? "▥" : activity.kind === "streak_milestone" ? "♨" : "✧";
+  const activityLabel = (activity: FeedActivity) => activity.category === "reflection_shared" ? "REFLEXÃO" : activity.category === "testimony_shared" ? "TESTEMUNHO" : activity.category === "note_shared" ? "ANOTAÇÃO" : activity.category === "verse_favorited" ? "VERSÍCULO FAVORITO" : activity.category === "verse_marked" ? "VERSÍCULO MARCADO" : activity.category === "scroll_found" ? "PERGAMINHO ENCONTRADO" : activity.kind === "mission_completed" ? "MISSÃO" : activity.kind === "chapter_completed" ? "LEITURA" : activity.kind === "streak_milestone" ? "CHAMA ACESA" : "CONQUISTA";
+  const activityGlyph = (activity: FeedActivity) => activity.category === "reflection_shared" ? "✎" : activity.category === "testimony_shared" ? "✦" : activity.category === "note_shared" ? "✎" : activity.category === "verse_favorited" ? "♡" : activity.category === "verse_marked" ? "▰" : activity.category === "scroll_found" ? "▥" : activity.kind === "mission_completed" ? "✦" : activity.kind === "chapter_completed" ? "▥" : activity.kind === "streak_milestone" ? "♨" : "✧";
 
   if (accountView) {
     const personalNotes = Object.entries(progress.notes || {}).filter(([, note]) => note.trim());
     return <>
       <ProfilePage dark={dark} setDark={setDark} progress={progress} manifest={manifest} onOpenFavorite={onOpenFavorite} onProfilePhotoChange={onProfilePhotoChange} onDisplayNameChange={onDisplayNameChange} onBack={returnToSocial} />
       <section className="generic-page social-page social-account-page page-in">
-        <button className="social-back" onClick={returnToSocial}>‹ Voltar ao {profileOrigin === "feed" ? "Feed" : "Social"}</button>
+        <button className="social-back" onClick={returnToSocial}>‹ Voltar ao {profileOrigin === "feed" ? "Feed" : profileOrigin === "discover" ? "Descobrir" : "Social"}</button>
         <section className="social-handle"><p>SEU IDENTIFICADOR PÚBLICO</p><b>{publicHandle ? `@${publicHandle}` : "Preparando seu identificador…"}</b><button onClick={() => void copyHandle()} disabled={!publicHandle}>Copiar</button><small>Compartilhe somente este código para receber pedidos. Seu e-mail nunca aparece.</small></section>
-        {privacy && <section className="social-detail social-privacy"><p className="eyebrow">PRIVACIDADE DAS ATIVIDADES</p><label><span><b>Compartilhar conquistas</b><small>Ativo por padrão. Desative se preferir manter novas leituras e missões privadas.</small></span><input type="checkbox" checked={privacy.showActivities} disabled={working} onChange={(event) => void updateActivityPrivacy(event.target.checked)} /></label></section>}
+        {privacy && <section className="social-detail social-privacy"><p className="eyebrow">PRIVACIDADE DAS ATIVIDADES</p><label><span><b>Compartilhar atividades e reflexões</b><small>Desative se preferir manter novas leituras, missões e publicações privadas.</small></span><input type="checkbox" checked={privacy.showActivities} disabled={working} onChange={(event) => void updateActivityPrivacy(event.target.checked)} /></label></section>}
         {privacy && <section className="social-detail social-privacy social-profile-privacy"><p className="eyebrow">O QUE AMIGOS VEEM</p><label><span><b>Jornada e missões</b><small>Nível, XP, chama acesa, missão principal e missões secundárias.</small></span><input type="checkbox" checked={privacy.showProgress} disabled={working} onChange={(event) => void updateProfilePrivacy({ showProgress: event.target.checked }, event.target.checked ? "Sua jornada ficará visível para amigos" : "Sua jornada ficará privada")} /></label><label><span><b>Estatísticas do acervo</b><small>Capítulos lidos, favoritos e quantidade de anotações.</small></span><input type="checkbox" checked={privacy.showStats} disabled={working} onChange={(event) => void updateProfilePrivacy({ showStats: event.target.checked }, event.target.checked ? "Estatísticas compartilhadas" : "Estatísticas privadas")} /></label><label><span><b>Versículos favoritos</b><small>Lista de referências salvas na sua biblioteca.</small></span><input type="checkbox" checked={privacy.showFavorites} disabled={working} onChange={(event) => void updateProfilePrivacy({ showFavorites: event.target.checked }, event.target.checked ? "Favoritos compartilhados" : "Favoritos privados")} /></label></section>}
         {privacy && <section className="social-detail social-privacy"><p className="eyebrow">PRIVACIDADE DAS ANOTAÇÕES</p><label><span><b>Permitir anotações compartilhadas</b><small>Você escolhe cada anotação; só as selecionadas aparecem para seus amigos.</small></span><input type="checkbox" checked={privacy.showNotes} disabled={working} onChange={(event) => void updateNotesPrivacy(event.target.checked)} /></label></section>}
         <SharedNotesManager notes={personalNotes} sharedNotes={sharedNotes} manifest={manifest} working={working} onShare={(reference, action) => void shareNote(reference, action)} onOpen={onOpenFavorite} />
@@ -1893,7 +1968,7 @@ function SocialPage({ notify, dark, setDark, progress, manifest, onOpenFavorite,
     const profileContact = { displayName: selectedProfile.displayName || "Perfil protegido", profilePhoto: selectedProfile.profilePhoto || "" };
     const recentProfileActivities = activities.filter((activity) => activity.actor.publicHandle === selectedProfile.publicHandle).slice(0, 2);
     return <section className="generic-page social-page page-in">
-      <button className="social-back" onClick={returnToSocial}>‹ Voltar ao {profileOrigin === "feed" ? "Feed" : "Social"}</button>
+      <button className="social-back" onClick={returnToSocial}>‹ Voltar ao {profileOrigin === "feed" ? "Feed" : profileOrigin === "discover" ? "Descobrir" : "Social"}</button>
       <section className="social-profile-card">
         {selectedProfile.profileVisible ? <div className="social-profile-identity"><SocialAvatar contact={profileContact} /><div><p className="eyebrow social-disciple-label">DISCÍPULO <span aria-hidden="true"><PixelDisciple level={selectedProfile.progress?.level} turning /></span></p><h1>{profileContact.displayName}</h1>{selectedProfile.progress && <p className="social-profile-rank">Nível {selectedProfile.progress.level} <span>·</span> {discipleTitle(selectedProfile.progress.level)}</p>}<small>@{selectedProfile.publicHandle}</small></div></div> : <><SocialAvatar contact={profileContact} /><p className="eyebrow">PERFIL DO VERBO</p><h1>Perfil protegido</h1><span>@{selectedProfile.publicHandle}</span></>}
         {!selectedProfile.profileVisible && <p className="social-private">Este perfil fica visível apenas para amigos. Você ainda pode enviar um pedido se a pessoa permitir.</p>}
@@ -1909,21 +1984,23 @@ function SocialPage({ notify, dark, setDark, progress, manifest, onOpenFavorite,
         {selectedProfile.secondaryMissions && <section className="social-detail social-secondary-summary"><p className="eyebrow">MISSÕES SECUNDÁRIAS</p><div><span>✦ Missões concluídas</span><b>{selectedProfile.secondaryMissions.completed} de {selectedProfile.secondaryMissions.total}</b></div><div><span>◆ XP obtido nas missões</span><b>{selectedProfile.secondaryMissions.xp.toLocaleString("pt-BR")}</b></div>{selectedProfile.secondaryMissions.missions.length > 0 && <ul>{selectedProfile.secondaryMissions.missions.map((mission) => <li key={mission.id}><span>{mission.title}</span><small>{new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(mission.completedAt))}</small></li>)}</ul>}</section>}
         {selectedProfile.notes && <section className="social-detail social-profile-notes"><p className="eyebrow">ANOTAÇÕES COMPARTILHADAS · {selectedProfile.notes.length}</p>{selectedProfile.notes.length ? <div>{selectedProfile.notes.map((note) => <article key={note.id}><button className="social-shared-note-copy" onClick={() => onOpenFavorite(note.reference)}><small>{profileContact.displayName} · {new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(note.noteCreatedAt))}</small><b>{note.text}</b><span>{socialReference(note.reference, manifest)} · Abrir trecho ›</span></button><div className="social-reactions"><button className={note.reactions.viewer === "amen" ? "active" : ""} disabled={working} onClick={() => void reactToSharedNote(note, "amen")}>🙏 <span>{note.reactions.amen || "Amém"}</span></button><button className={note.reactions.viewer === "celebrate" ? "active" : ""} disabled={working} onClick={() => void reactToSharedNote(note, "celebrate")}>✦ <span>{note.reactions.celebrate || "Celebrar"}</span></button></div></article>)}</div> : <small>Este amigo ainda não compartilhou anotações.</small>}</section>}
         {recentProfileActivities.length > 0 && <section className="social-detail social-profile-activities"><p className="eyebrow">ÚLTIMAS CONQUISTAS</p>{recentProfileActivities.map((activity) => <div key={activity.id}><b>{activity.title}</b>{activity.detail && <small>{activity.detail}</small>}</div>)}</section>}
-        {selectedProfile.relationship === "self" && privacy && <section className="social-detail social-privacy"><p className="eyebrow">PRIVACIDADE DAS ATIVIDADES</p><label><span><b>Compartilhar conquistas</b><small>Ativo por padrão. Desative se preferir manter novas leituras e missões privadas.</small></span><input type="checkbox" checked={privacy.showActivities} disabled={working} onChange={(event) => void updateActivityPrivacy(event.target.checked)} /></label></section>}
+        {selectedProfile.relationship === "self" && privacy && <section className="social-detail social-privacy"><p className="eyebrow">PRIVACIDADE DAS ATIVIDADES</p><label><span><b>Compartilhar atividades e reflexões</b><small>Desative se preferir manter novas leituras, missões e publicações privadas.</small></span><input type="checkbox" checked={privacy.showActivities} disabled={working} onChange={(event) => void updateActivityPrivacy(event.target.checked)} /></label></section>}
         {selectedProfile.relationship === "self" && blockedUsers.length > 0 && <section className="social-detail social-blocked"><p className="eyebrow">PERFIS BLOQUEADOS</p>{blockedUsers.map((contact) => <div key={contact.publicHandle}><span><b>{contact.displayName}</b><small>@{contact.publicHandle}</small></span><button disabled={working} onClick={() => void unblockProfile(contact.publicHandle)}>Desbloquear</button></div>)}</section>}
       </>}
     </section>;
   }
 
   return <section className="generic-page social-page social-home page-in">
-    <header className="social-topbar"><button className="social-wordmark" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })} aria-label="Ir ao início do Social">VERBO <i>social</i></button><div><button className="social-top-icon social-add-friend" onClick={() => { setProfileError(""); setFriendFinderOpen(true); }} aria-label="Adicionar amigo"><span aria-hidden="true" /><i aria-hidden="true">+</i></button><button className="social-top-icon" onClick={openAccount} aria-label="Abrir meu perfil">◎</button><button className="social-top-icon social-notification-button" onClick={() => setNotificationsOpen(true)} aria-label="Ver notificações">🔔{unreadNotifications > 0 && <i>{unreadNotifications > 9 ? "9+" : unreadNotifications}</i>}</button></div></header>
+    <header className="social-topbar"><button className="social-wordmark" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })} aria-label="Ir ao início do Social">VERBO <i>social</i></button><div><button className="social-top-icon social-compose-button" onClick={() => { if (!privacy?.showActivities) { notify("Ative o compartilhamento nas preferências para publicar para seus amigos"); openAccount(); return; } setComposerOpen(true); }} aria-label="Compartilhar reflexão">✎</button><button className="social-top-icon social-add-friend" onClick={() => { setProfileError(""); setFriendFinderOpen(true); }} aria-label="Adicionar amigo"><span aria-hidden="true" /><i aria-hidden="true">+</i></button><button className="social-top-icon" onClick={openAccount} aria-label="Abrir meu perfil">◎</button><button className="social-top-icon social-notification-button" onClick={() => setNotificationsOpen(true)} aria-label="Ver notificações">🔔{unreadNotifications > 0 && <i>{unreadNotifications > 9 ? "9+" : unreadNotifications}</i>}</button></div></header>
     <section className="social-self-card"><button onClick={openAccount}><SocialAvatar contact={{ displayName: progress.displayName?.trim() || "Usuário do VERBO", profilePhoto: progress.profilePhoto || "" }} /><span><small>SUA JORNADA</small><b>{progress.displayName?.trim() || "Usuário do VERBO"}</b><em>Nível {progress.level} · {progress.streak} dias de leitura</em></span><strong>Ver perfil ›</strong></button></section>
     <section className="social-stories" aria-label="Jornadas da comunidade"><div className="social-stories-heading"><span>JORNADAS</span><button onClick={() => setSocialView("community")}>Ver amigos</button></div><div className="social-stories-rail"><button className="social-story social-story-self" onClick={openAccount}><span className="social-story-ring"><SocialAvatar contact={{ displayName: progress.displayName?.trim() || "Você", profilePhoto: progress.profilePhoto || "" }} /><i>+</i></span><small>Sua jornada</small></button>{data.friends.map((friend) => <button className="social-story" key={friend.publicHandle} onClick={() => void openProfile(friend.publicHandle, "community")}><span className="social-story-ring"><SocialAvatar contact={friend} /></span><small>{friend.displayName}</small></button>)}</div></section>
-    <nav className="social-view-tabs" aria-label="Navegação social"><button className={socialView === "feed" ? "active" : ""} onClick={() => setSocialView("feed")}>Feed</button><button className={socialView === "community" ? "active" : ""} onClick={() => setSocialView("community")}>Comunidade <small>{data.friends.length}</small></button></nav>
+    <nav className="social-view-tabs" aria-label="Navegação social"><button className={socialView === "feed" ? "active" : ""} onClick={() => setSocialView("feed")}>Feed</button><button className={socialView === "discover" ? "active" : ""} onClick={() => setSocialView("discover")}>Descobrir</button><button className={socialView === "community" ? "active" : ""} onClick={() => setSocialView("community")}>Comunidade <small>{data.friends.length}</small></button></nav>
+    {composerOpen && <SocialPostComposer kind={postKind} text={postText} reference={postReference} favorites={progress.favorites || []} manifest={manifest} working={working} onKind={setPostKind} onText={setPostText} onReference={setPostReference} onClose={() => { if (!working) setComposerOpen(false); }} onPublish={() => void publishPost()} />}
     {friendFinderOpen && <div className="social-finder-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setFriendFinderOpen(false); }}><section className="social-finder-dialog" role="dialog" aria-modal="true" aria-label="Adicionar amigo"><button className="social-finder-close" onClick={() => setFriendFinderOpen(false)} aria-label="Fechar">×</button><span className="social-finder-mark" aria-hidden="true">+</span><p className="eyebrow">NOVA CONEXÃO</p><h2>Adicionar amigo</h2><small>Digite o ID público de quem você quer encontrar no VERBO.</small><form onSubmit={(event) => { event.preventDefault(); void openProfile(query); }}><label htmlFor="social-handle">ID DO USUÁRIO</label><input id="social-handle" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Ex.: verbo-abc123def4" autoCapitalize="none" autoCorrect="off" autoFocus /><button type="submit" disabled={working}>{working ? "Buscando…" : "Encontrar perfil"}</button></form>{profileError && <p className="social-error">{profileError}</p>}</section></div>}
     {notificationsOpen && <div className="social-notifications-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setNotificationsOpen(false); }}><section className="social-notifications-sheet" role="dialog" aria-modal="true" aria-label="Notificações"><div className="social-notifications-sheet-head"><div><p className="eyebrow">ATUALIZAÇÕES</p><h2>Notificações</h2></div><button onClick={() => setNotificationsOpen(false)} aria-label="Fechar notificações">×</button></div>{notifications.length ? <><button className="social-mark-read" disabled={working || unreadNotifications === 0} onClick={() => void markNotificationsRead()}>Marcar todas como lidas</button><div className="social-notification-list">{notifications.map((notification) => <button key={notification.id} className={notification.read ? "read" : ""} onClick={() => void openNotification(notification)}><SocialAvatar contact={notification.actor} small /><span><b>{notification.actor.displayName}</b><small>{notificationText(notification)}</small></span>{!notification.read && <i />}</button>)}</div></> : <div className="social-notifications-empty">Quando houver novidades de amigos, missões ou interações, elas aparecerão aqui.</div>}</section></div>}
     {loading ? <p className="social-loading">Carregando suas conexões…</p> : <>
       {socialView === "feed" && <section className="social-section social-feed"><div className="social-section-title social-feed-title"><div><p className="eyebrow">FEED DE AMIGOS</p><h2>Para você</h2></div><span>{activities.length}</span></div><div className="social-feed-tabs" role="tablist" aria-label="Ordenar atividades"><button role="tab" aria-selected={feedOrder === "recent"} className={feedOrder === "recent" ? "active" : ""} onClick={() => setFeedOrder("recent")}>Recentes</button><button role="tab" aria-selected={feedOrder === "celebrated"} className={feedOrder === "celebrated" ? "active" : ""} onClick={() => setFeedOrder("celebrated")}>Celebradas</button></div>{orderedActivities.length ? <div className="social-feed-list">{orderedActivities.map((activity) => <article id={`social-activity-${activity.id}`} key={activity.id} className={`social-feed-card activity-${activity.kind}${activity.category ? ` activity-${activity.category}` : ""}${focusedActivityId === activity.id ? " focused" : ""}`}><button className="social-activity-head" onClick={() => void openProfile(activity.actor.publicHandle, "feed")}><SocialAvatar contact={activity.actor} small /><span><b>{activity.actor.displayName}</b><small>{new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short" }).format(new Date(activity.createdAt))} · Ver jornada</small></span><em>•••</em></button><div className="social-activity-copy"><span className="social-activity-glyph" aria-hidden="true">{activityGlyph(activity)}</span><div><i>{activityLabel(activity)}</i><p>{activity.title}</p>{activity.detail && <small>{activity.detail}</small>}{(activity.xp || activity.level) && <span className="social-activity-reward">{activity.xp ? `+${activity.xp} XP` : ""}{activity.xp && activity.level ? " · " : ""}{activity.level ? `Nível ${activity.level}` : ""}</span>}{activity.reference && <button className="social-activity-reference" onClick={() => onOpenFavorite(activity.reference!)}>▥ {activity.reference.includes(":") ? socialReference(activity.reference, manifest) : activity.reference} ›</button>}</div></div><div className="social-reactions"><button className={activity.reactions.viewer === "amen" ? "active" : ""} disabled={working} onClick={() => void reactToActivity(activity, "amen")}>🙏 <span>{activity.reactions.amen || "Amém"}</span></button><button className={activity.reactions.viewer === "celebrate" ? "active" : ""} disabled={working} onClick={() => void reactToActivity(activity, "celebrate")}>✦ <span>{activity.reactions.celebrate || "Celebrar"}</span></button><button className={commentActivityId === activity.id ? "active social-comment-toggle" : "social-comment-toggle"} onClick={() => setCommentActivityId((current) => current === activity.id ? null : activity.id)}>◌ <span>{activity.comments.total ? `${activity.comments.total} comentário${activity.comments.total === 1 ? "" : "s"}` : "Comentar"}</span></button></div>{(activity.comments.items.length > 0 || commentActivityId === activity.id) && <div className="social-comments">{activity.comments.items.map((comment) => <div className="social-comment" key={comment.id}><SocialAvatar contact={comment.author} small /><p><b>{comment.author.displayName}</b>{comment.text}</p></div>)}{commentActivityId === activity.id && <form className="social-comment-form" onSubmit={(event) => { event.preventDefault(); void publishComment(activity); }}><input value={commentDrafts[activity.id] || ""} maxLength={400} onChange={(event) => setCommentDrafts((current) => ({ ...current, [activity.id]: event.target.value }))} placeholder="Escreva algo que edifique…" aria-label="Seu comentário" /><button disabled={working || !(commentDrafts[activity.id] || "").trim()}>Enviar</button></form>}</div>}</article>)}</div> : <div className="social-feed-empty"><span>✦</span><p>As atividades da sua jornada e de seus amigos aparecerão aqui. Marcos relevantes são compartilhados automaticamente, sem sobrecarregar o Feed.</p></div>}</section>}
+      {socialView === "discover" && <PeopleDiscoveryPanel people={people} search={peopleSearch} loading={peopleLoading} working={working} onSearch={setPeopleSearch} onOpen={(handle) => void openProfile(handle, "discover")} onAdd={(handle) => void sendRequest(handle)} />}
       {socialView === "community" && <>
       {data.requests.incoming.length > 0 && <section className="social-section"><div className="social-section-title"><div><p className="eyebrow">PEDIDOS RECEBIDOS</p><h2>Quer caminhar com você</h2></div><span>{data.requests.incoming.length}</span></div>{data.requests.incoming.map((request) => <article className="social-request" key={request.id}><SocialAvatar contact={request} small /><div><b>{request.displayName}</b><small>@{request.publicHandle}</small></div><div className="social-request-actions"><button disabled={working} onClick={() => void answerRequest(request.id, "accept")}>Aceitar</button><button disabled={working} onClick={() => void answerRequest(request.id, "decline")}>×</button></div></article>)}</section>}
       {data.friends.length > 0 ? <section id="social-community" className="social-section"><div className="social-section-title"><div><p className="eyebrow">SUA COMUNIDADE</p><h2>Amigos no Verbo</h2></div><span>{data.friends.length}</span></div><div className="social-friends">{data.friends.map((friend) => <button key={friend.publicHandle} onClick={() => void openProfile(friend.publicHandle, "community")}><SocialAvatar contact={friend} small /><span><b>{friend.displayName}</b><small>@{friend.publicHandle}</small></span><em>›</em></button>)}</div></section> : <section id="social-community" className="social-empty"><span className="social-empty-community-icon" aria-hidden="true"><i /><i /></span><h2>Comece sua comunidade</h2><p>Envie seu identificador para alguém de confiança ou busque o código que recebeu.</p></section>}

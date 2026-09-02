@@ -1,4 +1,4 @@
-import { authenticate, InvalidCredentialsError, startSession } from "../../../../lib/auth";
+import { authenticate, consumeAuthAttempt, InvalidCredentialsError, startSession } from "../../../../lib/auth";
 import { corsOptions, withCors } from "../../../../lib/cors";
 
 export const dynamic = "force-dynamic";
@@ -16,6 +16,8 @@ export async function POST(request: Request) {
   const email = String(body.email || "").trim();
   const password = String(body.password || "");
   if (!email || !password) return withCors(Response.json({ error: "Informe e-mail e senha." }, { status: 400 }));
+  const attempt = await consumeAuthAttempt(request, "login", email);
+  if (!attempt.allowed) return withCors(Response.json({ error: `Muitas tentativas de acesso. Tente novamente em cerca de ${Math.ceil(attempt.retryAfterSeconds / 60)} minuto(s).` }, { status: 429, headers: { "Retry-After": String(attempt.retryAfterSeconds) } }));
 
   try {
     const user = await authenticate(email, password);

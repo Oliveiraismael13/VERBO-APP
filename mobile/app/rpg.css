@@ -15,7 +15,7 @@
 @media(max-width:370px){.journey-page{padding-inline:13px}.player-hud{grid-template-columns:51px 1fr 43px;gap:8px}.crest{width:50px}.player-level h1{font-size:15px}.map-node{width:calc(50% - 18px);padding:8px;grid-template-columns:30px 1fr}.map-node>span{width:30px}.map-node:after{width:18px}.map-node.left:after{right:-19px}.map-node.right:after{left:-19px}}
 
 /* Sobrescritas finais para o modo web do tema RPG. */
-@media (min-width:900px){
+@media (min-width:900px) and (pointer:fine){
   .rpg-shell .bottom-nav{position:absolute;z-index:10;top:102px;bottom:auto;left:22px;transform:none;width:176px;height:auto;padding:10px;background:#101421f5;border:1px solid #2c3246;border-radius:16px;display:flex;flex-direction:column;gap:3px;backdrop-filter:blur(14px)}
   .rpg-shell .bottom-nav button{min-height:45px;display:grid;grid-template-columns:30px 1fr;justify-items:start;align-items:center;gap:8px;padding:0 11px;border-radius:10px;font-size:11px;text-align:left}
   .rpg-shell .bottom-nav button>span{font-size:18px;height:auto;text-align:center;width:25px}.rpg-shell .bottom-nav .selected{background:#ffffff0d}.rpg-shell .bottom-nav .selected:after{top:auto;bottom:8px;left:13px;width:3px;height:22px}
@@ -75,6 +75,28 @@
 
 /* A aba Missões compartilha a mesma paleta noturna azul-marinho das demais abas. */
 .rpg-shell.dark .missions-page{--ink:#edf0f7;--muted:#aeb5c8;--paper:#111522;--card:#181c2d;--line:#2c3246;--soft:#202536;background:var(--paper);color:var(--ink)}
+
+/* Tablets e iPads mantêm a navegação por toque, mas aproveitam a largura disponível.
+   O conteúdo de leitura continua limitado para preservar uma linha confortável. */
+@media (min-width:650px) and (max-width:899px), (min-width:650px) and (pointer:coarse){
+  .app-shell.rpg-shell{width:100%;max-width:1180px;min-height:100dvh;margin:0 auto;padding-bottom:96px;box-shadow:none}
+  .rpg-shell .topbar{padding-left:clamp(28px,6vw,72px);padding-right:clamp(28px,6vw,72px)}
+  .rpg-shell .bottom-nav{width:100%;max-width:1180px}
+  .rpg-shell .journey-page,.rpg-shell .generic-page,.rpg-shell .study-page{padding-left:clamp(28px,6vw,72px);padding-right:clamp(28px,6vw,72px)}
+  .rpg-shell .reader{padding-left:clamp(28px,9vw,132px);padding-right:clamp(28px,9vw,132px)}
+  .rpg-shell .player-hud,.rpg-shell .active-quest,.rpg-shell .quest-map{max-width:960px;margin-left:auto;margin-right:auto}
+  .rpg-shell .daily-quests{grid-template-columns:repeat(3,minmax(0,1fr));max-width:960px;margin-left:auto;margin-right:auto}
+  .rpg-shell .book-picker,.rpg-shell .search-overlay{width:min(calc(100% - 80px),900px);left:50%;right:auto;transform:translateX(-50%)}
+  .social-page{padding:34px clamp(28px,6vw,72px) 56px}
+  .social-heading .lead{max-width:520px;font-size:12px}
+  .social-handle,.social-search,.social-section,.social-empty,.social-home .social-topbar,.social-home .social-self-card,.social-home .social-stories,.social-home .social-section{max-width:900px}
+  .social-feed-list{max-width:820px}
+  .social-profile-card,.social-detail,.social-stats{max-width:700px}
+  .social-home .social-stories{margin-left:0;margin-right:0;padding-left:0;padding-right:0}
+  .social-finder-backdrop{align-items:center}
+  .social-finder-dialog{width:min(calc(100% - 80px),620px);padding:28px}
+  .social-notifications-sheet{width:min(calc(100% - 80px),680px)}
+}
 
 /* Perfil e identificador público também acompanham a paleta noturna. */
 .rpg-shell.dark .social-profile-page,.rpg-shell.dark .social-account-page{--ink:#edf0f7;--muted:#aeb5c8;--paper:#111522;--card:#181c2d;--line:#2c3246;--soft:#202536;background:radial-gradient(circle at 88% 2%,#49316b55,transparent 26%),radial-gradient(circle at 5% 22%,#28535c44,transparent 27%),linear-gradient(180deg,#111522,#0b0e18);color:var(--ink)}.rpg-shell.dark .social-profile-page .profile-heading .eyebrow{color:#c5b1ff}.rpg-shell.dark .social-profile-page .profile-heading h1{color:#f2eff9}.rpg-shell.dark .social-profile-page .profile-heading .lead{color:#aeb5c8}.rpg-shell.dark .social-profile-page .profile-status{border-color:#514769;background:#27213f;color:#d9ccff}.rpg-shell.dark .social-profile-page .profile-summary{border-color:#3a4057;background:#181c2d;box-shadow:0 12px 28px #05071155}.rpg-shell.dark .social-profile-page .profile-avatar{border-color:#e8c66f;background:linear-gradient(145deg,#8d67df,#52409e);box-shadow:0 0 0 4px #28233d}.rpg-shell.dark .social-profile-page .profile-stats article,.rpg-shell.dark .social-profile-page .profile-panel{border-color:#2c3246;background:#181c2d;box-shadow:0 7px 18px #05071155}.rpg-shell.dark .social-profile-page .profile-stats article>span,.rpg-shell.dark .social-profile-page .library-items i{background:#28233d;color:#c7b1ff}.rpg-shell.dark .social-profile-page .profile-action{border-color:#514769;background:#202536;color:#d9ccff}.rpg-shell.dark .social-profile-page .profile-name-trigger{color:#c7b1ff}.rpg-shell.dark .social-profile-page .profile-name-edit label,.rpg-shell.dark .social-profile-page .profile-name-edit small,.rpg-shell.dark .social-profile-page .profile-edit-photo small,.rpg-shell.dark .social-profile-page .profile-edit-note{color:#aeb5c8}.rpg-shell.dark .social-profile-page .profile-name-edit input{border-color:#45405e;background:#111522;color:#edf0f7;outline-color:#8b6ce9}.rpg-shell.dark .social-profile-page .profile-name-edit button{border-color:#514769;background:#28233d;color:#ded1ff}.rpg-shell.dark .social-profile-page .profile-name-edit button:first-of-type{border-color:#7658d8;background:#7658d8;color:#fff}.rpg-shell.dark .social-profile-page .profile-editor-close{border-color:#514769;background:#28233d;color:#d9ccff}.rpg-shell.dark .social-profile-page .profile-edit-photo{border-color:#2c3246}.rpg-shell.dark .social-profile-page .profile-edit-photo b{color:#edf0f7}.rpg-shell.dark .social-account-page .social-back{color:#c5b1ff}.rpg-shell.dark .social-account-page .social-handle{border-color:#514769;background:linear-gradient(135deg,#28213f,#181c2d);box-shadow:0 10px 22px #05071155}.rpg-shell.dark .social-account-page .social-handle p{color:#c5b1ff}.rpg-shell.dark .social-account-page .social-handle b{color:#f2d17a}.rpg-shell.dark .social-account-page .social-handle small,.rpg-shell.dark .social-account-page .social-privacy label small,.rpg-shell.dark .social-account-page .social-blocked>div small{color:#aeb5c8}.rpg-shell.dark .social-account-page .social-detail{border-color:#2c3246;background:#181c2d}.rpg-shell.dark .social-account-page .social-privacy label b{color:#edf0f7}

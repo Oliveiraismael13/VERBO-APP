@@ -6,7 +6,7 @@ import { levelForXp } from "../../../lib/xp";
 import { campaignActs, missionForChapter as findCampaignMission, type CampaignAct } from "../../../lib/campaign";
 import { recordSocialActivity } from "../../../lib/social";
 import { secondaryMissionById } from "../../../lib/secondary-missions";
-import { CoopMissionChapterError, CoopMissionLockedError, ensureCoopChapterCanBeCompleted, getCoopMissionState, recordCoopChapter } from "../../../lib/coop-mission";
+import { CoopMissionChapterError, CoopMissionLockedError, getCoopMissionState, recordCoopChapter } from "../../../lib/coop-mission";
 
 export const dynamic = "force-dynamic";
 
