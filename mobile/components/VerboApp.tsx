@@ -8,6 +8,7 @@ import { findBiblePassages, parseBibleReference, recognizeBibleTranslation, reco
 import { downloadBibleForOffline, hasOfflineBible } from "../lib/offline-bible";
 import { secondaryMissionById, secondaryMissions, secondaryMissionProgress, type SecondaryMission } from "../lib/secondary-missions";
 import { mainMissionScrollForChapter } from "../lib/main-mission-scrolls";
+import { PersonalStudies, StudyPicker, type StudyVerseReference } from "./PersonalStudies";
 
 type Screen = "journey" | "bible" | "plans" | "camera" | "studies" | "social" | "result";
 type BibleVerse = { number: number; text: string };
@@ -102,7 +103,7 @@ type LastReading = { bookSlug: string; chapter: number };
 type CoopContact = { publicHandle: string; displayName: string; profilePhoto: string };
 type CoopReference = { bookSlug: string; chapter: number };
 type CoopMissionState = { status: "none" | "incoming" | "outgoing" | "active"; sessionId?: number; journeyMode?: "whole" | "custom"; start?: CoopReference; end?: CoopReference; current?: CoopReference; myProgress?: number; partnerProgress?: number; waitingForPartner?: boolean; partner?: CoopContact };
-type PlayerProgress = { xp: number; level: number; coins: number; streak: number; completed: string[]; achievements: string[]; dailyNoteCompleted?: boolean; xpBonusPercent?: number; missedStreakDays?: number; displayName?: string; profilePhoto?: string; favorites?: string[]; highlights?: Record<string, string>; notes?: Record<string, string>; noteDates?: Record<string, number>; plans?: string[]; shared?: string[]; foundScrolls?: string[]; lastReading?: LastReading | null; coop?: CoopMissionState };
+type PlayerProgress = { xp: number; level: number; coins: number; streak: number; completed: string[]; achievements: string[]; dailyNoteCompleted?: boolean; xpBonusPercent?: number; missedStreakDays?: number; streakRestorationAvailable?: boolean; streakRestorationDaysLeft?: number; displayName?: string; profilePhoto?: string; favorites?: string[]; highlights?: Record<string, string>; notes?: Record<string, string>; noteDates?: Record<string, number>; plans?: string[]; shared?: string[]; foundScrolls?: string[]; lastReading?: LastReading | null; coop?: CoopMissionState };
 type ChapterReward = { xp: number; coins: number; levelUp: boolean; unlocked: string[]; scrollsUnlocked?: number; scrollXp?: number; firstScrollDiscovery?: boolean; missionCompleted?: boolean; missionTitle?: string; secondaryMissionCompleted?: boolean; replayCompleted?: boolean; actCompleted?: boolean; actTitle?: string; coopBonus?: boolean; coopRoundCompleted?: boolean; coopJourneyCompleted?: boolean };
 type ScrollDiscovery = { count: number; xp: number; first: boolean };
 type DeveloperGift = { id: number; amount: number; message: string };
@@ -175,6 +176,10 @@ export default function VerboApp() {
   const [manualReference, setManualReference] = useState("");
   const [noteEditorOpen, setNoteEditorOpen] = useState(false);
   const [noteDraft, setNoteDraft] = useState("");
+  const [studyPickerOpen, setStudyPickerOpen] = useState(false);
+  const [studyLibraryOpen, setStudyLibraryOpen] = useState(false);
+  const [studyReferenceFilter, setStudyReferenceFilter] = useState<StudyVerseReference | null>(null);
+  const [studyVerseCounts, setStudyVerseCounts] = useState<Record<number, number>>({});
   const [toast, setToast] = useState("");
   const [progress, setProgress] = useState<PlayerProgress>(emptyProgress);
   const [secondaryMissionStates, setSecondaryMissionStates] = useState<SecondaryMissionStatus[]>([]);
@@ -1018,6 +1023,19 @@ export default function VerboApp() {
   };
 
   const currentVerses = book?.chapters[chapter - 1] ?? [];
+  const studySelection = useMemo<StudyVerseReference[]>(() => (selectedVerses.length ? selectedVerses : [selectedVerse]).map((verse) => ({ bookSlug, chapter, verse })), [bookSlug, chapter, selectedVerse, selectedVerses]);
+  const studySource = useMemo(() => ({ path: translations[translation].path, privateTranslation: Boolean(translations[translation].private), bookNames: Object.fromEntries((manifest?.books || []).map((item) => [item.slug, item.name])) }), [manifest, translation]);
+  const refreshStudyMarks = useCallback(async () => {
+    const response = await fetch(`/api/personal-studies/verse-index?bookSlug=${encodeURIComponent(bookSlug)}&chapter=${chapter}`).catch(() => null);
+    if (!response?.ok) return;
+    const data = await response.json() as { verseCounts?: Record<string, number> };
+    setStudyVerseCounts(Object.fromEntries(Object.entries(data.verseCounts || {}).map(([verse, count]) => [Number(verse), Number(count)])));
+  }, [bookSlug, chapter]);
+  useEffect(() => { const task = window.setTimeout(() => void refreshStudyMarks(), 0); return () => window.clearTimeout(task); }, [refreshStudyMarks]);
+  const openStudiesForSelectedVerse = () => {
+    setStudyReferenceFilter({ bookSlug, chapter, verse: selectedVerse });
+    setStudyLibraryOpen(true);
+  };
   const currentLevel = getXpProgress(progress.xp).level;
   const catholicEdition = translations[translation].canon === "catholic-73";
   const oldTestamentBookCount = catholicEdition ? 46 : 39;
@@ -1034,8 +1052,8 @@ export default function VerboApp() {
           {screen === "result" && <span className="top-title">João 3:16</span>}
           <div className="top-actions">
             <button className="hud-search" onClick={() => setSearchOpen(true)} aria-label="Buscar na Bíblia">⌕</button>
+            <button className="hud-studies" onClick={() => { setStudyReferenceFilter(null); setStudyLibraryOpen(true); }} aria-label="Abrir meus estudos">▤</button>
             <div className="hud-resource"><span>◆</span>{progress.coins}</div>
-            <button className="avatar level-avatar" onClick={() => go("social")} aria-label={`Abrir Social, nível ${currentLevel}`}><b>{currentLevel}</b></button>
           </div>
         </header>
       )}
@@ -1096,6 +1114,8 @@ export default function VerboApp() {
                     <button onClick={() => setHighlightPickerOpen(!highlightPickerOpen)} className={marked ? "active" : ""} aria-label="Escolher cor da marcação">◒</button>
                     <button onClick={toggleFavorite} className={saved ? "active" : ""} aria-label="Favoritar">{saved ? "♥" : "♡"}</button>
                     <button onClick={openNoteEditor} aria-label="Criar anotação">▱</button>
+                    <button onClick={() => setStudyPickerOpen(true)} aria-label="Adicionar ao estudo">⌑</button>
+                    {studyVerseCounts[number] ? <button onClick={openStudiesForSelectedVerse} aria-label="Abrir estudos deste versículo">▤</button> : null}
                     <button onClick={() => navigator.clipboard?.writeText(`${book?.name} ${chapter}:${number} — ${text}`).then(() => notify("Versículo copiado"))} aria-label="Copiar">⧉</button>
                     <button onClick={() => void shareSelection()} aria-label="Compartilhar">↗</button>
                   </div>
@@ -1105,7 +1125,7 @@ export default function VerboApp() {
                   </div>}
                 </div>}
                 <button data-verse={number} className={`verse ${isSelected ? "selected" : ""} ${isCameraDetected ? "camera-detected" : ""} ${savedHighlight ? `marked marked-${savedHighlight}` : ""}`} onClick={() => selectVerse(number)}>
-                  <sup>{presentation.reference}</sup>{presentation.text}
+                  <sup>{presentation.reference}</sup>{studyVerseCounts[number] ? <i className="verse-study-marker" aria-label={`${studyVerseCounts[number]} ${studyVerseCounts[number] === 1 ? "estudo" : "estudos"}`}>⌑</i> : null}{presentation.text}
                 </button>
               </div>;
             })}
@@ -1184,6 +1204,8 @@ export default function VerboApp() {
       {secondaryBriefingId && secondaryMissionById(secondaryBriefingId) && <SecondaryMissionBriefing mission={secondaryMissionById(secondaryBriefingId)!} progress={progress} status={secondaryMissionStates.find((mission) => mission.id === secondaryBriefingId)} start={beginSecondaryMission} close={() => setSecondaryBriefingId(null)} />}
       {leaveMissionDialog && <div className="leave-mission-backdrop" role="presentation"><section className="leave-mission-dialog" role="dialog" aria-modal="true" aria-label="Sair da missão"><p>MISSÃO EM ANDAMENTO</p><h2>Deseja sair da missão?</h2><span>Seu progresso fica salvo e você poderá continuar mais tarde pela aba Missões.</span><div><button className="secondary" onClick={() => { setLeaveMissionDialog(false); setPendingScreen(null); }}>Continuar missão</button><button onClick={() => void leaveActiveMission()}>Sair da missão</button></div></section></div>}
       {noteEditorOpen && <div className="note-overlay" role="dialog" aria-modal="true" aria-label="Nova anotação"><section><button className="note-close" onClick={() => setNoteEditorOpen(false)} aria-label="Fechar">×</button><p className="eyebrow">ANOTAÇÃO PESSOAL</p><h2>{book?.name} {chapter}:{selectedVerses[0] || selectedVerse}{selectedVerses.length > 1 ? `-${selectedVerses.at(-1)}` : ""}</h2><textarea value={noteDraft} onChange={(event) => setNoteDraft(event.target.value)} placeholder="O que Deus falou com você neste trecho?" autoFocus /><div><button className="secondary-note" onClick={() => { setNoteDraft(""); }}>Limpar</button><button className="save-note" onClick={saveNote}>Salvar anotação</button></div></section></div>}
+      <StudyPicker open={studyPickerOpen} selection={studySelection} onClose={() => setStudyPickerOpen(false)} onAssigned={() => { void refreshStudyMarks(); notify("Versículo adicionado ao estudo"); }} />
+      <PersonalStudies open={studyLibraryOpen} onClose={() => { setStudyLibraryOpen(false); setStudyReferenceFilter(null); }} source={studySource} referenceFilter={studyReferenceFilter} onOpenReference={(reference) => { setMissionMode(false); setBookSlug(reference.bookSlug); setChapter(reference.chapter); setSelectedVerse(reference.verse); setSelectedVerses([reference.verse]); setVerseSelected(true); setStudyLibraryOpen(false); setStudyReferenceFilter(null); go("bible"); }} />
       {toast && <div className="toast">✓ {toast}</div>}
       {developerGift && <DeveloperGiftModal gift={developerGift} close={() => void claimDeveloperGift()} />}
       {scrollDiscovery && <ScrollDiscoveryModal discovery={scrollDiscovery} close={() => setScrollDiscovery(null)} />}
@@ -1329,7 +1351,7 @@ function JourneyPage({ manifest, progress, activeSecondaryMission, activeSeconda
     <div className="daily-title"><div><p>MISSÕES DIÁRIAS</p><h2>Fortaleça sua constância</h2></div><span>◴ 24h</span></div>
     <div className="daily-quests">
       <article className={completedCount ? "complete" : ""}><i>▥</i><div><b>Leia um capítulo</b><span>{completedCount ? "1/1 concluído" : "0/1 capítulo"}<u><em style={{ width: completedCount ? "100%" : "0%" }} /></u></span></div><strong>+20 XP</strong></article>
-      <article className={progress.missedStreakDays ? "streak-paused" : ""}><i>🔥</i><div><b>Mantenha a chama acesa <HelpButton title="Como funciona a chama" text="Conclua pelo menos um capítulo por dia. A cada 10 dias de leitura, você ganha mais 1% de XP em todas as recompensas, até +30%. Se perder dias, o bônus zera; restaure-os por 100 siclos de prata cada." /></b><span>{progress.streak} {progress.streak === 1 ? "dia consecutivo" : "dias consecutivos"} de leitura{progress.missedStreakDays ? <small>{progress.missedStreakDays} {progress.missedStreakDays === 1 ? "dia perdido" : "dias perdidos"} · 100 siclos de prata por dia</small> : null}</span></div>{progress.missedStreakDays ? <button className="streak-restore" onClick={onRestoreStreak}>Restaurar<br /><b>◆ {progress.missedStreakDays * 100}</b></button> : <strong>+{progress.xpBonusPercent ?? 0}% XP</strong>}</article>
+      <article className={progress.streakRestorationAvailable ? "streak-paused" : ""}><i>🔥</i><div><b>Mantenha a chama acesa <HelpButton title="Como funciona a chama" text="Conclua pelo menos um capítulo por dia. A cada 10 dias de leitura, você ganha mais 1% de XP em todas as recompensas, até +30%. Se perder dias, o bônus zera. A restauração custa 100 siclos por dia perdido e fica disponível por no máximo três dias após a quebra." /></b><span>{progress.streak} {progress.streak === 1 ? "dia consecutivo" : "dias consecutivos"} de leitura{progress.streakRestorationAvailable ? <small>{progress.missedStreakDays} {progress.missedStreakDays === 1 ? "dia perdido" : "dias perdidos"} · restam {progress.streakRestorationDaysLeft} {progress.streakRestorationDaysLeft === 1 ? "dia" : "dias"} para restaurar</small> : null}</span></div>{progress.streakRestorationAvailable ? <button className="streak-restore" onClick={onRestoreStreak}>Restaurar<br /><b>◆ {(progress.missedStreakDays ?? 0) * 100}</b></button> : <strong>+{progress.xpBonusPercent ?? 0}% XP</strong>}</article>
       <article className={noteCompleted ? "complete" : ""}><i>✎</i><div><b>Medite na Palavra</b><span>{noteCompleted ? "1/1 concluído" : "Crie uma anotação"}<u><em style={{ width: noteCompleted ? "100%" : "0%" }} /></u></span></div><strong>+15 XP</strong></article>
     </div>
   </section>;
@@ -1991,7 +2013,7 @@ function SocialPage({ notify, dark, setDark, progress, manifest, onOpenFavorite,
   }
 
   return <section className="generic-page social-page social-home page-in">
-    <header className="social-topbar"><button className="social-wordmark" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })} aria-label="Ir ao início do Social">VERBO <i>social</i></button><div><button className="social-top-icon social-compose-button" onClick={() => { if (!privacy?.showActivities) { notify("Ative o compartilhamento nas preferências para publicar para seus amigos"); openAccount(); return; } setComposerOpen(true); }} aria-label="Compartilhar reflexão">✎</button><button className="social-top-icon social-add-friend" onClick={() => { setProfileError(""); setFriendFinderOpen(true); }} aria-label="Adicionar amigo"><span aria-hidden="true" /><i aria-hidden="true">+</i></button><button className="social-top-icon" onClick={openAccount} aria-label="Abrir meu perfil">◎</button><button className="social-top-icon social-notification-button" onClick={() => setNotificationsOpen(true)} aria-label="Ver notificações">🔔{unreadNotifications > 0 && <i>{unreadNotifications > 9 ? "9+" : unreadNotifications}</i>}</button></div></header>
+    <header className="social-topbar"><button className="social-wordmark" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })} aria-label="Ir ao início do Social">VERBO <i>social</i></button><div><button className="social-top-icon social-compose-button" onClick={() => { if (!privacy?.showActivities) { notify("Ative o compartilhamento nas preferências para publicar para seus amigos"); openAccount(); return; } setComposerOpen(true); }} aria-label="Compartilhar reflexão">✎</button><button className="social-top-icon social-add-friend" onClick={() => { setProfileError(""); setFriendFinderOpen(true); }} aria-label="Adicionar amigo"><span aria-hidden="true" /><i aria-hidden="true">+</i></button><button className="social-top-icon social-notification-button" onClick={() => setNotificationsOpen(true)} aria-label="Ver notificações">🔔{unreadNotifications > 0 && <i>{unreadNotifications > 9 ? "9+" : unreadNotifications}</i>}</button></div></header>
     <section className="social-self-card"><button onClick={openAccount}><SocialAvatar contact={{ displayName: progress.displayName?.trim() || "Usuário do VERBO", profilePhoto: progress.profilePhoto || "" }} /><span><small>SUA JORNADA</small><b>{progress.displayName?.trim() || "Usuário do VERBO"}</b><em>Nível {progress.level} · {progress.streak} dias de leitura</em></span><strong>Ver perfil ›</strong></button></section>
     <section className="social-stories" aria-label="Jornadas da comunidade"><div className="social-stories-heading"><span>JORNADAS</span><button onClick={() => setSocialView("community")}>Ver amigos</button></div><div className="social-stories-rail"><button className="social-story social-story-self" onClick={openAccount}><span className="social-story-ring"><SocialAvatar contact={{ displayName: progress.displayName?.trim() || "Você", profilePhoto: progress.profilePhoto || "" }} /><i>+</i></span><small>Sua jornada</small></button>{data.friends.map((friend) => <button className="social-story" key={friend.publicHandle} onClick={() => void openProfile(friend.publicHandle, "community")}><span className="social-story-ring"><SocialAvatar contact={friend} /></span><small>{friend.displayName}</small></button>)}</div></section>
     <nav className="social-view-tabs" aria-label="Navegação social"><button className={socialView === "feed" ? "active" : ""} onClick={() => setSocialView("feed")}>Feed</button><button className={socialView === "discover" ? "active" : ""} onClick={() => setSocialView("discover")}>Descobrir</button><button className={socialView === "community" ? "active" : ""} onClick={() => setSocialView("community")}>Comunidade <small>{data.friends.length}</small></button></nav>
@@ -2053,7 +2075,7 @@ function ProfilePhoto({ src }: { src: string }) {
 
 function PixelDisciple({ level = 1, turning = false }: { level?: number; turning?: boolean }) {
   // Sprites fornecidos para o personagem da campanha; mantém os pixels nítidos em qualquer tela.
-  const tier = level >= 50 ? 50 : level >= 40 ? 40 : level >= 30 ? 30 : level >= 20 ? 20 : 30;
+  const tier = level >= 50 ? 50 : level >= 40 ? 40 : level >= 30 ? 30 : level >= 20 ? 20 : level >= 10 ? 10 : 30;
   if (turning) {
     const directions = ["south", "south-west", "west", "north-west", "north", "north-east", "east", "south-east"];
     return <span className="pixel-disciple-turn">{directions.map((direction, index) => <img key={direction} src={`/characters/homem-${tier}lvl-idle-${direction}.png`} alt="" aria-hidden="true" style={{ animationDelay: `${-index * 0.4}s` }} />)}</span>;

@@ -1,0 +1,36 @@
+{
+  "group_id": "b8bab002-821b-4688-8cd4-ec19fdac593c",
+  "states": [
+    {
+      "character": {
+        "id": "2e67c9b3-b3e2-46cc-ac2b-55c3b2e1ec70",
+        "name": "Tire a capa e cinto",
+        "prompt": "Homem com uma espada, escudo, sandalhas, coura\u00e7a, capacete e cinto",
+        "size": {
+          "width": 40,
+          "height": 40
+        },
+        "template_id": "mannequin",
+        "directions": 8,
+        "view": "low top-down",
+        "created_at": "2026-09-02T14:14:52.866320+00:00"
+      },
+      "folder": "Tire_a_capa_e_cinto",
+      "frames": {
+        "rotations": {
+          "south": "Tire_a_capa_e_cinto/rotations/south.png",
+          "south-east": "Tire_a_capa_e_cinto/rotations/south-east.png",
+          "east": "Tire_a_capa_e_cinto/rotations/east.png",
+          "north-east": "Tire_a_capa_e_cinto/rotations/north-east.png",
+          "north": "Tire_a_capa_e_cinto/rotations/north.png",
+          "north-west": "Tire_a_capa_e_cinto/rotations/north-west.png",
+          "west": "Tire_a_capa_e_cinto/rotations/west.png",
+          "south-west": "Tire_a_capa_e_cinto/rotations/south-west.png"
+        },
+        "animations": {}
+      }
+    }
+  ],
+  "export_version": "3.1",
+  "export_date": "2026-09-02T14:17:36.145830"
+}

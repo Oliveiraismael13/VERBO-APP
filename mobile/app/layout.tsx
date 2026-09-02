@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { headers } from "next/headers";
+import Script from "next/script";
 import AppInstall from "../components/AppInstall";
 import "./globals.css";
 import "./rpg.css";
@@ -49,6 +50,9 @@ export default function RootLayout({
   return (
     <html lang="pt-BR">
       <head>
+        <Script id="touch-capable-layout" strategy="beforeInteractive">
+          {`if (navigator.maxTouchPoints > 0) document.documentElement.classList.add("touch-capable");`}
+        </Script>
         <link rel="apple-touch-icon" sizes="180x180" href="/icons/verbo-180.png?v=2" />
         <link rel="manifest" href="/manifest.webmanifest" />
         <meta name="apple-mobile-web-app-title" content="Verbo" />

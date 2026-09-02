@@ -1,0 +1,13 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "verbo-preview",
+  "compatibility_date": "2026-09-02",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "verbo-d1",
+      "database_id": "a67a7df0-4fdc-4da8-9e4f-176f47efdce2",
+      "migrations_dir": "drizzle"
+    }
+  ]
+}

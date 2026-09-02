@@ -22,11 +22,13 @@ type ProgressRow = {
   last_note_date: string | null;
   streak_before_break: number;
   missed_streak_days: number;
+  streak_break_date: string | null;
 };
 
 const NOTE_XP = 15;
 const SCROLL_XP = 20;
 const STREAK_RESTORE_COIN_COST = 100;
+const STREAK_RESTORE_WINDOW_DAYS = 3;
 const defaultProgress = { xp: 0, level: 1, coins: 0, streak: 0, completed: [] as string[], achievements: [] as string[], dailyNoteCompleted: false };
 
 function secondarySecretRequirement(userId: string, missionId: string) {
@@ -89,7 +91,7 @@ async function currentUser() {
 async function ensureSchema() {
   await env.DB.batch([
     env.DB.prepare("CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY NOT NULL, display_name TEXT, created_at INTEGER NOT NULL)"),
-    env.DB.prepare("CREATE TABLE IF NOT EXISTS user_progress (user_id TEXT PRIMARY KEY NOT NULL, xp INTEGER DEFAULT 0 NOT NULL, level INTEGER DEFAULT 1 NOT NULL, coins INTEGER DEFAULT 0 NOT NULL, streak INTEGER DEFAULT 0 NOT NULL, last_read_date TEXT, last_login_date TEXT, last_note_date TEXT, streak_before_break INTEGER DEFAULT 0 NOT NULL, missed_streak_days INTEGER DEFAULT 0 NOT NULL, updated_at INTEGER NOT NULL, FOREIGN KEY (user_id) REFERENCES users(id))"),
+    env.DB.prepare("CREATE TABLE IF NOT EXISTS user_progress (user_id TEXT PRIMARY KEY NOT NULL, xp INTEGER DEFAULT 0 NOT NULL, level INTEGER DEFAULT 1 NOT NULL, coins INTEGER DEFAULT 0 NOT NULL, streak INTEGER DEFAULT 0 NOT NULL, last_read_date TEXT, last_login_date TEXT, last_note_date TEXT, streak_before_break INTEGER DEFAULT 0 NOT NULL, missed_streak_days INTEGER DEFAULT 0 NOT NULL, streak_break_date TEXT, updated_at INTEGER NOT NULL, FOREIGN KEY (user_id) REFERENCES users(id))"),
     env.DB.prepare("CREATE TABLE IF NOT EXISTS completed_chapters (user_id TEXT NOT NULL, book_slug TEXT NOT NULL, chapter INTEGER NOT NULL, completed_at INTEGER NOT NULL, PRIMARY KEY (user_id, book_slug, chapter), FOREIGN KEY (user_id) REFERENCES users(id))"),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_completed_chapters_user_date ON completed_chapters(user_id, completed_at)"),
     env.DB.prepare("CREATE TABLE IF NOT EXISTS user_secondary_missions (user_id TEXT NOT NULL, mission_id TEXT NOT NULL, unlocked_at INTEGER NOT NULL, active INTEGER NOT NULL DEFAULT 0 CHECK(active IN (0, 1)), completed_at INTEGER, PRIMARY KEY(user_id, mission_id), FOREIGN KEY (user_id) REFERENCES users(id))"),
@@ -110,6 +112,9 @@ async function ensureSchema() {
   if (!columns.results.some((column) => column.name === "missed_streak_days")) {
     await env.DB.prepare("ALTER TABLE user_progress ADD COLUMN missed_streak_days INTEGER DEFAULT 0 NOT NULL").run();
   }
+  if (!columns.results.some((column) => column.name === "streak_break_date")) {
+    await env.DB.prepare("ALTER TABLE user_progress ADD COLUMN streak_break_date TEXT").run();
+  }
 }
 
 async function ensureUser(user: { id: string; email: string }) {
@@ -122,11 +127,13 @@ async function ensureUser(user: { id: string; email: string }) {
 
 async function loadProgress(userId: string) {
   const [progress, chapters, achievements, coop] = await Promise.all([
-    env.DB.prepare("SELECT xp, level, coins, streak, last_read_date, last_note_date, streak_before_break, missed_streak_days FROM user_progress WHERE user_id = ?").bind(userId).first<ProgressRow>(),
+    env.DB.prepare("SELECT xp, level, coins, streak, last_read_date, last_note_date, streak_before_break, missed_streak_days, streak_break_date FROM user_progress WHERE user_id = ?").bind(userId).first<ProgressRow>(),
     env.DB.prepare("SELECT book_slug, chapter FROM completed_chapters WHERE user_id = ? ORDER BY completed_at DESC").bind(userId).all<{ book_slug: string; chapter: number }>(),
     env.DB.prepare("SELECT code FROM user_achievements WHERE user_id = ? ORDER BY unlocked_at DESC").bind(userId).all<{ code: string }>(),
     getCoopMissionState(userId),
   ]);
+  const restorationAge = progress?.streak_break_date ? daysBetween(progress.streak_break_date, todayInBrazil()) : STREAK_RESTORE_WINDOW_DAYS + 1;
+  const streakRestorationAvailable = Boolean(progress?.missed_streak_days && progress?.streak_break_date && restorationAge <= STREAK_RESTORE_WINDOW_DAYS);
   return {
     xp: progress?.xp ?? 0,
     level: levelForXp(progress?.xp ?? 0),
@@ -134,11 +141,19 @@ async function loadProgress(userId: string) {
     streak: progress?.streak ?? 0,
     xpBonusPercent: xpBonusPercent(progress?.streak ?? 0),
     missedStreakDays: progress?.missed_streak_days ?? 0,
+    streakRestorationAvailable,
+    streakRestorationDaysLeft: streakRestorationAvailable ? STREAK_RESTORE_WINDOW_DAYS - restorationAge : 0,
     dailyNoteCompleted: progress?.last_note_date === todayInBrazil(),
     completed: chapters.results.map((item) => `${item.book_slug}:${item.chapter}`),
     achievements: achievements.results.map((item) => item.code),
     coop,
   };
+}
+
+async function expireStreakRestoration(userId: string) {
+  const progress = await env.DB.prepare("SELECT streak_break_date, missed_streak_days FROM user_progress WHERE user_id = ?").bind(userId).first<ProgressRow>();
+  if (!progress?.missed_streak_days || !progress.streak_break_date || daysBetween(progress.streak_break_date, todayInBrazil()) <= STREAK_RESTORE_WINDOW_DAYS) return;
+  await env.DB.prepare("UPDATE user_progress SET streak = 0, streak_before_break = 0, missed_streak_days = 0, streak_break_date = NULL, updated_at = ? WHERE user_id = ?").bind(Date.now(), userId).run();
 }
 
 export async function GET() {
@@ -147,6 +162,7 @@ export async function GET() {
   try {
     await ensureSchema();
     await ensureUser(user);
+    await expireStreakRestoration(user.id);
     return withCors(Response.json(await loadProgress(user.id)));
   } catch (error) {
     console.error("Falha ao carregar progresso", error);
@@ -162,6 +178,7 @@ export async function POST(request: Request) {
   try {
     await ensureSchema();
     await ensureUser(user);
+    await expireStreakRestoration(user.id);
     if (body.action === "scroll") {
       const scrollKeys = Array.isArray(body.scrollKeys) ? body.scrollKeys : [];
       const requestedKeys = Array.from(new Set(scrollKeys.filter((key): key is string => typeof key === "string"))).slice(0, 2);
@@ -209,13 +226,14 @@ export async function POST(request: Request) {
       return withCors(Response.json({ ...(await loadProgress(user.id)), reward: { xp: xpGain, coins: 0, levelUp: nextLevel > (current?.level ?? 1), scrollsAwarded: awardedCount } }));
     }
     if (body.action === "restore-streak") {
-      const current = await env.DB.prepare("SELECT coins, streak_before_break, missed_streak_days FROM user_progress WHERE user_id = ?").bind(user.id).first<ProgressRow>();
+      const current = await env.DB.prepare("SELECT coins, streak_before_break, missed_streak_days, streak_break_date FROM user_progress WHERE user_id = ?").bind(user.id).first<ProgressRow>();
       const missedDays = current?.missed_streak_days ?? 0;
       const cost = missedDays * STREAK_RESTORE_COIN_COST;
       if (!missedDays) return withCors(Response.json({ error: "Não há dias perdidos para restaurar." }, { status: 400 }));
+      if (!current?.streak_break_date || daysBetween(current.streak_break_date, todayInBrazil()) > STREAK_RESTORE_WINDOW_DAYS) return withCors(Response.json({ error: "O prazo de três dias para restaurar a chama terminou. Sua sequência recomeçou." }, { status: 400 }));
       if ((current?.coins ?? 0) < cost) return withCors(Response.json({ error: `Você precisa de ${cost} siclos de prata para restaurar os dias perdidos.` }, { status: 400 }));
       const restoredStreak = current?.streak_before_break ?? 0;
-      await env.DB.prepare("UPDATE user_progress SET coins = coins - ?, streak = ?, streak_before_break = 0, missed_streak_days = 0, updated_at = ? WHERE user_id = ?")
+      await env.DB.prepare("UPDATE user_progress SET coins = coins - ?, streak = ?, streak_before_break = 0, missed_streak_days = 0, streak_break_date = NULL, updated_at = ? WHERE user_id = ?")
         .bind(cost, restoredStreak, Date.now(), user.id).run();
       return withCors(Response.json({ ...(await loadProgress(user.id)), restoration: { cost, nextDay: restoredStreak + 1 } }));
     }
@@ -234,22 +252,35 @@ export async function POST(request: Request) {
       return withCors(Response.json({ error: "Capítulo inválido" }, { status: 400 }));
     }
     if (body.coop) {
-      const current = await env.DB.prepare("SELECT xp, level, streak, last_read_date, streak_before_break, missed_streak_days FROM user_progress WHERE user_id = ?").bind(user.id).first<ProgressRow>();
+      const current = await env.DB.prepare("SELECT xp, level, streak, last_read_date, streak_before_break, missed_streak_days, streak_break_date FROM user_progress WHERE user_id = ?").bind(user.id).first<ProgressRow>();
       const today = todayInBrazil();
       const lastRead = current?.last_read_date;
       let nextStreak = current?.streak ?? 0;
       let streakBeforeBreak = current?.streak_before_break ?? 0;
       let missedStreakDays = current?.missed_streak_days ?? 0;
+      let streakBreakDate = current?.streak_break_date ?? null;
       if (lastRead !== today) {
         if (!lastRead) nextStreak = 1;
         else if (lastRead === previousDay(today)) nextStreak += 1;
-        else { missedStreakDays += daysBetween(lastRead, today) - 1; streakBeforeBreak = current?.missed_streak_days ? (current?.streak_before_break ?? 0) : nextStreak; nextStreak = 0; }
+        else {
+          const breakDate = streakBreakDate || previousDay(lastRead);
+          if (daysBetween(breakDate, today) > STREAK_RESTORE_WINDOW_DAYS) {
+            streakBeforeBreak = 0;
+            missedStreakDays = 0;
+            streakBreakDate = null;
+          } else if (nextStreak > 0 || current?.missed_streak_days) {
+            missedStreakDays += daysBetween(lastRead, today) - 1;
+            streakBeforeBreak = current?.missed_streak_days ? (current?.streak_before_break ?? 0) : nextStreak;
+            streakBreakDate = breakDate;
+          }
+          nextStreak = 0;
+        }
       }
       const coopRound = await recordCoopChapter(user.id, { bookSlug: body.bookSlug, chapter: body.chapter });
       const xpGain = xpWithStreakBonus(40, nextStreak);
       const nextXp = (current?.xp ?? 0) + xpGain;
       const nextLevel = levelForXp(nextXp);
-      await env.DB.prepare("UPDATE user_progress SET xp = ?, level = ?, coins = coins + 4, streak = ?, streak_before_break = ?, missed_streak_days = ?, last_read_date = ?, updated_at = ? WHERE user_id = ?").bind(nextXp, nextLevel, nextStreak, streakBeforeBreak, missedStreakDays, today, Date.now(), user.id).run();
+      await env.DB.prepare("UPDATE user_progress SET xp = ?, level = ?, coins = coins + 4, streak = ?, streak_before_break = ?, missed_streak_days = ?, streak_break_date = ?, last_read_date = ?, updated_at = ? WHERE user_id = ?").bind(nextXp, nextLevel, nextStreak, streakBeforeBreak, missedStreakDays, streakBreakDate, today, Date.now(), user.id).run();
       try {
         await recordSocialActivity(user.id, "chapter_completed", { title: "Avançou na jornada Coop", detail: "Concluiu um capítulo com seu parceiro de leitura.", reference: `${body.bookSlug}:${body.chapter}:1`, xp: xpGain, level: nextLevel, notifyFriends: true });
       } catch (error) {
@@ -261,18 +292,27 @@ export async function POST(request: Request) {
       .bind(user.id, body.bookSlug, body.chapter).first<{ found: number }>();
     if (existing) return withCors(Response.json({ ...(await loadProgress(user.id)), reward: null }));
 
-    const current = await env.DB.prepare("SELECT xp, level, streak, last_read_date, streak_before_break, missed_streak_days FROM user_progress WHERE user_id = ?").bind(user.id).first<ProgressRow>();
+    const current = await env.DB.prepare("SELECT xp, level, streak, last_read_date, streak_before_break, missed_streak_days, streak_break_date FROM user_progress WHERE user_id = ?").bind(user.id).first<ProgressRow>();
     const today = todayInBrazil();
     const lastRead = current?.last_read_date;
     let nextStreak = current?.streak ?? 0;
     let streakBeforeBreak = current?.streak_before_break ?? 0;
     let missedStreakDays = current?.missed_streak_days ?? 0;
+    let streakBreakDate = current?.streak_break_date ?? null;
     if (lastRead !== today) {
       if (!lastRead) nextStreak = 1;
       else if (lastRead === previousDay(today)) nextStreak += 1;
       else {
-        missedStreakDays += daysBetween(lastRead, today) - 1;
-        streakBeforeBreak = current?.missed_streak_days ? (current?.streak_before_break ?? 0) : nextStreak;
+        const breakDate = streakBreakDate || previousDay(lastRead);
+        if (daysBetween(breakDate, today) > STREAK_RESTORE_WINDOW_DAYS) {
+          streakBeforeBreak = 0;
+          missedStreakDays = 0;
+          streakBreakDate = null;
+        } else if (nextStreak > 0 || current?.missed_streak_days) {
+          missedStreakDays += daysBetween(lastRead, today) - 1;
+          streakBeforeBreak = current?.missed_streak_days ? (current?.streak_before_break ?? 0) : nextStreak;
+          streakBreakDate = breakDate;
+        }
         nextStreak = 0;
       }
     }
@@ -296,8 +336,8 @@ export async function POST(request: Request) {
 
     await env.DB.batch([
       env.DB.prepare("INSERT INTO completed_chapters (user_id, book_slug, chapter, completed_at) VALUES (?, ?, ?, ?)").bind(user.id, body.bookSlug, body.chapter, now),
-      env.DB.prepare("UPDATE user_progress SET xp = ?, level = ?, coins = coins + ?, streak = ?, streak_before_break = ?, missed_streak_days = ?, last_read_date = ?, updated_at = ? WHERE user_id = ?")
-        .bind(nextXp, nextLevel, coinGain, nextStreak, streakBeforeBreak, missedStreakDays, today, now, user.id),
+      env.DB.prepare("UPDATE user_progress SET xp = ?, level = ?, coins = coins + ?, streak = ?, streak_before_break = ?, missed_streak_days = ?, streak_break_date = ?, last_read_date = ?, updated_at = ? WHERE user_id = ?")
+        .bind(nextXp, nextLevel, coinGain, nextStreak, streakBeforeBreak, missedStreakDays, streakBreakDate, today, now, user.id),
       ...(secondaryMissionCompleted && secondaryMission ? [env.DB.prepare("UPDATE user_secondary_missions SET active = 0, completed_at = ? WHERE user_id = ? AND mission_id = ?").bind(now, user.id, secondaryMission.id)] : []),
     ]);
 
