@@ -10,7 +10,7 @@ import { secondaryMissionById, secondaryMissions, secondaryMissionProgress, type
 import { mainMissionScrollForChapter } from "../lib/main-mission-scrolls";
 import { PersonalStudies, StudyPicker, type StudyVerseReference } from "./PersonalStudies";
 
-type Screen = "journey" | "bible" | "plans" | "camera" | "studies" | "social" | "result";
+type Screen = "journey" | "bible" | "plans" | "camera" | "studies" | "social" | "support" | "result";
 type BibleVerse = { number: number; text: string };
 type BibleBook = { slug: string; name: string; longName: string; abbreviation: string; testament: "old" | "new"; isDeuterocanonical?: boolean; chapters: BibleVerse[][] };
 type ManifestBook = Omit<BibleBook, "chapters"> & { code: string; chapterCount: number; verseCount: number };
@@ -1053,6 +1053,7 @@ export default function VerboApp() {
           <div className="top-actions">
             <button className="hud-search" onClick={() => setSearchOpen(true)} aria-label="Buscar na Bíblia">⌕</button>
             <button className="hud-studies" onClick={() => { setStudyReferenceFilter(null); setStudyLibraryOpen(true); }} aria-label="Abrir meus estudos">▤</button>
+            <button className="hud-support" onClick={() => go("support")} aria-label="Apoiar o projeto" title="Apoiar o projeto">♡</button>
             <div className="hud-resource"><span>◆</span>{progress.coins}</div>
           </div>
         </header>
@@ -1187,6 +1188,7 @@ export default function VerboApp() {
       {screen === "studies" && <StudiesPage manifest={manifest} progress={progress} secondaryMissionStates={secondaryMissionStates} onStart={openMissionBriefing} onUnlockSecondary={unlockSecondaryMission} onContinueSecondary={beginSecondaryMission} onRestartSecondary={restartSecondaryMission} />}
       {screen === "plans" && <PlansPage />}
       {screen === "social" && <SocialPage notify={notify} dark={dark} setDark={setDark} progress={progress} manifest={manifest} onOpenFavorite={openFavorite} onProfilePhotoChange={updateProfilePhoto} onDisplayNameChange={updateDisplayName} />}
+      {screen === "support" && <SupportPage onBack={() => go("journey")} notify={notify} />}
 
       {screen !== "camera" && (
         <nav className="bottom-nav" aria-label="Navegação principal">
@@ -1539,6 +1541,35 @@ function StudiesPage({ manifest, progress, secondaryMissionStates, onStart, onUn
 
 function PlansPage() {
   return <section className="generic-page page-in"><p className="eyebrow">CRESÇA UM DIA DE CADA VEZ</p><h1>Planos</h1><p className="lead">Leituras breves para criar constância e aprofundar sua fé.</p><div className="progress-card"><span>PLANO ATUAL</span><h2>João em 21 dias</h2><p>Dia 4 de 21 · João 3</p><div><i style={{ width: "19%" }} /></div><button>Continuar leitura →</button></div><h3 className="list-heading">Para começar</h3><div className="plan-list"><article><i>7</i><div><b>Uma semana com os Salmos</b><span>7 dias · 8 min/dia</span></div><button>＋</button></article><article><i>14</i><div><b>Aprendendo a confiar</b><span>14 dias · 10 min/dia</span></div><button>＋</button></article></div></section>;
+}
+
+function SupportPage({ onBack, notify }: { onBack: () => void; notify: (message: string) => void }) {
+  const copyPix = async () => {
+    try {
+      await navigator.clipboard.writeText("04091278094");
+      notify("PIX copiado");
+    } catch {
+      notify("Chave PIX: 04091278094");
+    }
+  };
+
+  return <section className="generic-page support-page page-in">
+    <p className="eyebrow">APOIE O VERBO</p>
+    <h1>Um projeto feito por propósito.</h1>
+    <p className="lead">O Verbo é um projeto independente, voluntário e sem fins lucrativos, criado para aproximar pessoas da leitura e do estudo das Escrituras.</p>
+    <article className="support-card">
+      <span className="support-heart" aria-hidden="true">♡</span>
+      <h2>Se esta experiência abençoou você</h2>
+      <p>e você deseja ajudar o projeto a continuar crescendo, sua contribuição será recebida com gratidão. Cada apoio ajuda a manter o desenvolvimento, as melhorias e o Verbo acessível a mais pessoas.</p>
+      <div className="pix-key">
+        <span>CHAVE PIX · CPF</span>
+        <strong>040.912.780-94</strong>
+      </div>
+      <button className="copy-pix" onClick={() => void copyPix()}>Copiar chave PIX</button>
+    </article>
+    <p className="support-note">Apoiar é livre. Compartilhar o Verbo com alguém que precisa da Palavra também fortalece esta missão.</p>
+    <button className="support-back" onClick={onBack}>Voltar à jornada</button>
+  </section>;
 }
 
 type SocialContact = { publicHandle: string; displayName: string; profilePhoto: string };
