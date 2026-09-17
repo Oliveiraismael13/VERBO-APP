@@ -5,6 +5,7 @@ import Script from "next/script";
 import AppInstall from "../components/AppInstall";
 import "./globals.css";
 import "./rpg.css";
+import "./experience.css";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",

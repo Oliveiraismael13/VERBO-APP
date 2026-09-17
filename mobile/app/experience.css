@@ -1,0 +1,127 @@
+/* Journey and community: readable content, clear actions and comfortable touch targets. */
+.journey-page { padding-bottom: 48px; }
+.journey-page .player-hud { gap: 12px; margin-bottom: 16px; }
+.journey-page .player-level h1 { font-size: 20px; line-height: 1.2; }
+.journey-page .player-level p { font-size: 9px; letter-spacing: .7px; }
+.journey-page .player-level small { color: #b7bdd0; font-size: 11px; line-height: 1.4; }
+.journey-page .streak { min-height: 48px; justify-content: center; }
+.journey-page .streak b { font-size: 14px; }
+.journey-page .streak span { color: #b7bdd0; font-size: 10px; }
+.journey-shortcuts { display: flex; gap: 10px; margin: 0 0 20px; }
+.journey-shortcuts a { display: flex; flex: 1; align-items: center; justify-content: space-between; gap: 8px; min-height: 44px; padding: 10px 12px; border: 1px solid #33394f; border-radius: 12px; color: #dcd5f5; background: #191e2e; text-decoration: none; font-size: 12px; }
+.journey-shortcuts a span { color: #c5b1ff; }
+.journey-page .active-quest { padding: 22px 18px 18px; margin-bottom: 28px; }
+.journey-page .active-quest > p { gap: 12px; font-size: 10px; line-height: 1.5; letter-spacing: .7px; }
+.journey-page .active-quest h2 { margin-top: 14px; font-size: 28px; line-height: 1.15; }
+.journey-page .active-quest blockquote { margin-bottom: 16px; font-size: 15px; line-height: 1.55; }
+.quest-act-progress { position: relative; margin: 18px 0; }
+.quest-act-progress > div { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 9px; font-size: 12px; color: #c6bddb; }
+.quest-act-progress b { flex-shrink: 0; color: #e0d3ff; }
+.quest-act-progress progress { display: block; width: 100%; height: 6px; border: 0; border-radius: 6px; overflow: hidden; background: #ffffff18; accent-color: #a787f7; }
+.quest-act-progress progress::-webkit-progress-bar { background: #ffffff18; }
+.quest-act-progress progress::-webkit-progress-value { background: linear-gradient(90deg, #775ad9, #c3a3ff); border-radius: 6px; }
+.journey-page .active-quest > div:last-child { flex-direction: column; align-items: stretch; gap: 12px; }
+.journey-page .active-quest > div:last-child span { color: #bcc3d4; font-size: 12px; }
+.journey-page .active-quest button { min-height: 48px; font-size: 12px; border-radius: 12px; }
+.journey-daily, .journey-trail { position: relative; margin-bottom: 28px; scroll-margin-top: 96px; }
+.journey-page .daily-title h2, .journey-page .quest-heading h2 { font-size: 23px; }
+.journey-page .daily-title p, .journey-page .quest-heading p { color: #bda6ff; font-size: 10px; letter-spacing: 1px; }
+.journey-page .daily-title > span, .journey-page .quest-heading > span { color: #b7bdd0; font-size: 11px; white-space: nowrap; }
+.journey-page .daily-quests article { padding: 14px 12px; gap: 10px; }
+.journey-page .daily-quests article b { font-size: 13px; line-height: 1.4; }
+.journey-page .daily-quests article span { color: #b7bdd0; font-size: 11px; line-height: 1.5; }
+.journey-page .daily-quests article strong { font-size: 11px; }
+.journey-page .daily-quests .streak-restore { min-height: 44px; }
+.journey-page .quest-map { min-height: 0; padding: 4px 0 0; }
+.journey-page .map-line { left: 24px; top: 26px; bottom: 38px; background: #45405e; }
+.journey-page .map-node { width: 100%; min-height: 78px; grid-template-columns: 44px minmax(0, 1fr); gap: 14px; margin: 0 0 10px; padding: 14px; }
+.journey-page .map-node::after { display: none; }
+.journey-page .map-node > span { width: 40px; height: 44px; }
+.journey-page .map-node small { font-size: 9px; letter-spacing: .8px; }
+.journey-page .map-node b { font-size: 18px; }
+.journey-page .map-node p { font-size: 12px; line-height: 1.5; white-space: normal; color: #b7bdd0; }
+.journey-page .map-node.locked { opacity: .7; }
+.journey-page .map-node.current { border-color: #a080f3; box-shadow: inset 3px 0 #a080f3, 0 4px 24px #7557db20; }
+
+.social-home { --social-text: #29392f; --social-muted: #636f68; --social-card: #fff; --social-border: #e4ded5; --social-soft: #f5f1fa; --social-accent: #684796; }
+.rpg-shell.dark .social-home { --social-text: #eef0fa; --social-muted: #b6bdd0; --social-card: #181c2d; --social-border: #343a51; --social-soft: #28233d; --social-accent: #d0baff; }
+.social-home .social-topbar { margin-bottom: 18px; }
+.social-home .social-top-icon { width: 44px; height: 44px; border-radius: 13px; }
+.social-home .social-self-card { margin-bottom: 16px; box-shadow: none; }
+.social-home .social-self-card > button { min-height: 72px; padding: 12px; }
+.social-home .social-self-card small { font-size: 9px; }
+.social-home .social-self-card em { font-size: 11px; margin-top: 2px; }
+.social-home .social-self-card strong { font-size: 11px; color: var(--social-accent); }
+.social-home .social-view-tabs { gap: 4px; padding: 4px; margin-bottom: 18px; border-color: var(--social-border); background: var(--social-card); }
+.social-home .social-view-tabs button { display: flex; align-items: center; justify-content: center; gap: 4px; min-height: 44px; padding: 8px 4px; color: var(--social-muted); font-size: 12px; }
+.social-home .social-view-tabs button.active { background: var(--social-soft); color: var(--social-accent); box-shadow: none; }
+.social-home .social-view-tabs small { font-size: 10px; color: inherit; }
+.social-home .social-stories-heading span { font-size: 10px; letter-spacing: 1px; }
+.social-home .social-stories-heading button { min-height: 36px; font-size: 12px; color: var(--social-accent); }
+.social-home .social-stories-rail { gap: 16px; scroll-snap-type: x proximity; }
+.social-home .social-story { flex-basis: 64px; scroll-snap-align: start; }
+.social-home .social-story small { font-size: 11px; line-height: 1.5; }
+.social-compose-prompt { display: grid; grid-template-columns: 30px minmax(0, 1fr) 22px; gap: 10px; align-items: center; width: 100%; margin: 0 0 24px; padding: 15px 12px; border: 1px solid var(--social-border); border-radius: 14px; background: var(--social-card); color: var(--social-accent); text-align: left; }
+.social-compose-prompt > span:first-child { font-size: 25px; text-align: center; }
+.social-compose-prompt b { display: block; font-size: 13px; line-height: 1.4; }
+.social-compose-prompt small { display: block; margin-top: 4px; color: var(--social-muted); font-size: 11px; line-height: 1.4; }
+.social-home .social-feed-title h2 { font-size: 24px; }
+.social-home .social-feed-title .eyebrow { font-size: 10px; color: var(--social-accent); }
+.social-home .social-feed-tabs { gap: 8px; margin: 14px 0 18px; }
+.social-home .social-feed-tabs button { min-height: 40px; padding: 8px 15px; font-size: 12px; }
+.social-home .social-feed-list { gap: 20px; }
+.social-home .social-feed-list > article { border-radius: 16px; background: var(--social-card); box-shadow: 0 4px 16px #15132408; }
+.social-home .social-feed-card .social-activity-head { padding: 16px; grid-template-columns: 40px minmax(0, 1fr) 16px; gap: 10px; }
+.social-home .social-activity-head b { font-size: 14px; overflow-wrap: anywhere; }
+.social-home .social-feed-card .social-activity-head small { margin-top: 4px; font-size: 11px; color: var(--social-muted); }
+.social-home .social-feed-card .social-activity-copy { padding: 4px 16px 20px; gap: 12px; }
+.social-home .social-feed-card .social-activity-copy > div > i { font-size: 9px; letter-spacing: .8px; }
+.social-home .social-feed-card .social-activity-copy p { font-size: 21px; line-height: 1.35; overflow-wrap: anywhere; }
+.social-home .social-feed-card .social-post-detail p { margin: 10px 0 0; color: var(--social-text); font: 14px/1.65 Arial, sans-serif; white-space: pre-wrap; overflow-wrap: anywhere; }
+.social-post-detail button { min-height: 40px; padding: 8px 0; border: 0; background: transparent; color: var(--social-accent); font: 600 12px Arial, sans-serif; text-align: left; }
+.social-home .social-feed-card .social-activity-reference { min-height: 40px; font-size: 11px; line-height: 1.4; text-align: left; }
+.social-home .social-feed-card .social-reactions { display: flex; flex-wrap: wrap; gap: 8px; margin-inline: 16px; padding-block: 12px; }
+.social-home .social-feed-card .social-reactions button { min-width: 0; min-height: 44px; padding: 8px 10px; font-size: 13px; }
+.social-home .social-feed-card .social-reactions button span { font-size: 11px; }
+.social-home .social-comments { margin: 0 16px; padding-bottom: 16px; gap: 12px; }
+.social-home .social-comment p { font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; background: var(--social-soft); color: var(--social-text); }
+.social-home .social-comment p b { font-size: 12px; margin-bottom: 4px; color: var(--social-text); }
+.social-home .social-comment-form input { min-height: 44px; font-size: 16px; }
+.social-home .social-comment-form button { min-height: 44px; font-size: 12px; padding-inline: 12px; }
+.social-home .social-feed-empty { flex-direction: column; align-items: center; gap: 0; padding: 26px 18px; text-align: center; }
+.social-home .social-feed-empty > span { width: 44px; height: 44px; flex: 0 0 44px; }
+.social-home .social-feed-empty .social-empty-action { margin-top: 14px; }
+.social-home .social-feed-empty h3 { margin: 14px 0 8px; font: 600 23px Georgia, serif; color: var(--social-text); }
+.social-home .social-feed-empty p { font-size: 14px; line-height: 1.6; }
+.social-empty-action, .social-load-error button { min-height: 44px; border: 0; border-radius: 10px; padding: 10px 16px; background: #7051aa; color: #fff; font-weight: 700; }
+.social-load-error { padding: 14px; margin-bottom: 16px; border: 1px solid var(--social-border); border-radius: 12px; background: var(--social-card); color: var(--social-text); }
+.social-load-error p { margin: 0 0 10px; font-size: 13px; line-height: 1.5; }
+.social-home .social-loading { display: flex; gap: 10px; align-items: center; justify-content: center; min-height: 100px; font-size: 13px; color: var(--social-muted); }
+.social-loading-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--social-accent); }
+.social-home .social-discover-lead, .social-home .social-discover-empty { font-size: 13px; line-height: 1.5; }
+.social-home .social-discover-search input { min-height: 46px; font-size: 16px; }
+.social-home .social-person-profile b { font-size: 14px; }
+.social-home .social-person-profile small { font-size: 11px; }
+.social-home .social-person-add, .social-home .social-person-state { min-height: 44px; display: inline-flex; align-items: center; font-size: 11px; }
+.social-composer, .social-finder-dialog, .social-notifications-sheet { max-height: calc(100dvh - 32px); overflow-y: auto; overscroll-behavior: contain; }
+.social-composer textarea, .social-composer select, .social-finder-dialog input { font-size: 16px; }
+.social-composer-head > button, .social-composer-kinds button, .social-composer-submit, .social-finder-close, .social-notifications-sheet-head > button { min-width: 44px; min-height: 44px; }
+.social-composer-kinds button, .social-composer-submit { font-size: 12px; }
+.social-composer form > p { font-size: 12px; line-height: 1.5; }
+.rpg-shell :is(button, a, input, textarea, select):focus-visible { outline: 3px solid #a080f3; outline-offset: 3px; }
+.rpg-shell :is(button, a) { touch-action: manipulation; }
+.rpg-shell .bottom-nav button { min-height: 48px; }
+@media (max-width: 370px) {
+  .journey-page .player-level h1 { font-size: 17px; }
+  .journey-page .player-level p { font-size: 8px; }
+  .journey-page .daily-title h2 { font-size: 20px; }
+  .social-home .social-topbar > div { gap: 5px; }
+  .social-home .social-wordmark { font-size: 22px; }
+  .social-home .social-self-card > button { grid-template-columns: 38px minmax(0, 1fr); }
+  .social-home .social-self-card strong { grid-column: 2; }
+  .social-home .social-feed-card .social-activity-copy { grid-template-columns: 32px minmax(0, 1fr); gap: 10px; }
+  .social-home .social-activity-glyph { width: 32px; height: 36px; font-size: 18px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rpg-shell *, .rpg-shell *::before, .rpg-shell *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}
