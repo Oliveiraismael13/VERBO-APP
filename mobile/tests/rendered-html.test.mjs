@@ -17,6 +17,10 @@ test("contains the authenticated Verbo application routes", async () => {
   const personalStudyRoute = await text("app/api/personal-studies/[id]/route.ts");
   const personalStudies = await text("components/PersonalStudies.tsx");
   const personalStudiesMigration = await text("drizzle/0022_personal_studies.sql");
+  const sermonOutlines = await text("components/SermonOutlines.tsx");
+  const sermonOutlinesRoute = await text("app/api/sermon-outlines/route.ts");
+  const sermonOutlineRoute = await text("app/api/sermon-outlines/[id]/route.ts");
+  const sermonOutlinesMigration = await text("drizzle/0023_sermon_outlines.sql");
 
   assert.match(page, /currentUser\(\)/);
   assert.match(page, /<AuthPage \/>/);
@@ -43,7 +47,9 @@ test("contains the authenticated Verbo application routes", async () => {
   assert.match(app, /PersonalStudies/);
   assert.match(app, /Adicionar ao estudo/);
   assert.match(app, /verse-study-marker/);
-  assert.match(personalStudies, /Meus Estudos/);
+  assert.match(personalStudies, /Estudos & Esboços/);
+  assert.match(personalStudies, /<SermonOutlines/);
+  assert.match(personalStudies, />Esboços</);
   assert.match(personalStudies, /action: "add-verses"/);
   assert.match(personalStudies, /Inserir anotação aqui/);
   assert.match(personalStudies, /Salvar anotação/);
@@ -64,6 +70,18 @@ test("contains the authenticated Verbo application routes", async () => {
   assert.match(personalStudiesMigration, /CREATE TABLE `personal_studies`/);
   assert.match(personalStudiesMigration, /CREATE TABLE `personal_study_items`/);
   assert.match(personalStudiesMigration, /idx_personal_study_items_user_reference/);
+  assert.match(sermonOutlines, /Modo Pregação/);
+  assert.match(sermonOutlines, /nav\.wakeLock/);
+  assert.match(sermonOutlines, /verbo-sermon-timer-/);
+  assert.match(sermonOutlines, /action: "checkpoint"/);
+  assert.match(sermonOutlines, /action: "record-session"/);
+  assert.match(sermonOutlinesRoute, /INSERT INTO sermon_outlines/);
+  assert.match(sermonOutlineRoute, /action === "add-block"/);
+  assert.match(sermonOutlineRoute, /action === "duplicate"/);
+  assert.match(sermonOutlineRoute, /sermon_outline_revisions/);
+  assert.match(sermonOutlinesMigration, /CREATE TABLE `sermon_outlines`/);
+  assert.match(sermonOutlinesMigration, /CREATE TABLE `sermon_outline_blocks`/);
+  assert.match(sermonOutlinesMigration, /CREATE TABLE `sermon_sessions`/);
   await access(new URL("app/api/personal-studies/verse-index/route.ts", root));
   assert.match(app, /PERGAMINHOS · \{collection\}/);
   assert.match(app, /discoveredSecondaryChapterInsights/);

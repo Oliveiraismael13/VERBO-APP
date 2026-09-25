@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { SermonOutlines } from "./SermonOutlines";
 
 export type StudyVerseReference = {
   bookSlug: string;
@@ -323,6 +324,7 @@ export function PersonalStudies({
   const [savingNewNote, setSavingNewNote] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [error, setError] = useState("");
+  const [librarySection, setLibrarySection] = useState<"studies" | "sermons">("studies");
   const loadStudies = useCallback(async (search = "") => {
     setLoading(true);
     try {
@@ -545,6 +547,8 @@ export function PersonalStudies({
     }
   };
   if (!open) return null;
+  if (librarySection === "sermons")
+    return <SermonOutlines onBack={() => setLibrarySection("studies")} onClose={onClose} source={source} onOpenReference={onOpenReference} />;
   const verseCount =
     selected?.items.filter((item) => item.kind === "verse").length || 0;
   const noteCount =
@@ -770,13 +774,14 @@ export function PersonalStudies({
           <section className="study-list">
             <div className="study-library-heading">
               <p className="eyebrow">BIBLIOTECA PESSOAL</p>
-              <h1>{referenceFilter ? "Estudos deste versículo" : "Meus Estudos"}</h1>
+              <h1>{referenceFilter ? "Estudos deste versículo" : "Estudos & Esboços"}</h1>
               <p>
                 {referenceFilter
                   ? `Escolha o estudo que contém ${referenceLabel(referenceFilter, source.bookNames)}.`
                   : "Conecte versículos, anotações e suas descobertas na Palavra."}
               </p>
             </div>
+            {!referenceFilter && <div className="study-library-tabs" role="tablist" aria-label="Tipo de conteúdo"><button className="active" role="tab" aria-selected="true">Estudos</button><button role="tab" aria-selected="false" onClick={() => setLibrarySection("sermons")}>Esboços</button></div>}
             <div className="study-new">
               <input
                 value={newTitle}
