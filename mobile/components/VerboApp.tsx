@@ -2092,6 +2092,7 @@ function SocialPage({ notify, dark, setDark, progress, manifest, onOpenFavorite,
 
 function ProfilePage({ dark, setDark, progress, manifest, onOpenFavorite, onProfilePhotoChange, onDisplayNameChange, onBack }: { dark: boolean; setDark: (value: boolean) => void; progress: PlayerProgress; manifest: BibleManifest | null; onOpenFavorite: (reference: string) => void; onProfilePhotoChange: (file: File) => void; onDisplayNameChange: (displayName: string) => Promise<boolean>; onBack?: () => void }) {
   const xpProgress = getXpProgress(progress.xp);
+  const [characterGender, setCharacterGender] = useState<"homem" | "mulher">("homem");
   const [expanded, setExpanded] = useState(false);
   const [libraryView, setLibraryView] = useState<"favorites" | "notes" | null>(null);
   const [profileEditorOpen, setProfileEditorOpen] = useState(false);
@@ -2108,6 +2109,15 @@ function ProfilePage({ dark, setDark, progress, manifest, onOpenFavorite, onProf
   const favorites = progress.favorites || [];
   const notes = Object.entries(progress.notes || {}).filter(([, note]) => note.trim());
   const visibleAchievements = expanded ? achievements : achievements.slice(0, 3);
+  useEffect(() => {
+    const saved = window.localStorage.getItem("verbo-disciple-character");
+    if (saved === "mulher" || saved === "homem") setCharacterGender(saved);
+  }, []);
+  const chooseCharacter = (value: "homem" | "mulher") => {
+    setCharacterGender(value);
+    window.localStorage.setItem("verbo-disciple-character", value);
+    window.dispatchEvent(new CustomEvent("verbo-character-change", { detail: value }));
+  };
   return <section className="generic-page profile-page social-profile-page page-in">
     {onBack && <button className="social-back social-profile-top-back" onClick={onBack}>‹ Voltar ao Social</button>}
     <div className="profile-heading"><div><p className="eyebrow">SUA JORNADA</p><h1>Perfil</h1><p className="lead">Acompanhe sua constância, suas conquistas e o próximo passo na Palavra.</p></div><span className="profile-status"><i />Jornada ativa</span></div>
@@ -2116,7 +2126,7 @@ function ProfilePage({ dark, setDark, progress, manifest, onOpenFavorite, onProf
     <section className="profile-stats"><article><span>✦</span><div><b>{progress.completed.length}</b><small>capítulos lidos</small></div></article><article><span>🔥</span><div><b>{progress.streak}</b><small>dias de sequência</small></div></article><article><span>◆</span><div><b>{progress.coins}</b><small>siclos de prata</small></div></article><article><span>▤</span><div><b>{progress.foundScrolls?.length || 0}</b><small>pergaminhos encontrados</small></div></article></section>
     <section className="profile-panel"><div className="profile-section-heading"><div><p className="eyebrow">CONQUISTAS</p><h2>Marcos da jornada</h2></div><span>{achievements.filter((item) => item.unlocked).length} de {achievements.length} conquistadas</span></div><div className="achievement-row">{visibleAchievements.map((item) => <article key={item.name} className={item.unlocked ? "earned" : ""}><i>{item.icon}</i><b>{item.name}</b></article>)}</div><button className="profile-action" onClick={() => setExpanded(!expanded)}>{expanded ? "Exibir menos" : "Exibir mais conquistas"}</button></section>
     <section className="profile-panel"><div className="profile-section-heading"><div><p className="eyebrow">BIBLIOTECA</p><h2>Seu acervo</h2></div><span>Leitura</span></div><div className="library-items"><div><i>♡</i><span>Versículos favoritos<small><b>{favorites.length}</b> salvos para revisitar</small></span></div><div><i>✎</i><span>Anotações<small><b>{notes.length}</b> reflexões salvas na Bíblia</small></span></div><div><i>▥</i><span>Capítulos concluídos<small><b>{progress.completed.length}</b> registrados na jornada</small></span></div></div><div className="library-actions"><button className="profile-action" onClick={() => setLibraryView(libraryView === "favorites" ? null : "favorites")}>{libraryView === "favorites" ? "Fechar favoritos" : "Abrir favoritos"} <b>→</b></button><button className="profile-action" onClick={() => setLibraryView(libraryView === "notes" ? null : "notes")}>{libraryView === "notes" ? "Fechar anotações" : "Abrir anotações"} <b>→</b></button></div>{libraryView === "favorites" && <div className="favorites-list">{favorites.length ? favorites.map((reference) => { const [slug, chapter, verse] = reference.split(":"); const book = manifest?.books.find((item) => item.slug === slug); return <button key={reference} onClick={() => onOpenFavorite(reference)}><span>♡</span><div><b>{book?.name || slug} {chapter}:{verse}</b><small>Abrir na Bíblia</small></div><em>›</em></button>; }) : <p>Você ainda não salvou versículos.</p>}</div>}{libraryView === "notes" && <div className="favorites-list notes-list">{notes.length ? notes.map(([reference, note]) => { const [slug, chapter, verse] = reference.split(":"); const book = manifest?.books.find((item) => item.slug === slug); return <button key={reference} onClick={() => onOpenFavorite(reference)}><span>✎</span><div><b>{book?.name || slug} {chapter}:{verse}</b><small>{note}</small></div><em>›</em></button>; }) : <p>Suas anotações salvas aparecerão aqui.</p>}</div>}</section>
-    <h3 className="list-heading">Preferências</h3><div className="settings-list"><button onClick={() => setDark(!dark)}><i>{dark ? "☾" : "☀"}</i><span>Aparência<small>{dark ? "Modo escuro" : "Modo claro"}</small></span><em className={`switch ${dark ? "on" : ""}`}><u /></em></button><button><i>⇩</i><span>Conteúdo bíblico<small>3 traduções · cânones de 66 e 73 livros</small></span><b>›</b></button><button><i>©</i><span>Créditos das traduções<small>Domínio público + CC BY</small></span><b>›</b></button></div>
+    <h3 className="list-heading">Preferências</h3><div className="settings-list"><button onClick={() => chooseCharacter(characterGender === "homem" ? "mulher" : "homem")}><i>♙</i><span>Personagem da jornada<small>{characterGender === "mulher" ? "Mulher" : "Homem"} · aparência do discípulo</small></span><em className={`switch ${characterGender === "mulher" ? "on" : ""}`}><u /></em></button><button onClick={() => setDark(!dark)}><i>{dark ? "☾" : "☀"}</i><span>Aparência<small>{dark ? "Modo escuro" : "Modo claro"}</small></span><em className={`switch ${dark ? "on" : ""}`}><u /></em></button><button><i>⇩</i><span>Conteúdo bíblico<small>3 traduções · cânones de 66 e 73 livros</small></span><b>›</b></button><button><i>©</i><span>Créditos das traduções<small>Domínio público + CC BY</small></span><b>›</b></button></div>
   </section>;
 }
 
@@ -2132,14 +2142,27 @@ function ProfilePhoto({ src }: { src: string }) {
 }
 
 function PixelDisciple({ level = 1, turning = false }: { level?: number; turning?: boolean }) {
+  const [gender, setGender] = useState<"homem" | "mulher">("homem");
+  useEffect(() => {
+    const saved = window.localStorage.getItem("verbo-disciple-character");
+    if (saved === "mulher" || saved === "homem") setGender(saved);
+    const update = (event: Event) => {
+      const value = (event as CustomEvent).detail;
+      if (value === "mulher" || value === "homem") setGender(value);
+    };
+    window.addEventListener("verbo-character-change", update);
+    return () => window.removeEventListener("verbo-character-change", update);
+  }, []);
   // Sprites fornecidos para o personagem da campanha; mantém os pixels nítidos em qualquer tela.
-  const tier = level >= 50 ? 50 : level >= 40 ? 40 : level >= 30 ? 30 : level >= 20 ? 20 : level >= 10 ? 10 : 30;
+  const tier = gender === "mulher"
+    ? level >= 50 ? 50 : level >= 40 ? 40 : 30
+    : level >= 50 ? 50 : level >= 40 ? 40 : level >= 30 ? 30 : level >= 20 ? 20 : level >= 10 ? 10 : 30;
   if (turning) {
     const directions = ["south", "south-west", "west", "north-west", "north", "north-east", "east", "south-east"];
-    return <span className="pixel-disciple-turn">{directions.map((direction, index) => <img key={direction} src={`/characters/homem-${tier}lvl-idle-${direction}.png`} alt="" aria-hidden="true" style={{ animationDelay: `${-index * 0.4}s` }} />)}</span>;
+    return <span className="pixel-disciple-turn">{directions.map((direction, index) => <img key={direction} src={`/characters/${gender}-${tier}lvl-idle-${direction}.png`} alt="" aria-hidden="true" style={{ animationDelay: `${-index * 0.4}s` }} />)}</span>;
   }
   // eslint-disable-next-line @next/next/no-img-element
-  return <img className="pixel-disciple" src={`/characters/homem-${tier}lvl-idle-south.png`} alt="" aria-hidden="true" />;
+  return <img className="pixel-disciple" src={`/characters/${gender}-${tier}lvl-idle-south.png`} alt="" aria-hidden="true" />;
 }
 
 function BookPicker({ manifest, currentSlug, currentChapter, close, choose }: { manifest: BibleManifest; currentSlug: string; currentChapter: number; close: () => void; choose: (slug: string, chapter: number) => void }) {
